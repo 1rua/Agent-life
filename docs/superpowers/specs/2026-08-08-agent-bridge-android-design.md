@@ -1,7 +1,8 @@
 # Agent Bridge Android 与 Agent 端集成设计规格
 
 - 日期：2026-08-08
-- 状态：规格草案 v1；已确认需求已整理，等待用户书面审阅
+- 修订日期：2026-08-09
+- 状态：规格 v1.1；用户已于 2026-08-08 书面确认，2026-08-09 确认 App 内嵌 Tailscale 且不占系统 VPN 通道的网络修订
 - 目标平台：Android 14（API 34）及以上
 - 目标 Agent：[NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent) 与 [openclaw/openclaw](https://github.com/openclaw/openclaw)
 - 分发模式：受控设备私有分发或侧载；Google Play 上架不是首版目标
@@ -13,7 +14,7 @@
 Android App 只实现一套统一的设备协议。Agent 端部署 Device Bridge，并分别通过 Hermes 和 OpenClaw 适配器接入各自的 plugin、工具、事件和会话系统。App、Bridge 和 Agent skill 的职责严格分离：
 
 - App 是实时采集和设备操作的最终裁决者；Bridge 已存副本的查询授权由独立的服务端授权状态裁决。
-- Bridge 负责设备身份、多用户隔离、消息路由、存储、幂等和审计。
+- Bridge 负责设备身份、多用户隔离、消息路由、存储、幂等和审计，并以服务端最小权限 Tailscale credential 签发一次性节点注册凭据、绑定及撤销 Tailnet 节点。
 - Agent plugin 负责把手机能力转换为 Agent 工具及事件。
 - Agent skill 只指导模型正确使用工具，不承担认证或权限控制。
 
@@ -28,7 +29,7 @@ Android App 只实现一套统一的设备协议。Agent 端部署 Device Bridge
 | 拓扑 | 一个逻辑 Agent/Bridge 服务管理多位用户的多台手机；允许内部使用隔离 workspace、worker 或凭据实现安全边界 |
 | App 形态 | 自建统一产品与 Device Bridge，不 fork OpenClaw Android App；主 App 与最小权限 companion APK 作为同一签名产品套件交付 |
 | Agent 后端 | 支持 Hermes Agent 和 OpenClaw；通过服务端适配器消除差异 |
-| 默认网络 | Tailscale 私网优先；用户显式启用的 HTTPS 直连作为备用 |
+| 默认网络 | App 内嵌、仅供本产品连接使用的 Tailscale userspace 节点；不使用 Android `VpnService`、系统 TUN、系统路由或系统 DNS；用户显式启用的公网 HTTPS 直连作为备用 |
 | 后台可靠性 | 尽力而为，不维持常驻前台服务，不承诺设备始终在线 |
 | 同步方式 | 每个数据源可选按需、事件后上传或定期批量上传 |
 | 本机缓存 | 加密缓冲、按来源设置期限和配额 |
@@ -56,6 +57,7 @@ Android App 只实现一套统一的设备协议。Agent 端部署 Device Bridge
 5. 为 Hermes 和 OpenClaw 提供语义一致的 tools、events、plugin 和 skill。
 6. 把 Android 平台限制表达为能力状态和标准错误，不伪造成功或静默提权。
 7. 提供可立即生效且不依赖网络的暂停、撤销和紧急停止能力。
+8. 在不占用 Android 系统 VPN 通道的前提下，只为本 App 到 Bridge 的流量提供加密 Tailnet 连接，并允许其他 VPN 继续占用系统 VPN 槽位。
 
 ### 3.2 非目标
 
@@ -67,6 +69,8 @@ Android App 只实现一套统一的设备协议。Agent 端部署 Device Bridge
 - 不允许 Agent 远程启用 Root、Shizuku、无障碍、通知访问、MediaProjection 或默认助手角色。
 - 不向 Agent 暴露任意 Root Shell、任意脚本、shell 字符串或通用命令解释器；Root 仅可作为类型化动作的受控后端。
 - 不让 Agent 静默浏览手机文件系统；图片和文件必须由用户通过系统选择器明确选择。
+- 不为其他 App 或系统流量提供 VPN、出口节点、子网路由、SOCKS5/HTTP 代理或通用 Tailnet 拨号服务；不依赖另行安装的 Tailscale Android VPN 客户端。
+- 不承诺与每一种第三方 VPN 都能联网；本 App 不占用系统 VPN 槽位，但已激活的其他 VPN 仍可能阻断其底层 UDP/HTTPS 流量。
 - 不以 Google Play 政策合规作为首版验收目标。若未来上架，需要单独削减或重构 SMS、Call Log、Accessibility 和远程执行能力。
 - 不在本规格中实现 iOS、桌面端管理后台或托管云服务。
 
@@ -82,10 +86,10 @@ Android App 只实现一套统一的设备协议。Agent 端部署 Device Bridge
   │    ├─ Shizuku/ADB
   │    └─ 类型化 Root actions
   ├─ 加密缓冲、临时附件、审计
-  └─ 出站 WSS/HTTPS 客户端
-             │
-       Tailscale 优先
-       公网 HTTPS 备用
+  └─ 出站 transport
+       ├─ 内嵌 Tailscale userspace core（Go → Android AAR）
+       │    └─ 仅 App→Bridge 的私有 WSS/HTTPS；direct 或 DERP
+       └─ 用户手动启用的公网 HTTPS 备用
              │
        Agent Device Bridge
   ├─ 租户/principal/设备注册与密钥
@@ -103,25 +107,27 @@ Android App 只实现一套统一的设备协议。Agent 端部署 Device Bridge
 
 ### 4.1 核心边界
 
-- 手机不开放入站端口，只主动连接 Bridge。
+- 手机不开放应用层入站服务，只主动连接 Bridge；Tailscale 为直连建立的底层 UDP socket 不得承载任何 App listener。
+- 只有本 App 发往当前已配对 Bridge 的 WSS/HTTPS 和 artifact 流量可以进入内嵌 Tailnet；其他 App 和系统流量不经过该节点。
 - 本机策略引擎是实时读取和设备操作的最终授权点；已上传副本由 Bridge 的独立查询授权控制。
 - Bridge 不解释用户自动化需求，也不运行自己的规则 DSL。
 - Agent backend 可以使用自身的对话、任务、记忆、定时器或自动化系统处理同步数据。
 - Bridge 可以安装 Hermes 与 OpenClaw 适配器，但一个 deployment 中每种 backend 的命令与事件入口只能有一个权威路径；任何 Agent principal 都必须绑定明确的租户、用户、Agent 实例和 scope。
-- 首版每个 App 安装实例只保持一个活动 Bridge 配对；一个 Bridge 可以管理多用户、多设备。
+- 首版每个 App 安装实例只保持一个活动的应用设备配对（一个 `device_id` / `pairing_generation`）；该配对可以绑定默认 Tailnet transport profile 与一个可选公网 transport profile，但任一时刻只能有一个活动 transport connection。一个 Bridge 可以管理多用户、多设备。
 
 ### 4.2 信任边界
 
 系统包含以下独立信任边界：
 
 1. Android OS 权限与 App 沙箱。
-2. App 标准进程与 Shizuku/类型化 Root broker。
-3. 手机与 Tailscale/公网网络。
-4. Device Bridge 与 Agent backend。
-5. Agent 模型输出与确定性的命令策略。
-6. 每位用户的数据、会话和长期记忆。
-7. 应用管理员与 Agent 主机操作员。
-8. Agent 调用的本地模型或满足零保留契约的远程瞬时推理提供方；它是明文处理边界，但不是持久存储边界。
+2. 主 App Kotlin/Java 代码与内嵌 Go/AAR/JNI `tailnet-core`。
+3. App 标准进程与 Shizuku/类型化 Root broker。
+4. 手机内嵌 Tailscale core、Tailscale coordination/DERP 与公网网络；Tailscale 处理节点和连通性元数据，但不能替代应用层身份、授权或内容保护。
+5. Device Bridge 与 Agent backend。
+6. Agent 模型输出与确定性的命令策略。
+7. 每位用户的数据、会话和长期记忆。
+8. 应用管理员与 Agent 主机操作员。
+9. Agent 调用的本地模型或满足零保留契约的远程瞬时推理提供方；它是明文处理边界，但不是持久存储边界。
 
 应用层管理员只能管理设备状态、缩小服务端 scope ceiling 和撤销配对，不能通过产品 API 读取用户内容、扩大 scope 或替用户授权。Agent 主机的 OS root 管理员能够接触进程内解密数据，属于受信基础设施；保护数据不受主机 root 读取需要可信执行环境或端到端隐私计算，超出本项目范围。配对时必须向用户说明当前模型是在本地运行还是会把获准数据发送给远程模型提供方，并显示当前零保留 profile/契约 revision。
 
@@ -136,7 +142,8 @@ Android App 只实现一套统一的设备协议。Agent 端部署 Device Bridge
 | `assistant-holder` | 独立 APK/UID 的 `VoiceInteractionService`/session，仅负责系统入口与轻量 IPC | 签名权限 IPC；不声明网络、SMS、Call Log、Notification Listener、Accessibility 或增强后端权限 |
 | `assistant-ui` | 主 App 内的文字/语音会话、附件和流式回复 | transport、policy-engine |
 | `policy-engine` | scope、风险等级、授权版本、限时会话、紧急停止 | encrypted-store、系统认证 |
-| `transport` | 配对、设备身份、WSS/HTTPS、签名、重连、协议状态机 | Android Keystore、网络栈 |
+| `tailnet-core` | App-scoped Tailscale userspace 节点、节点注册、状态与受限 Bridge client transport；通过 gomobile/JNI 打包为 AAR | 固定版本的 Tailscale Go 源码、加密 `StateStore`；不使用 `VpnService` 或系统 TUN |
+| `transport` | 配对、设备身份、WSS/HTTPS、签名、重连、协议状态机；只调用 `tailnet-core` 的 Bridge 专用接口或显式启用的公网 HTTPS 路径 | Android Keystore、`tailnet-core`、Android 网络栈 |
 | `encrypted-store` | 设置、待同步队列、临时附件、本机审计 | Android Keystore、App 私有存储 |
 | `collectors` | 各数据源的采集、过滤、标准化与游标 | Android content/service APIs |
 | `accessibility-service` | 活动窗口、语义树和已授权 UI 操作 | AccessibilityService |
@@ -144,7 +151,7 @@ Android App 只实现一套统一的设备协议。Agent 端部署 Device Bridge
 | `dpc` | 独立 APK/UID 的 fully managed Device Owner 能力 | 签名权限 IPC；不声明网络 |
 | `capability-backends` | 标准 API、DPC、Shizuku 与类型化 Root 动作 | 各自系统服务或 broker |
 
-模块必须通过稳定接口通信。Collector 不直接发网络请求；transport 不直接调用 Android Provider；Agent 命令必须先经过 policy-engine，再进入具体 capability backend。
+模块必须通过稳定接口通信。Collector 不直接发网络请求；transport 不直接调用 Android Provider；Agent 命令必须先经过 policy-engine，再进入具体 capability backend。只有主 App 的 `transport` 模块可以调用 `tailnet-core`；`assistant-holder`、DPC、增强后端 companion、collector 和其他 App 均不能调用。`tailnet-core` 不向 Kotlin、其他 APK 或 loopback socket 暴露通用 `Dial`、`Listen`、SOCKS5、HTTP proxy、LocalAPI、Funnel 或 Web 管理入口；其应用数据目标由当前配对记录固定为唯一 Bridge endpoint 和 TCP 443，底层仅额外访问 Tailscale control、discovery/STUN 与 DERP 等建链基础设施。
 
 ### 5.2 分层能力解析
 
@@ -175,27 +182,39 @@ Device Owner 可以管理部分 runtime permission，但不是 system UID 或 Ro
 ### 6.1 配对
 
 1. 用户先登录目标 Agent 的可信 Web/CLI 会话。Bridge 从该已认证会话签发一个单次使用、5 分钟有效的 opaque enrollment ticket；服务端记录其 `tenant_id`、`human_principal_id`、`agent_instance_id`、enrollment scope ceiling、随机挑战和 Bridge 身份。App 不能提交、选择或覆盖这些身份字段。
-2. 二维码包含 endpoint、ticket、Bridge 标识、挑战和服务端公钥指纹，并显示可人工核对短码；不包含长期管理员密钥。每个 principal/IP 在 10 分钟内最多尝试配对 5 次，成功或失败消耗 ticket。
-3. App 在 Android Keystore 生成不可导出的安装实例签名密钥；优先使用硬件或 StrongBox 支持。[Android Keystore](https://developer.android.com/privacy-and-security/keystore)
-4. App 与 Bridge 互相签名挑战，并在两端显示相同短码。Bridge 只从 ticket 派生用户归属，并创建不可复用的 `device_id`。
-5. Bridge 将设备公钥绑定到 ticket 中的 tenant、human principal、Agent 实例和 scope ceiling；App 固定 Bridge command-signing 公钥。
-6. 配对完成后，App→Bridge 由设备安装密钥签名，Bridge→App 由 Bridge command-signing key 签名，Agent adapter→Bridge 使用独立的服务端凭据。Hermes/OpenClaw 的 owner token、API key 或密码不得保存到手机。
-7. 三类凭据各自拥有 `key_id`、序列、轮换、撤销和审计状态。撤销配对同时终止网络会话，并推进设备授权纪元使旧请求、批准和通道票据失效。
+2. 生成 Tailnet 配对码前，Bridge enrollment issuer 使用只保存在服务端秘密存储中的 Tailscale trust credential 创建节点注册 auth key。issuer credential 只授予 deployment-specific 手机 tag 所需的 `auth_keys`；节点回收使用另一个绑定同一 tag、仅授予 `devices:core` 的 lifecycle credential。完整 policy 校验再使用第三个独立 verifier credential，只授予 `policy_file:read` 及 Tailscale 对该 scope 明确要求的 `devices:posture_attributes:read`、`devices:core:read`，不得授予任何写 scope。三套 credential 不得互相复用，也不得获得 `all` 或 `all:read`；运维必须知晓 lifecycle credential 可管理匹配节点，而 verifier 可读取 tailnet-wide policy、设备与 posture 元数据，二者都是独立部署信任边界。auth key 必须为一次性、不可复用、非 ephemeral，并请求不晚于 enrollment ticket 的 5 分钟过期时间；Bridge 必须检查 Tailscale API 实际返回的 expiry，任何超出窗口或无法确认的结果都立即撤销并 fail closed。Bridge 记录 key ID，但不记录明文 key。[Tailscale trust credentials](https://tailscale.com/docs/reference/trust-credentials)、[安全处理 auth key](https://tailscale.com/docs/features/access-control/auth-keys/how-to/secure-auth-keys)
+3. 二维码包含 Tailscale control URL/profile、私有 Bridge endpoint、一次性 auth key、key ID、专用 tag、ticket、Bridge 标识、挑战和服务端公钥指纹，并显示可人工核对短码；不包含 OAuth client secret、长期管理员密钥或 Hermes/OpenClaw 凭据。二维码整体按秘密处理，不进入日志、剪贴板、备份或 analytics；成功、失败或超时后 Bridge 立即撤销尚未消费的 auth key。每个 principal/IP 在 10 分钟内最多尝试配对 5 次，成功或失败消耗 ticket。
+4. App 在 Android Keystore 生成不可导出的安装实例签名密钥；优先使用硬件或 StrongBox 支持。App 只把一次性 auth key 以进程内参数交给 `tailnet-core`，不得写入磁盘、崩溃报告或网络日志；节点注册成功或失败后立即清除该参数。[Android Keystore](https://developer.android.com/privacy-and-security/keystore)
+5. `tailnet-core` 注册一个与本次 App 安装/配对一一对应的持久节点，并把后续重连所需状态写入 Keystore-wrapped、App-private、禁止 Android Backup 的 `StateStore`。auth key 本身不持久化；本机 state 丢失、失效或被清除时必须重新生成配对码，不得下发可复用 key。
+6. 默认 Device Approval profile 下，auth key 不预批准，App 明确显示 `waiting_tailnet_approval`，待管理员批准后才能继续；若部署显式选择自动批准，`preauthorized=true` 只能由 Bridge 的服务端策略设置、记录和披露，App/二维码字段不能覆盖。Tailnet Lock 与 Device Approval 互斥；Lock profile 必须由非 Android trusted signing node 预签新 auth key后才能生成可立即使用的二维码，或在节点注册后人工签 node key。Tailnet Lock 私钥不得放入普通 Bridge/issuer 进程；如自动化预签，必须使用隔离 signer、独立批准和审计。Bridge OAuth API、Android App 和 Agent 均不能自行完成或绕过该签名。[Device Approval](https://tailscale.com/docs/features/access-control/device-management/device-approval)、[Tailnet Lock](https://tailscale.com/docs/features/tailnet-lock)
+7. Tailnet 节点可运行后，App 通过内嵌 userspace dialer 连接私有 Bridge endpoint。App 与 Bridge 互相签名挑战，并在两端显示相同短码。Bridge 只从 ticket 派生用户归属，并创建不可复用的 `device_id`；Tailnet node ID/tag 只记录为附加风控绑定。
+8. Bridge 将设备公钥绑定到 ticket 中的 tenant、human principal、Agent 实例和 scope ceiling；App 固定 Bridge command-signing 公钥。
+9. 配对完成后，App→Bridge 由设备安装密钥签名，Bridge→App 由 Bridge command-signing key 签名，Agent adapter→Bridge 使用独立的服务端凭据。Hermes/OpenClaw 的 owner token、API key 或密码不得保存到手机。
+10. 上述三类应用凭据各自拥有 `key_id`、序列、轮换、撤销和审计状态；Tailscale OAuth credential、一次性 auth key 与节点状态属于独立的网络凭据生命周期，不能替代应用凭据。auth key 已消费但应用层配对未完成的节点是孤儿节点，Bridge 必须在 ticket 到期后 10 分钟内回收；已完成配对但连续 30 天没有任何有效应用层 heartbeat 的离线节点也由 Bridge 撤销，设备再次使用时需重新配对。
+11. 撤销配对同时终止应用会话、推进设备授权纪元、使旧请求/批准/通道票据失效、本机删除 `StateStore`，并由 Bridge 尽快撤销对应的 Tailnet 节点；任一侧失败必须显示 pending 状态而不能伪装完成。
 
-### 6.2 Tailscale 默认链路
+### 6.2 App-scoped Tailscale 默认链路
 
-- Agent 主机通过 Tailscale Serve 暴露私有 HTTPS/WSS，Bridge 本身只监听 localhost。[Tailscale Serve](https://tailscale.com/docs/features/tailscale-serve)
-- 使用 grants 只允许目标手机/用户访问 Agent 的 TCP 443；不启用 Funnel，不开放 SSH、子网路由或无关端口。[Tailscale grants](https://tailscale.com/docs/reference/syntax/grants)
-- Tailscale 身份、MagicDNS 名称和 Serve 注入头只作为额外风控上下文，不能替代应用实例身份。
-- Tailscale 会优先建立点对点直连，但在 NAT/网络条件不满足时可能经 DERP relay；App 展示 direct/relay 状态，但二者使用同一应用层认证与授权，不能把“当前不是 P2P”伪装成故障。[Connection types](https://tailscale.com/docs/reference/connection-types)
-- 默认使用 Device Approval；高保证部署可改用 Tailnet Lock。二者互斥，部署必须选择其一；Android 手机不能充当 Tailnet Lock signing node，启用时至少准备两个非 Android signing node 和离线恢复材料。该选择不影响应用层配对。[Device Approval](https://tailscale.com/docs/features/access-control/device-management/device-approval)、[Tailnet Lock](https://tailscale.com/docs/features/tailnet-lock)
-- Android 同时只能运行一个活动 VPN。与其他 VPN 冲突时，用户可显式启用 HTTPS 备用链路。[Tailscale 与其他 VPN](https://tailscale.com/docs/reference/faq/other-vpns)
+- Android App 内嵌一个小型 Go 网络核心，首选基于固定 commit/version 的 `tailscale.com/tsnet`，通过 gomobile/JNI 封装为 AAR；如直接绑定 `tsnet.Server` 在 Android 上不可行，只允许在同一固定 Tailscale 源码上封装语义等价的 userspace netstack。`tsnet` 在进程内运行用户态 TCP/IP 栈并提供 Tailnet `Dial`，无需系统级网络配置。[tsnet](https://tailscale.com/docs/features/tsnet)、[tsnet source](https://github.com/tailscale/tailscale/blob/main/tsnet/tsnet.go)
+- Android manifest 和运行时均不得声明、绑定或启动 `VpnService`，不得创建系统/内核 TUN，不修改 Android 路由表、系统 DNS、Private DNS 或其他 App 的 socket。实现把 `Tun` 保持为 nil/等价 userspace 模式，`RunWebClient=false`，且不调用或暴露 `Listen`、`Loopback`、LocalAPI、SOCKS5/HTTP proxy、Serve/Funnel、exit node 或 subnet-router 路径。
+- Kotlin 侧只能调用版本化的 `startEnrollment`、`connectBridge`、`sendControl`、`transferArtifact`、`observeStatus`、`close` 等高层接口；任意主机、端口、协议、脚本或 raw socket 参数均不进入公共 IPC/API。目标 endpoint 必须与签名 enrollment ticket 和当前 pairing generation 完全相符。每个异步调用必须可取消；消息、附件与实时流使用有界队列和背压；`close` 必须串行化并发调用、拒绝新工作、取消未决 I/O，并返回确定的最终连接状态。
+- Agent 主机通过 Tailscale Serve 暴露私有 HTTPS/WSS，Bridge 本身只监听 localhost。Tailnet 数据链路使用 WireGuard 端到端加密；DERP 只中继加密包，不能解密应用 payload。[Tailscale Serve](https://tailscale.com/docs/features/tailscale-serve)
+- Tailnet policy 为每个 Bridge deployment 使用独立的手机与 Bridge identity，例如 `tag:agent-life-mobile-<deployment-id>` → `tag:agent-life-bridge-<deployment-id>` TCP 443；不得使用会让所有手机访问所有 Bridge 的全局共用目的 tag，也不得有其他 ACL/grant 通过同一 tag、autogroup 或更宽来源重新授予无关节点/端口。规则只允许手机发起到 Bridge，不允许 Bridge 发起到手机。因为 Tailscale allow 规则可叠加，隔离的 policy verifier 必须从 Tailscale 当前生效的完整 policy 读取并验证，而不只检查项目片段；它为规范化 policy digest、Tailnet、deployment、允许路径、Tailscale policy revision、签发/过期时间生成签名 attestation。Bridge 只固定 verifier 公钥，不持有 verifier credential；Tailnet subsystem 启动、enrollment、建立新 Tailnet connection 及 attestation 到期前均需校验。缺失、过期、revision/digest 不匹配或 verifier 不可用时只有 Tailnet 路径 fail closed，并关闭无法续期的 Tailnet 应用会话；已绑定公网 profile 仍只能由用户手动选择，不得自动接管。[Tailscale grants](https://tailscale.com/docs/reference/syntax/grants)、[policy read scope](https://tailscale.com/docs/reference/trust-credentials)
+- 通过 Bridge OAuth client/auth key 创建的手机节点是 tag-owned service node，而不是带 Tailscale 人类用户身份的终端；此取舍必须在部署时披露。Tailscale node ID、tag、IP、MagicDNS 名称和 Serve 注入头只作为额外风控上下文，不能替代 App 安装密钥、enrollment ticket 或 human principal 绑定。
+- Tailscale 优先建立点对点直连；NAT/网络条件不满足时允许经 DERP relay。App 展示 `direct`、`relay`、`control_unreachable`、`approval_required` 等真实状态；direct/relay 只能来自已验证可用的 Tailscale backend/status 信号，不得从一次请求成功或延迟特征推断。direct 与 DERP 使用同一应用层认证和授权，不能把 relay 伪装成故障，也不能把无法判断的路径报告为 direct。[Connection types](https://tailscale.com/docs/reference/connection-types)
+- 默认使用 Device Approval；高保证部署可改用 Tailnet Lock。二者互斥，部署必须选择其一；Android 手机不能充当 Tailnet Lock signing node，启用时至少准备两个非 Android signing node 和离线恢复材料。该选择不影响应用层配对。
+- 节点状态只保存在 6.1 指定的加密 `StateStore`，每次安装/有效配对只有一个节点身份。Tailscale 依赖、Go toolchain、gomobile、NDK、ABI、license/SBOM 与源码校验和必须锁定并通过供应链审阅；升级需重跑互操作和安全测试。
+- 内嵌 core 默认选择 Tailscale 的 no-logs/no-support 模式，后端调试 logger 为空或只进入本机脱敏环形缓冲；不得向 Tailscale 日志服务或本机日志写入 auth key、endpoint ticket、应用 envelope、headers、正文或附件。Tailscale control plane 仍会处理建立 Tailnet 所需的节点与连通性元数据，配对时必须披露。[Tailscale logging](https://tailscale.com/docs/features/logging)
+- 该设计不占用 Android 系统 VPN 槽位，因此另一个系统 VPN 可以保持活动；但另一个 VPN 的全隧道路由、DNS、封锁策略或 lockdown 仍可能阻断 Tailscale control、STUN、UDP 或 DERP HTTPS。产品只承诺“不创建系统 VPN”，不承诺绕过第三方 VPN；失败时返回真实网络状态。[Tailscale 与其他 VPN](https://tailscale.com/docs/reference/faq/other-vpns)
+- 同一手机安装的官方 Tailscale App 与本产品内嵌 core 是两个独立节点；前者可继续作为系统 VPN 运行，不能共享或接管本产品的 `StateStore`、node ID 或应用层 pairing。
+- 官方 `tsnet` 是 Go 库，官方 Android 客户端目前仍以 `VpnService` 为主，Android 客户端的 userspace 模式仍是未完成的功能请求。因此该 AAR 是本项目的定制集成，P0t 必须先作为可行性门槛；门槛失败时暂停并重新评审，不得静默退回系统 VPN。[Tailscale Android](https://github.com/tailscale/tailscale-android)、[Android userspace feature request](https://github.com/tailscale/tailscale/issues/10126)
 
 ### 6.3 HTTPS 备用链路
 
-- 首次设置默认只引导 Tailscale；用户进入“高级连接”并明确确认公网风险后，才能手动添加 HTTPS endpoint 并重新完成应用层配对。
-- 使用标准 TLS、双向应用消息签名、5 分钟单次挑战、配对限流和可撤销设备密钥。
-- 不因 Tailscale 暂时不可用而自动降级到未配对公网地址。
+- 首次设置默认只引导内嵌 Tailscale；用户进入“高级连接”并明确确认公网风险后，才能手动添加公网 HTTPS endpoint，并通过 5 分钟单次 `transport_profile_ticket` 完成独立的公网 transport profile 挑战与绑定。该 profile 绑定当前 `device_id`、设备公钥和 `pairing_generation`，不创建第二个应用设备配对、不更换设备密钥，也不递增 `pairing_generation`；该路径使用 Android 普通网络栈，不经过 `tailnet-core`。
+- 使用标准 TLS、双向应用消息签名、5 分钟单次挑战、配对限流和可撤销 transport profile binding；endpoint 与证书身份变更必须重新完成该 profile 挑战。
+- 不因 Tailscale 暂时不可用、等待设备批准、受第三方 VPN 阻断或 userspace core 故障而自动降级到公网地址；Tailnet auth key、node state 和 OAuth credential 永不发送到公网 Bridge endpoint。
+- 用户手动切换 Tailnet 与已绑定公网 profile 时，先关闭旧控制/数据通道，再由 Bridge 分配新的 `connection_generation` 并 fence 旧路径；首版不允许两个 transport profile 同时保持活动控制连接，也不因 Tailnet 故障对公网 endpoint 发起 DNS/TCP 探测。
 - 公网入口不得直接暴露 Hermes/OpenClaw 管理 API。
 
 ## 7. 身份、授权域与多用户隔离
@@ -211,6 +230,9 @@ Device Owner 可以管理部分 runtime permission，但不是 system UID 或 Ro
 | `agent_principal_id` | 发起工具调用的服务身份；服务端绑定 tenant、Agent 实例和 scope ceiling |
 | `agent_instance_id` / `workspace_id` | Hermes/OpenClaw 的隔离运行域；会话、任务、工具 trace 与记忆均归属于它 |
 | `device_id` | 一次 App 安装与一次有效配对创建的设备身份；归属于一个 human principal |
+| `tailnet_node_id` / `tailnet_tag` | Bridge 从注册记录和连接上下文取得的网络身份；只绑定一个 active pairing，不产生 human/Agent 授权，同一 tag 下仍依赖应用层 principal 隔离 |
+| `transport_profile_id` / `transport_mode` | 绑定当前 `device_id` / `pairing_generation` 的 `TAILNET_EMBEDDED` 或用户单独完成传输 profile 挑战的 `PUBLIC_HTTPS_MANUAL`；由实际 listener/连接上下文确定，客户端声明不能切换路径或产生授权 |
+| `tailnet_policy_attestation_revision` | 隔离 verifier 对 Tailscale 当前生效完整 policy 的签名证明 revision/digest；只证明网络路径约束，不产生 human、Agent 或设备授权 |
 | `session_id` / `job_id` | 对话或自动化任务上下文；不能改变其绑定 principal |
 | `operation_id` | 一个逻辑设备请求的稳定身份；与传输重试分离 |
 
@@ -239,6 +261,7 @@ Device Owner 可以管理部分 runtime permission，但不是 system UID 或 Ro
 - 默认不存在跨用户检索或共享记忆。显式共享空间不在首版范围。
 - 应用管理员可以查看设备在线、版本和错误状态，缩小 ceiling 或撤销设备，但不能读取同步正文或提高 scope。
 - 一台设备的序列、授权 revision、审批凭据、通道票据和执行账本不能被另一台设备复用。
+- 每次安装/有效配对使用独立 Tailnet `StateStore`，不得复制到另一设备、Android user/profile 或备份恢复。node ID、tag、control URL 或私有 Bridge endpoint 改变时不得静默继承配对，必须重新配对或使用后续子规格定义的受签名恢复流程。
 - 同一逻辑服务中的两个用户必须可同时使用；端到端测试证明 prompt/context、tool result、事件、附件、会话、记忆和审计互不可见。
 
 ## 8. 数据源与 Android 平台边界
@@ -328,6 +351,8 @@ Device Owner 可以管理部分 runtime permission，但不是 system UID 或 Ro
 
 `policy_version` 只用于 UI/cache 同步，不产生授权。operation、批准凭据、事件来源 epoch、artifact/stream ticket 和缓存结果都绑定 `pairing_generation + authorization_epoch + scope_revision`。Bridge 历史副本查询只使用 7.2 定义的独立 `data_query_grant.grant_revision`，不冒充设备 epoch。校验采用精确匹配和拒绝优先；“撤销后重授”不能让旧请求、旧批准或旧 ticket 复活。限时会话使用 Android 单调时钟；远程请求 TTL 由 Bridge 时间裁决并允许最多 60 秒时钟偏差。
 
+Tailnet node ID、tag、control URL 或私有 Bridge endpoint 被替换时视为新应用设备配对并递增 `pairing_generation`。公网 endpoint/证书身份变化只使对应 transport profile binding 失效，必须在当前应用配对下重新完成 profile 挑战。用户在同一应用设备配对所绑定的两个 transport profile 间手动切换不提高授权、也不改变 `pairing_generation`，但必须递增 `connection_generation`、fence 旧 HTTP/WSS/artifact/stream 通道并终止不可恢复的实时流；不能把路径切换当作同一连接的透明重试。
+
 ### 9.3 撤销与删除语义
 
 本机撤销即使离线也会立即停止后续采集和设备操作、清除相应未上传数据并推进 revision。它无法在离线状态下瞬间改变 Bridge 已保存副本，因而以下动作在产品中分开显示：
@@ -336,6 +361,7 @@ Device Owner 可以管理部分 runtime permission，但不是 system UID 或 Ro
 2. **撤销 Bridge 数据查询授权**：App 上报后，只有收到 Bridge 签名 ACK 才显示“服务端已生效”；离线期间显示“待同步撤销”。用户也可从已认证的 Agent 账户直接发起服务端撤销。
 3. **删除 Bridge 原始数据与附件**：生成删除 job，返回 `pending/completed/partially_completed/failed` 和签名 receipt；Bridge 自有存储不允许 `unsupported`。
 4. **删除 Agent 副本与记忆**：分别覆盖会话历史、任务输入、tool trace、adapter cache、搜索/向量索引和长期记忆；每个 backend 返回同样的完成状态。
+5. **撤销 Tailnet 节点**：本机 `StateStore` 清除立即生效并阻止本机重连；服务端节点删除只有在 Bridge/Tailscale 返回成功后显示“已撤销”。离线或 API 不可用时显示“本机已清除 / 服务端撤销待完成”，用户可从已认证 Agent 会话继续完成远端撤销。
 
 Bridge 收到查询授权撤销后立即阻断新查询；已上传密文可保留到删除 job 完成或 TTL 到期。删除 tombstone 必须阻止备份恢复、重建索引或迟到事件重新生成已删除内容。
 
@@ -347,6 +373,8 @@ Bridge 自有存储、Hermes/OpenClaw adapter 和被启用的 Agent 数据/记�
 |---|---|
 | 手机同步数据队列 | 认证加密保存 7 天；全局 256 MiB |
 | 手机安全执行账本 | 与数据队列物理/逻辑分区，预留 32 MiB；Bridge ACK 前不可清除 |
+| Tailnet node state | 安装与 active pairing 专用的 Keystore-wrapped `StateStore`，位于 App-private no-backup 区域；不得导出、迁移或跨设备恢复；撤销配对时本机立即清除 |
+| Tailnet enrollment auth key | 仅在扫码注册期间存在于进程内有界缓冲；成功、失败或超时立即清除，绝不持久化 |
 | Bridge 原始数据 | 按来源使用独立 tenant/user 数据密钥加密，默认 30 天；可设不保存、立即删除或自定义期限 |
 | 屏幕画面和连续传感器流 | App 与 Bridge 均不持久化原始帧；首版不提供录制 |
 | 审计元数据 | 默认 90 天，只保存 allowlist 字段 |
@@ -399,7 +427,7 @@ event_kind: upsert | delete_tombstone | loss_marker
 - HTTPS：配对、管理、非实时查询、artifact 元数据与分片传输。
 - WSS：签名控制 envelope、presence、请求状态、事件、ACK 和对话 token 流。
 - 二进制 artifact/stream 通道：使用独立对象 ID 和短时 ticket；不能只靠 operation ID 复用 WSS 权限。
-- 三个面共享相同的身份绑定、授权 revision 和审计语义。HTTPS/WSS 断线恢复不能改变 operation 身份。
+- 三个面在 `TAILNET_EMBEDDED` 下全部经过同一个 Bridge-only userspace dial abstraction，在 `PUBLIC_HTTPS_MANUAL` 下全部经过绑定当前应用设备配对的公网 profile；不能让不同面绕过当前 transport mode。它们共享相同的身份绑定、授权 revision 和审计语义，HTTPS/WSS 断线恢复不能改变 operation 身份。
 
 所有敏感消息同时受 TLS 和应用层双向签名保护：App→Bridge 使用设备安装密钥；Bridge→App 使用固定并可轮换的 command-signing key；Agent adapter→Bridge 使用与 tenant、Agent 实例和 scope ceiling 绑定的独立凭据。adapter 无权访问设备私钥、Bridge command 私钥或核心数据库。
 
@@ -420,7 +448,7 @@ signature
 
 - `connect_hello`：设备 ID、pairing generation、client nonce、支持版本、最后 manifest/event cursor；不含 Agent principal、operation 或尚未分配的新 connection generation。
 - `connect_welcome`：Bridge nonce、选定版本、Bridge 时间、command key set 和本次新分配的 `connection_generation`。
-- `operation_command/result/approval/cancel`：tenant、human/agent principal、Agent instance/workspace、session/job、device、operation、capability、parameters digest、connection generation、`authorization_epoch`、相关 `scope_revisions` 映射或等价的 authorization snapshot hash。
+- `operation_command/result/approval/cancel`：tenant、human/agent principal、Agent instance/workspace、session/job、device、operation、capability、parameters digest、connection generation、`authorization_epoch`以及相关 `scope_revisions` 显式映射；v1 不提供可替代该映射的 snapshot hash 编码。
 - `device_event/event_ack`：device、source epoch、occurrence/cursor、采集时 revision 与 connection generation；主动设备事件不携带或选择 Agent principal，由 Bridge 按服务端 subscription 路由。
 - `presence/ping/key_rotation/policy_update`：只携带其 schema 所需的身份、generation/revision 和 challenge，不伪造 operation/capability 字段。
 
@@ -433,7 +461,7 @@ signature
 - 时间戳只用于过期，不能代替序列和持久账本。Bridge 是远程 TTL 的权威时钟，允许的客户端 wall-clock 偏差为 60 秒。
 - Protocol 子规格必须在 P0a 出口前冻结规范化编码、签名算法、域分离、hash、最大 envelope 大小、版本协商/降级拒绝、key 轮换与恢复规则，并生成跨 Android/Bridge/adapter 的 golden vectors。
 
-服务端从已认证连接和凭据取得真实身份；envelope 中的身份声明不产生授权。任一绑定不一致都返回 `AUTH_BINDING_MISMATCH` 并写安全审计。
+服务端从已认证连接和凭据取得真实身份；`transport_mode`、Tailnet node ID/tag 或公网 listener profile 由 Bridge 从实际连接上下文派生，不接受客户端自报。envelope 中的身份声明不产生授权。任一绑定不一致都返回 `AUTH_BINDING_MISMATCH` 并写安全审计。
 
 ### 10.3 Capability manifest
 
@@ -599,8 +627,8 @@ Agent 只可调用两类命令能力：
 
 App 提供两个本机动作：
 
-- **暂停全部**：推进 `authorization_epoch`，停止采集、同步、重连、MediaProjection、无障碍注入，拒绝新命令并尽力终止由 App 直接管理的子进程；重启后保持暂停。不能回滚已经发生的外部副作用。
-- **撤销并清除**：在暂停基础上撤销 Bridge 配对、清除本机队列和临时附件，并使设备密钥失效。
+- **暂停全部**：推进 `authorization_epoch`，停止采集、同步、重连并关闭 `tailnet-core`、MediaProjection、无障碍注入，拒绝新命令并尽力终止由 App 直接管理的子进程；重启后保持暂停。不能回滚已经发生的外部副作用，也不等于删除服务端 Tailnet 节点。
+- **撤销并清除**：在暂停基础上撤销 Bridge 配对、清除本机队列、临时附件和 Tailnet `StateStore`，使设备密钥失效，并提交服务端 Tailnet 节点撤销；远端未完成时按 9.3 显示 pending。
 
 屏幕会话期间，停止入口同时存在于持续通知和醒目浮层。远程管理员可以撤销设备，但不能在本机暂停后重新启用。
 
@@ -609,9 +637,10 @@ App 提供两个本机动作：
 ### 12.1 首次设置
 
 ```text
-使用 Tailscale 连接
-→（仅“高级连接”可选择 HTTPS 备用）
-→ 在已登录的目标用户会话生成并扫描配对码，核对短码
+在已登录的目标用户会话生成包含一次性 Tailnet 注册凭据的配对码
+→ App 内嵌节点加入 Tailnet（需要时等待 Device Approval/Tailnet Lock 签名）
+→ 通过私有 Bridge endpoint 完成双向挑战并核对短码
+→（仅“高级连接”可另行配置并将公网 HTTPS transport profile 绑定到当前设备配对）
 → 显示由 ticket 绑定的用户/Agent 身份与设备名称
 → 检测标准、Device Owner、Shizuku、类型化 Root actions
 → 逐项启用数据源和同步模式
@@ -619,11 +648,11 @@ App 提供两个本机动作：
 → 可选设为系统默认数字助手
 ```
 
-每一步说明为何需要系统权限、会读取什么、是否会离开设备、当前模型提供方、零保留 profile revision 以及如何撤销。App 不把“已检测到能力”显示成“已授权”。Accessibility 侧载场景明确引导用户先在 App Info 允许 restricted settings，再由用户进入系统设置启用；Agent、DPC 和类型化 Root 后端流程不代为点击。
+每一步说明为何需要系统权限、会读取什么、是否会离开设备、Tailscale control plane 可见的节点/连通性元数据、当前模型提供方、零保留 profile revision 以及如何撤销。网络设置明确说明本 App 使用进程内 userspace 节点而非 Android 系统 VPN。App 不把“已检测到能力”显示成“已授权”。Accessibility 侧载场景明确引导用户先在 App Info 允许 restricted settings，再由用户进入系统设置启用；Agent、DPC 和类型化 Root 后端流程不代为点击。
 
 ### 12.2 主界面
 
-- 当前 Bridge/Agent、连接状态、上次同步、待同步大小和最近错误。
+- 当前 Bridge/Agent、当前路径（Tailnet 或用户启用的公网 HTTPS）、Tailnet 节点/批准状态、direct/DERP/不可判定状态、上次同步、待同步大小和最近错误；明确显示“未占用系统 VPN”，不得显示为 Android 系统 VPN。
 - 数据源列表及其系统权限、采集状态、同步模式、过滤范围和保留期。
 - 能力中心，分别展示标准 API、Device Owner、Shizuku 和类型化 Root 后端状态。
 - 授权中心，分别管理主动读取、写入、Shell、屏幕查看和屏幕控制。
@@ -672,6 +701,10 @@ Accessibility service 声明 `isAccessibilityTool=false`。敏感节点隐藏、
 Bridge 负责：
 
 - 从已认证 human principal 签发预绑定 enrollment ticket，完成设备注册、密钥轮换和撤销。
+- 使用相互独立、最小 scope 的 Tailscale trust credential：enrollment issuer 只以绑定 deployment-specific tag 的 `auth_keys` 创建一次性 auth key；lifecycle worker 只以绑定同一 tag 的 `devices:core` 精确查询并撤销对应节点；隔离 policy verifier 只以 `policy_file:read` 及其必需的 `devices:posture_attributes:read`、`devices:core:read` 读取并验证当前完整 policy。三者均不得获得 `all`、`all:read` 或互相复用，verifier 不得获得写 scope。所有 OAuth client secret 只存在于各自服务端秘密存储，不进入二维码、手机、Agent prompt、adapter 或审计正文。
+- 把 auth-key 签发记录、enrollment ticket、Tailnet node ID/tag 与应用 `device_id` 绑定，并在 ticket 到期后回收已注册但未完成应用配对的孤儿节点。
+- 对已配对节点维护应用层 last-seen；连续 30 天没有有效 heartbeat 时撤销 Tailnet 节点并使应用配对失效，防止卸载/清数据后留下无限期 tag-owned 节点。
+- 固定 policy verifier 公钥并验证其短期签名 attestation；启动、enrollment、新 Tailnet connection 和定期续期均以 Tailscale 当前生效完整 policy 为输入，确认手机 tag 到 Bridge TCP 443 是唯一允许路径。attestation 缺失、过期或 revision/digest 不匹配时拒绝新连接并关闭无法续期的 Tailnet 应用会话；存在可使该 tag 访问无关节点/端口的重叠 grant/ACL 时部署不合规。
 - 持久绑定 tenant、human principal、agent principal、Agent instance/workspace、session/job 与设备。
 - WSS presence、签名双向 RPC、connection fencing、事件 ACK、游标恢复和取消。
 - operation/执行 receipt 账本、重放防护、请求 TTL、批准限流和 `result_unknown` reconciliation。
@@ -686,10 +719,11 @@ Bridge 不负责：
 - 解释自然语言自动化规则。
 - 替 Agent 决定何时分析数据。
 - 保存手机或 Agent 的无范围管理员密钥。
+- 把 Tailnet node/tag/IP、MagicDNS 或 Serve header 当成应用层 principal，或让 Agent 直接调用 Tailscale 管理 API。
 - 在手机离线时保证高危命令最终执行。
 - 通过 adapter、MCP、webhook 或 node 的第二入口重复投递同一命令/事件。
 
-服务端审计使用追加写逻辑记录并生成可校验检查点。日志仅允许记录 server/device time、序列、key ID、operation/message ID、身份绑定、scope、风险等级、授权 revision、批准方式、枚举型 outcome、耗时、字节数和经过 allowlist 的非内容字段；不接受 Agent/backend 自由文本“结果摘要”，不记录令牌、密码、OTP、通知正文、命令输出或屏幕帧。
+服务端审计使用追加写逻辑记录并生成可校验检查点。日志仅允许记录 server/device time、序列、credential/key ID、Tailnet node ID/tag、policy attestation revision/digest、operation/message ID、身份绑定、scope、风险等级、授权 revision、批准方式、枚举型 outcome、耗时、字节数和经过 allowlist 的非内容字段；不接受 Agent/backend 自由文本“结果摘要”，不记录 OAuth secret、原始 auth key、node private state、enrollment ticket 明文、令牌、密码、OTP、通知正文、命令输出或屏幕帧。
 
 Bridge 的数据删除、索引重建、备份恢复和密钥销毁必须尊重 deletion tombstone。删除 receipt 只枚举 Bridge、adapter 和 Agent backend 实际拥有的持久对象。若模型 API 调用返回持久 object/retention ID，或本地 adapter 把请求正文落入 spool、日志或重试文件，视为零保留前提破坏，立即阻断后续正文外发并告警。
 
@@ -796,6 +830,19 @@ skill 不承担认证、多租户隔离、风险分类、限流、授权或幂�
 
 `APPROVAL_REQUIRED`、`USER_DENIED`、`EXPIRED` 和 `RESULT_UNKNOWN` 不再混作可重试异常。Agent 必须查询 operation，再依 capability 的 offline policy 决定是否等待。
 
+配对前/连接层状态与 operation reason 分开：
+
+| 状态/原因 | 行为 |
+|---|---|
+| `TAILNET_CREDENTIAL_EXPIRED_OR_USED` | 消耗当前 ticket，用户从已认证会话生成新配对码；不切公网 |
+| `TAILNET_APPROVAL_REQUIRED` | 等待 Device Approval，或在 Tailnet Lock profile 完成 trusted signing；不切公网 |
+| `TAILNET_POLICY_DENIED` | 当前完整 grants/ACL 明确不符合唯一允许路径；提示运维修复，不得扩大 tag、目标或端口 |
+| `TAILNET_POLICY_ATTESTATION_STALE` | verifier attestation 缺失、过期、签名失败或 revision/digest 不匹配；拒绝 enrollment/新连接并关闭无法续期的 Tailnet 应用会话 |
+| `TAILNET_CONTROL_UNREACHABLE` | 保持离线并有界退避；不探测公网 Bridge |
+| `TAILNET_BRIDGE_UNREACHABLE` | 保持离线并有界退避；区分 policy denied 与网络不可判定状态 |
+| `TAILNET_STATE_INVALID` | 停止 core；只有明确恢复流程或重新配对可创建新 node state |
+| `PUBLIC_FALLBACK_DISABLED` | 只有用户可在高级连接中配置、配对并启用 |
+
 协议层错误：
 
 | 代码 | 含义 | 客户端/Agent 行为 |
@@ -803,9 +850,16 @@ skill 不承担认证、多租户隔离、风险分类、限流、授权或幂�
 | `AUTH_FAILED` | 签名或凭据不可验证 | 终止连接并记录安全事件 |
 | `AUTH_BINDING_MISMATCH` | tenant/principal/session/device 声明与服务端绑定不符 | 拒绝；不得改 ID 重试 |
 | `VERSION_UNSUPPORTED` | 协议/schema 不兼容或被降级 | 显示双方范围，停止该能力 |
+| `SCHEMA_INVALID` | canonical JSON 或已知 schema 校验失败 | 拒绝；不执行且不猜测未知字段 |
+| `MESSAGE_TOO_LARGE` | 控制 envelope 超过协议上限 | 在解析前拒绝；大正文改走 artifact/stream |
+| `MESSAGE_EXPIRED` | 签名消息已超过有效期 | 不执行；仅允许新建合法请求或核对既有 operation |
+| `CONNECTION_FENCED` | connection generation 过旧或未分配 | 关闭旧连接；在当前 generation 重新包装可重放 receipt |
 | `REPLAY_REJECTED` | message/sequence 已使用且无可返回 receipt | 不执行 |
 | `IDEMPOTENCY_CONFLICT` | 同一 operation 对应不同参数摘要 | 停止并安全审计 |
 | `INTEGRITY_FAILED` | digest、chunk、receipt 或 ticket 校验失败 | 关闭通道并安全审计 |
+| `FLOW_CONTROL_VIOLATION` | stream/artifact 发送超过已签发 credit 或通道上限 | 关闭通道并释放缓冲；不得无界重试 |
+| `INVALID_STATE_TRANSITION` | 消息对当前状态不存在合法迁移 | 不改变状态；查询服务端权威 operation |
+| `RESULT_CONFLICT` | 同一 execution claim 出现相互冲突的签名 result | 保留首个可信 result，停止自动处理并安全审计 |
 
 operation 拒绝/失败原因：
 
@@ -826,6 +880,7 @@ operation 拒绝/失败原因：
 ### 16.2 后台行为
 
 - App 空闲时不维持前台服务。
+- `tailnet-core` 按任务/会话惰性启动，持久节点状态用于后续重连；不得为了保持 Tailnet 在线而单独维持常驻前台服务、唤醒锁或无界 keepalive。关闭 core 不等于撤销节点，撤销必须执行 6.1 的双端生命周期。
 - WorkManager、系统广播、Notification Listener 等机制只提供尽力而为同步。
 - 用户主动对话、连续传感器、MediaProjection 或屏幕控制时才启动相应前台服务和持续通知。
 - 普通重启后，只有在“未暂停、配对有效、当前授权 revision 匹配、Android 权限仍有效且用户未强制停止 App”时恢复非高危调度；被强制停止后必须由用户重新打开 App。Shizuku/ADB 能力可能还需重新启动或授权。
@@ -833,13 +888,15 @@ operation 拒绝/失败原因：
 
 ### 16.3 可观测性
 
-用户可查看最近同步、待上传大小、最后错误、能力变化、当前审批、授权/删除同步状态和本机审计。服务端指标只使用非内容元数据，包括在线设备数、请求时延、枚举错误/结果码、队列深度、重试数、gap 和丢弃计数。
+用户可查看最近同步、待上传大小、最后错误、能力变化、当前审批、授权/删除同步状态、本机审计，以及 Tailnet 节点、Device Approval/Tailnet Lock、direct/DERP 和公网备用是否启用。服务端指标只使用非内容元数据，包括在线设备数、请求时延、枚举错误/结果码、队列深度、重试数、gap 和丢弃计数。
 
 ## 17. 安全不变量与残余风险
 
 ### 17.1 必须始终成立
 
 - IP、MagicDNS、Tailscale 用户头或设备名称不能单独授权操作。
+- Android 产品及其 companion APK 不声明或启动 `VpnService`，不创建系统 TUN、路由或 DNS，不暴露代理/入站服务/通用 Tailnet dial；只有当前配对 Bridge 的 TCP 443 可从产品 API 到达。
+- Tailnet 故障、等待批准或第三方 VPN 阻断时不得自动切换公网 HTTPS；只有用户已显式启用且已绑定当前应用设备配对的公网 transport profile 可被选择，且 UI/审计必须记录实际路径。
 - 每次采集、上传、Bridge 副本查询和命令执行都检查 7.2 的身份/scope 交集与当前授权 revision。
 - Agent 输出始终是不可信输入；正常安全保证只覆盖类型化、可验证的命令边界。
 - 本机撤销、暂停和紧急停止立即优先于后续设备采集/操作，并在重启后持续有效；Bridge 查询撤销以服务端 ACK 状态诚实显示。
@@ -857,6 +914,10 @@ operation 拒绝/失败原因：
 ### 17.2 残余风险
 
 - 硬件 Keystore 可以阻止私钥导出，但设备、Root 或 App 进程完全失陷时，攻击者仍可能调用密钥。
+- Tailscale coordination service 会处理节点身份与连通性元数据；DERP 不解密 WireGuard payload，但仍可观察中继连接元数据。本项目默认关闭 Tailscale 客户端远程日志，不能消除 control plane 正常运行所需的元数据处理。
+- 二维码中未消费的 auth key 是短期 bearer secret；Bridge issuer credential 泄露可铸造 deployment tag 节点，lifecycle credential 泄露可读取设备清单元数据并管理匹配节点。一次性 key、分离 credential、tag 限制、秘密存储、轮换、速率限制和审计只能降低而不能消除该风险。
+- 不占用 Android 系统 VPN 通道不等于能绕过另一个 VPN；对方的全隧道、lockdown、DNS 或防火墙策略可使内嵌节点无法连接，产品只能诚实失败或由用户手动选择已配对的公网 HTTPS 备用。
+- Android 上的 app-scoped `tsnet`/userspace AAR 是基于官方 Go 源码的定制集成，而不是 Tailscale 官方支持的现成 Android userspace SDK；Go/NDK/ABI、OEM 后台限制、耗电、网络切换和上游更新都可能迫使设计重新评审。
 - Tailscale 不能限制已获授权的 Agent 如何使用已解密数据。
 - Agent 主机 root 管理员能够读取内存或底层存储。
 - 系统依赖所选模型 API 的零保留契约和账户配置；契约、配置或证据 revision 漂移属于运维供应链风险，健康检查失败时必须停止正文外发。
@@ -870,9 +931,10 @@ operation 拒绝/失败原因：
 | 阶段 | 交付范围 | 验收出口 |
 |---|---|---|
 | P0a 协议与安全模型 | 身份/授权域、envelope、operation 状态机、artifact/stream ticket、威胁模型、golden traces、fake device/adapter | 规范字段、算法、迁移和失败语义冻结；跨语言 golden vectors 通过 |
-| P0b Bridge 核心 | principal/enrollment、持久 operation/事件/artifact 元数据、安全/审计账本、删除 job、mock adapter | 伪造身份、重放、取消竞态、删除 tombstone、崩溃恢复通过 |
-| P0c Android 安全底座 | 安装身份、配对、本机 policy、统一 revision、加密数据队列/安全账本、暂停/清除 | 离线撤销、重启、账本写满和旧批准/ticket 重放全部 fail closed |
-| P0d 端到端传输 | WSS/HTTPS、Tailscale 默认引导、公网备用、connection fencing、轮换/恢复 | Tailscale 与 HTTPS 分别验收；新旧连接并存不重复执行 |
+| P0t Tailnet 可行性门槛 | 固定 Tailscale/Go/gomobile/NDK 版本，制作最小 AAR，仅完成一次性 auth key 注册、持久 state 恢复和 Bridge TCP 443 client dial 真机 spike；在子规格测试前冻结包大小、RSS、CPU、唤醒和传输/空闲电量预算 | `arm64-v8a`/`x86_64` 在 API 34–37 参考环境及 Android 15+ 16 KiB page-size 环境运行；无 `VpnService`/系统 TUN/route/DNS/代理/listener；验证 direct、DERP、网络切换、Doze、官方 Tailscale App 及另一系统 VPN 的允许/阻断路径，并满足冻结的资源预算。任一硬门槛失败即暂停并重审，不开始 P0b/P0c 的生产实现，也不退回系统 VPN |
+| P0b Bridge 核心 | principal/enrollment、Tailscale credential issuer/lifecycle/policy verifier、node binding/orphan cleanup、transport profile binding、持久 operation/事件/artifact 元数据、安全/审计账本、删除 job、mock adapter | 伪造身份、auth key 重放/越权、policy attestation 失效、孤儿节点回收、transport profile fencing、取消竞态、删除 tombstone、崩溃恢复通过 |
+| P0c Android 安全底座 | 安装身份、应用配对、加密/no-backup Tailnet state、auth key 内存清除、本机 policy、统一 revision、加密数据队列/安全账本、暂停/清除 | 无 `VpnService`/TUN 的静态门禁，离线撤销、state 复制/恢复、重启、账本写满和旧批准/ticket 重放全部 fail closed |
+| P0d 端到端传输 | 基于已通过 P0t 的 AAR 实现私有 WSS/HTTPS/artifact、Bridge-only dial、用户手动公网备用、connection fencing、轮换/恢复 | Tailscale 与 HTTPS 分别验收；无通用 dial/listener/代理；direct/DERP 与实际 transport mode 可观测；新旧路径并存不重复执行且不自动公网降级 |
 | P0e Hermes 契约接入 | 唯一 chat/tool/event profile、principal 传播、operation 映射、共享契约套件 | 两个真实用户在 Hermes 内无上下文/tool/记忆交叉 |
 | P0f OpenClaw 契约接入 | 唯一 Gateway/plugin/node profile、principal 传播、operation 映射、共享契约套件 | 两个真实用户在 OpenClaw 内无上下文/tool/记忆交叉 |
 | P1a 基础只读事件 | 设备状态、通知、通话状态/记录、过滤和 event cursor | 权限、gap/resync、离线和队列淘汰语义通过 |
@@ -892,16 +954,17 @@ schema migration、崩溃恢复、安全故障注入、跨用户测试和审计�
 后续子规格：
 
 1. Threat model、Protocol 与 golden traces。
-2. Device Bridge 存储、operation/event/artifact 状态机与内部 API。
-3. Android 安全底座、权限/角色和增强后端。
-4. Android 数据采集器与 event cursor。
-5. 类型化写入与不可降低确认。
-6. MediaProjection、Accessibility、restricted shell 与类型化 Root actions。
-7. 默认数字助手、语音与附件体验。
-8. Hermes plugin、adapter 与 skill 打包。
-9. OpenClaw plugin、adapter 与 skill 打包。
+2. Android app-scoped Tailscale core、Bridge enrollment issuer、Tailnet grants 与手动公网 fallback。
+3. Device Bridge 存储、operation/event/artifact 状态机与内部 API。
+4. Android 安全底座、权限/角色和增强后端。
+5. Android 数据采集器与 event cursor。
+6. 类型化写入与不可降低确认。
+7. MediaProjection、Accessibility、restricted shell 与类型化 Root actions。
+8. 默认数字助手、语音与附件体验。
+9. Hermes plugin、adapter 与 skill 打包。
+10. OpenClaw plugin、adapter 与 skill 打包。
 
-本文通过书面审阅后，第一份实施计划仅覆盖 P0a；P0a 的规范与测试向量未冻结前，不开始 P0b–P3 实现。
+本文已通过书面审阅。第一份实施计划仅覆盖 P0a；P0a 的规范与测试向量未冻结前，不开始 P0b–P3 实现。
 
 ## 19. 测试策略
 
@@ -909,6 +972,11 @@ schema migration、崩溃恢复、安全故障注入、跨用户测试和审计�
 
 - policy-engine、有效授权交集、risk/sensitivity/backend 修正、统一 revision、限时会话和紧急停止的单元与属性测试。
 - 签名 envelope、golden vectors、per-direction sequence、防重放、版本降级、connection generation、key rotation 和加密队列测试。
+- transport profile 状态机验证一个安装实例始终只有一个 `device_id` / `pairing_generation`：新增、撤销或更新公网 profile binding 不创建第二设备配对；endpoint/证书身份变化只使该 binding 失效；用户手动切换只递增 `connection_generation` 并 fence 旧通道，两个 profile 不得同时成为活动控制路径。
+- Android manifest、merged manifest、依赖和运行路径静态门禁：产品及 companion 中不得出现 `VpnService`/`BIND_VPN_SERVICE`、系统 TUN 创建、route/DNS 修改、exit/subnet/Funnel、loopback proxy、LocalAPI、通用 `Dial`/`Listen` IPC；只允许 Tailscale core 自身为 WireGuard 连通性建立底层 socket。
+- `tailnet-core` API 契约测试只接受 enrollment ticket 固定的 Bridge endpoint 与 TCP 443；任意 host/port/protocol 注入、旧 pairing generation、redirect 到其他 Tailnet 目标和 DNS 重绑定均 fail closed。
+- policy verifier 以实际当前完整 Tailnet policy 和 fixture/preview 校验 deployment-specific 手机 tag 只能访问同一 deployment 的 Bridge TCP 443，Bridge 不能反向连接手机；两部手机/两个 Bridge 的跨 deployment、跨端口访问均为负例。加入宽泛 autogroup、共用 Bridge tag、旧 ACL 或重叠 grant 后 attestation 不得签发。验证 verifier credential 只有 `policy_file:read`、`devices:posture_attributes:read`、`devices:core:read`，无法写 policy/设备或创建 auth key；attestation 缺失、过期、旧 revision、错误 digest/签名时 Tailnet subsystem 启动、enrollment 和新 Tailnet connection 均 fail closed，存量 Tailnet 应用会话无法续期。已绑定公网 profile 不自动启用，只能在用户手动选择后继续。
+- auth key/二维码字段、node state、OAuth secret 和应用 payload 不进入 Logcat、崩溃报告、Bridge 审计正文或 Tailscale client log；no-logs/no-support 配置漂移触发构建或启动失败。
 - 每个 collector 的权限、过滤、游标、删除和错误映射测试。
 - Hermes/OpenClaw 共用协议契约测试，验证相同工具语义与错误码。
 - 多用户/设备隔离、tenant/principal/session/device 注入、越权查询、跨 workspace 检索和审计访问测试。
@@ -921,6 +989,10 @@ schema migration、崩溃恢复、安全故障注入、跨用户测试和审计�
 
 - API 34、35、36 模拟器；API 37 使用测试时最新可得的 SDK/系统镜像做兼容检查，并在项目宣布正式支持该版本时进入必测矩阵。
 - 至少一台 Pixel 参考设备和一台后台限制较强的主流 OEM 真机。
+- `tailnet-core` AAR 至少覆盖 `arm64-v8a` 与 `x86_64`，在 Android 15+ 16 KiB page-size 环境验证 native library，覆盖 cold/warm start、重复创建/关闭、进程死亡、应用升级和 node state 恢复；按 P0t 预先冻结的预算验收 AAR/APK 增量、RSS、CPU、唤醒次数、空闲与传输电量。
+- 通过 merged manifest、`dumpsys`、路由表/DNS 前后快照和系统 VPN UI 证明本 App 从未注册/启动 VPN service、未创建系统 TUN、未接管系统路由/DNS，且其他 App 流量不进入内嵌节点。
+- 覆盖 Wi-Fi↔蜂窝、IPv4/IPv6、NAT、control/DERP 临时不可用、direct↔DERP 切换和 Doze/后台限制；路径不可判定时不得声称 direct。
+- 在另一系统 VPN 活动时分别测试允许底层 UDP/HTTPS 的 split/full-tunnel 配置和主动阻断 Tailscale 的 always-on+lockdown 配置，并单列官方 Tailscale App 作为系统 VPN 的组合：原系统 VPN 始终保持活动；允许路径下本 App 可连接，阻断路径下真实报错且不自动公网降级。
 - 标准 API、Device Owner、Shizuku/ADB 和类型化 Root backend 四种设备配置。
 - 权限从未授予、已授予、使用中撤销、重启失效和 user/profile 切换。
 - Notification Listener、Accessibility、Usage Access、MediaProjection、Health Connect 和 Assistant Role 真机流程。
@@ -932,6 +1004,12 @@ schema migration、崩溃恢复、安全故障注入、跨用户测试和审计�
 ### 19.3 故障与安全测试
 
 - 断网、Doze、进程终止、强制停止、设备重启、Agent 重启和证书轮换。
+- enrollment auth key/二维码在使用前泄漏、并发抢用、成功后重放、请求/实际 expiry 超过 5 分钟、Bridge 撤销、旧 node state 恢复与重新配对后重放；分别验证 Device Approval 未预批准/批准/拒绝、显式 `preauthorized=true` 和 Tailnet Lock 预签/未签/错签流程，任何失败均不能建立有效应用配对。
+- 推进 Bridge 权威时钟并验证两类节点回收：未完成应用配对的孤儿节点在 ticket 到期后 10 分钟内撤销；已配对节点连续 30 天无有效应用 heartbeat 后，其 Tailnet 节点和应用 pairing 一并失效。远端删除暂时失败时状态保持 pending、持续重试且旧节点不能恢复权限。
+- 篡改二维码中的 control URL、Bridge endpoint、tag、key ID 或 public key fingerprint；Tailnet node/tag 与 ticket 不匹配；客户端把 auth key 发往 Bridge、公网备用或日志；全部 fail closed 并产生无正文安全审计。
+- 尝试通过反射/JNI/IPC/redirect 调用任意 Tailnet 地址、开放 listener、启动 loopback proxy/LocalAPI/Funnel、修改系统 route/DNS 或创建 VPN/TUN；构建门禁和运行时两层均拒绝。
+- direct/DERP 抖动、Tailscale control/DERP 全失效、另一个 VPN 阻断以及 userspace core 崩溃时保持当前 operation/sequence 语义；公网 HTTPS 未经用户启用并绑定当前应用设备配对不得成为候选路径。节点注册成功但应用配对失败、App 清数据/卸载、远端删除 API 暂时失败时，应用权限立即失效且孤儿/旧节点最终回收。
+- 在隔离测试环境捕获 App egress，证明 payload 只去往 Tailscale control/STUN/DERP 与当前 Bridge 所需 endpoint，且 no-logs/no-support 下不连接 Tailscale log upload endpoint；连接元数据与应用正文严格分离。
 - 在 execution claim 前、claim 后副作用前、副作用后 result 前、result 后 Bridge ACK 前逐点崩溃并重启。
 - 同一 operation 不同 digest、并发重复、取消与成功竞态、`result_unknown` 后晚到 receipt、result ACK 丢失。
 - 队列 gap、乱序、delete tombstone、snapshot/resync、来源撤销后新 source epoch 和数据/安全账本分别写满。
@@ -962,10 +1040,14 @@ schema migration、崩溃恢复、安全故障注入、跨用户测试和审计�
 11. Hermes 与 OpenClaw 对相同手机能力给出一致工具、异步状态、terminal outcome、错误、幂等和删除语义。
 12. 参考设备可从系统默认助手入口唤起，完成文字、按住说话、JPEG/PNG/WebP、PDF/纯文本附件对话；holder 不因角色获得敏感产品 scope。
 13. App/Bridge 不包含自动化规则引擎；触发条件和分析完全由用户在 Agent 端自然语言/原生自动化中定义，Agent 规则不能扩大手机授权。
+14. App 通过进程内 Tailscale userspace core 与私有 Bridge 完成 WSS/HTTPS 和附件传输；产品所有 APK 均无 `VpnService`、系统 TUN/route/DNS、代理、入站服务或通用 Tailnet dial，其他 App 流量不经过该 core，Android 系统 VPN 槽位可继续由另一 VPN 使用。
+15. 一次性 Tailnet auth key 只在 5 分钟 enrollment 内存中出现，Tailscale API 返回的实际 expiry 必须被校验，issuer/lifecycle/verifier OAuth secret 永不离开各自 Bridge-side 信任边界；有效的完整 policy attestation 证明 deployment-specific 手机 tag 只能访问同一 deployment 的 Bridge TCP 443，不能反向、跨 Bridge 或跨端口访问。direct、DERP、等待批准、第三方 VPN 阻断和不可达状态均如实显示；公网 HTTPS 只有用户显式启用并绑定当前应用设备配对后可用，任何故障都不触发自动降级。
 
 ## 21. 平台与发布风险
 
 本项目面向受控设备和私有分发。即使侧载，Android 的角色、hard-restricted permission、MediaProjection、Accessibility 和后台限制仍然生效，Device Owner 也不能公开地绕过所有限制。
+
+内嵌 Tailscale userspace core 会增加 Go runtime/AAR 体积、原生 ABI、内存、电量、上游安全更新和第三方 VPN 兼容风险。官方 Android 客户端尚未提供可直接复用的 userspace 模式，因此 P0t feasibility gate 是后续实现阻断项；不能通过时必须回到设计评审，由用户决定是否接受其他网络方案，不能改用 `VpnService` 冒充达标。
 
 若未来提交 Google Play，以下能力必须视为高风险或可能不允许：
 
@@ -1006,10 +1088,23 @@ schema migration、崩溃恢复、安全故障注入、跨用户测试和审计�
 
 ### Tailscale
 
+- [tsnet](https://tailscale.com/docs/features/tsnet)
+- [tsnet.Server API](https://tailscale.com/docs/reference/tsnet-server-api)
+- [tsnet source](https://github.com/tailscale/tailscale/blob/main/tsnet/tsnet.go)
+- [Tailscale Android source](https://github.com/tailscale/tailscale-android)
+- [Android userspace networking feature request](https://github.com/tailscale/tailscale/issues/10126)
+- [Userspace networking](https://tailscale.com/docs/concepts/userspace-networking)
 - [Connection types](https://tailscale.com/docs/reference/connection-types)
+- [DERP servers](https://tailscale.com/docs/reference/derp-servers)
 - [Tailscale identity](https://tailscale.com/docs/concepts/tailscale-identity)
+- [Tags](https://tailscale.com/docs/features/tags)
 - [Grants](https://tailscale.com/docs/reference/syntax/grants)
 - [Application capabilities](https://tailscale.com/docs/features/access-control/grants/grants-app-capabilities)
+- [OAuth clients](https://tailscale.com/kb/1215/oauth-clients)
+- [Trust credentials](https://tailscale.com/docs/reference/trust-credentials)
+- [Secure auth keys](https://tailscale.com/docs/features/access-control/auth-keys/how-to/secure-auth-keys)
+- [Logging](https://tailscale.com/docs/features/logging)
+- [Other VPNs](https://tailscale.com/docs/reference/faq/other-vpns)
 - [Tailscale Serve](https://tailscale.com/docs/features/tailscale-serve)
 - [Tailnet Lock](https://tailscale.com/docs/features/tailnet-lock)
 - [Device Approval](https://tailscale.com/docs/features/access-control/device-management/device-approval)
