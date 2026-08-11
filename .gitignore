@@ -1,8 +1,9 @@
 .worktrees/
+/.toolchains/
+/node_modules/
 **/node_modules/
 **/__pycache__/
 .env_check.txt
-.toolchains/
 
 # Android
 apps/android/local.properties

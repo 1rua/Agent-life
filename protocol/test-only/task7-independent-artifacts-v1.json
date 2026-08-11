@@ -1,0 +1,49 @@
+{
+  "artifact_set": "task7-independent-v1",
+  "status": "APPROVED_REFERENCE_ARTIFACTS",
+  "decision_status": {
+    "D1": "APPROVED_USER_CONFIRMED",
+    "D2": "APPROVED_USER_CONFIRMED",
+    "D3": "APPROVED_USER_CONFIRMED",
+    "D4": "APPROVED_USER_CONFIRMED"
+  },
+  "present": [
+    "protocol/schemas/v1/operation.schema.json",
+    "protocol/schemas/v1/receipt.schema.json",
+    "protocol/schemas/v1/migration-receipt.schema.json",
+    "protocol/schemas/v1/error-response.schema.json",
+    "protocol/schemas/v1/errors-registry.schema.json",
+    "protocol/registries/v1/errors.json",
+    "protocol/model/v1/operation-transitions.json",
+    "protocol/model/v1/error-precedence.json",
+    "protocol/test-only/migration/v0.9/profile.json",
+    "protocol/test-only/migration/v0.9/pending-operation.schema.json",
+    "protocol/test-only/migration/v0.9/pending-operation.json",
+    "protocol/test-only/migration/v0.9/pending-operation-signature.json",
+    "protocol/test-only/operation/v1/operation-state-vectors.json",
+    "protocol/test-only/operation/v1/result-digest-vectors.json",
+    "protocol/test-only/operation/v1/reconciliation-evidence-vectors.json",
+    "protocol/src/migration.ts",
+    "protocol/test/migration.test.ts",
+    "protocol/src/error-model.ts",
+    "protocol/test/error-model.test.ts",
+    ".superpowers/sdd/2026-08-08-p0a-protocol-security-model/task-7-product-decisions.md",
+    "docs/protocol/v1/operations.md",
+    "protocol/schemas/v1/replay-policies-registry.schema.json",
+    "protocol/registries/v1/replay-policies.json",
+    "protocol/test-only/replay/v1/compaction-recovery-vectors.json",
+    "protocol/test/task7-decision-record.test.ts"
+  ],
+  "pending": [
+    "protocol/test-only/replay/v1/intent-metadata-device-v1.json",
+    "protocol/test-only/replay/v1/intent-metadata-adapter-v1.json",
+    "protocol/test-only/replay/v1/intent-metadata-adapter-empty-scope-v1.json",
+    "protocol/test-only/operation/v1/receipt-replay-vectors.json",
+    "protocol/registries/v1/messages.json#Task7-13-rows"
+  ],
+  "non_claims": [
+    "D1-D4 are user-approved reference decisions; this artifact set does not claim a production durable backend.",
+    "replay-policy and compaction vectors are canonical reference oracles, while runtime admission/ACK/compaction integration remains pending implementation review.",
+    "Migration fixtures are conformance inputs only; they do not enable v0.9 negotiation or production migration code."
+  ]
+}

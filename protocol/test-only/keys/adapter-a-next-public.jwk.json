@@ -1,0 +1,9 @@
+{
+  "kty": "EC",
+  "crv": "P-256",
+  "x": "sBoXKnakYCyS0yQsuJfd4wJMdA3rshW0xrCq6Twikak",
+  "y": "6FwQdDI32tVv7A4t-6cDeRwA93Acfha9_XxIU4_Hf-I",
+  "alg": "ES256",
+  "use": "sig",
+  "kid": "test-adapter-a-next"
+}

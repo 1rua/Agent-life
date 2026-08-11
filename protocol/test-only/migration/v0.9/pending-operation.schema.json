@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agent-life:protocol:v0.9:pending-operation",
+  "type": "object",
+  "required": ["message_schema", "operation_id", "parameters_digest", "state", "expires_at"],
+  "properties": {
+    "message_schema": { "const": "urn:agent-life:protocol:v0.9:pending-operation" },
+    "operation_id": { "type": "string", "pattern": "^[A-Za-z0-9._~-]{1,128}$" },
+    "parameters_digest": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
+    "state": { "const": "pending" },
+    "expires_at": { "type": "string", "format": "rfc3339-utc-milliseconds" },
+    "binding": {
+      "type": "object",
+      "required": ["tenant_id", "human_principal_id", "agent_instance_id", "workspace_id", "device_id"],
+      "properties": {
+        "tenant_id": { "type": "string", "pattern": "^[A-Za-z0-9._~-]{1,128}$" },
+        "human_principal_id": { "type": "string", "pattern": "^[A-Za-z0-9._~-]{1,128}$" },
+        "agent_instance_id": { "type": "string", "pattern": "^[A-Za-z0-9._~-]{1,128}$" },
+        "workspace_id": { "type": "string", "pattern": "^[A-Za-z0-9._~-]{1,128}$" },
+        "device_id": { "type": "string", "pattern": "^[A-Za-z0-9._~-]{1,128}$" }
+      },
+      "unevaluatedProperties": false
+    }
+  },
+  "unevaluatedProperties": false
+}

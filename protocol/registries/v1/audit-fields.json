@@ -1,0 +1,50 @@
+{
+  "protocol_version": "1.0",
+  "allowed_audit_fields": [
+    "server_time", "device_time", "sequence", "credential_id", "key_id",
+    "tailnet_node_id", "tailnet_tag", "policy_attestation_revision", "policy_attestation_digest",
+    "operation_id", "message_id",
+    "tenant_id", "human_principal_id", "agent_principal_id", "agent_instance_id",
+    "workspace_id", "session_id", "job_id", "device_id", "scope", "capability", "risk_level",
+    "pairing_generation", "authorization_epoch", "scope_revisions", "grant_revision",
+    "approval_method", "outcome", "duration_ms", "byte_count", "correlation_id"
+  ],
+  "forbidden_audit_fields": [
+    "auth_key", "body", "command_output", "enrollment_ticket", "node_private_state",
+    "notification_body", "oauth_secret", "otp", "password", "private_key",
+    "screen_frame", "token"
+  ],
+  "field_contracts": {
+    "server_time": { "kind": "string", "format": "rfc3339-utc", "max_encoded_length": 30 },
+    "device_time": { "kind": "string", "format": "rfc3339-utc", "max_encoded_length": 30 },
+    "sequence": { "kind": "integer", "format": "uint64", "max_encoded_length": 20 },
+    "credential_id": { "kind": "string", "format": "credential-id", "max_encoded_length": 128 },
+    "key_id": { "kind": "string", "format": "key-id", "max_encoded_length": 128 },
+    "tailnet_node_id": { "kind": "string", "format": "tailnet-node-id", "max_encoded_length": 128 },
+    "tailnet_tag": { "kind": "string", "format": "tailnet-tag", "max_encoded_length": 128 },
+    "policy_attestation_revision": { "kind": "integer", "format": "revision", "max_encoded_length": 20 },
+    "policy_attestation_digest": { "kind": "string", "format": "b64u-sha256-jcs-signed-attestation", "max_encoded_length": 43 },
+    "operation_id": { "kind": "string", "format": "operation-id", "max_encoded_length": 128 },
+    "message_id": { "kind": "string", "format": "message-id", "max_encoded_length": 128 },
+    "tenant_id": { "kind": "string", "format": "tenant-id", "max_encoded_length": 128 },
+    "human_principal_id": { "kind": "string", "format": "principal-id", "max_encoded_length": 128 },
+    "agent_principal_id": { "kind": "string", "format": "principal-id", "max_encoded_length": 128 },
+    "agent_instance_id": { "kind": "string", "format": "agent-instance-id", "max_encoded_length": 128 },
+    "workspace_id": { "kind": "string", "format": "workspace-id", "max_encoded_length": 128 },
+    "session_id": { "kind": "string", "format": "session-id", "max_encoded_length": 128 },
+    "job_id": { "kind": "string", "format": "job-id", "max_encoded_length": 128 },
+    "device_id": { "kind": "string", "format": "device-id", "max_encoded_length": 128 },
+    "scope": { "kind": "string", "enum_ref": "v1.scope-enum", "max_encoded_length": 128 },
+    "capability": { "kind": "string", "enum_ref": "v1.capability-enum", "max_encoded_length": 128 },
+    "risk_level": { "kind": "string", "enum_ref": "v1.risk-level-enum", "max_encoded_length": 32 },
+    "pairing_generation": { "kind": "integer", "format": "pairing-generation", "max_encoded_length": 20 },
+    "authorization_epoch": { "kind": "integer", "format": "authorization-epoch", "max_encoded_length": 20 },
+    "scope_revisions": { "kind": "map", "key_format": "scope-id", "value_kind": "integer", "value_format": "revision", "max_entries": 32, "max_encoded_length": 512 },
+    "grant_revision": { "kind": "integer", "format": "grant-revision", "max_encoded_length": 20 },
+    "approval_method": { "kind": "string", "enum_ref": "v1.approval-method-enum", "max_encoded_length": 32 },
+    "outcome": { "kind": "string", "enum_ref": "v1.audit-outcome-enum", "max_encoded_length": 64 },
+    "duration_ms": { "kind": "integer", "format": "duration-ms", "max_encoded_length": 20 },
+    "byte_count": { "kind": "integer", "format": "byte-count", "max_encoded_length": 20 },
+    "correlation_id": { "kind": "string", "format": "correlation-id", "max_encoded_length": 128 }
+  }
+}

@@ -1,0 +1,796 @@
+{
+  "artifact_set": "task7-compaction-recovery-v1",
+  "encoding": "RFC8785-JCS-UTF8",
+  "base64": "RFC4648-standard-padded",
+  "vectors": [
+    {
+      "vector_id": "security-row-count-16383",
+      "semantic_input": {
+        "vector_id": "security-row-count-16383",
+        "decision_boundary": true
+      },
+      "expected_decision": "ACCEPT",
+      "expected_state": "reference",
+      "persisted_projection": {
+        "ledger": "operation_security_ledger",
+        "boundary": "16383",
+        "vector": "security-row-count-16383"
+      },
+      "metadata_jcs_b64": "eyJib3VuZGFyeSI6IjE2MzgzIiwibGVkZ2VyIjoib3BlcmF0aW9uX3NlY3VyaXR5X2xlZGdlciIsInZlY3RvciI6InNlY3VyaXR5LXJvdy1jb3VudC0xNjM4MyJ9",
+      "metadata_jcs_byte_length": "93"
+    },
+    {
+      "vector_id": "security-row-count-16384",
+      "semantic_input": {
+        "vector_id": "security-row-count-16384",
+        "decision_boundary": true
+      },
+      "expected_decision": "ACCEPT",
+      "expected_state": "reference",
+      "persisted_projection": {
+        "ledger": "operation_security_ledger",
+        "boundary": "16384",
+        "vector": "security-row-count-16384"
+      },
+      "metadata_jcs_b64": "eyJib3VuZGFyeSI6IjE2Mzg0IiwibGVkZ2VyIjoib3BlcmF0aW9uX3NlY3VyaXR5X2xlZGdlciIsInZlY3RvciI6InNlY3VyaXR5LXJvdy1jb3VudC0xNjM4NCJ9",
+      "metadata_jcs_byte_length": "93"
+    },
+    {
+      "vector_id": "security-row-count-16385",
+      "semantic_input": {
+        "vector_id": "security-row-count-16385",
+        "decision_boundary": true
+      },
+      "expected_decision": "REJECT_BEFORE_MUTATION",
+      "expected_state": "reference",
+      "persisted_projection": {
+        "ledger": "operation_security_ledger",
+        "boundary": "16385",
+        "vector": "security-row-count-16385"
+      },
+      "metadata_jcs_b64": "eyJib3VuZGFyeSI6IjE2Mzg1IiwibGVkZ2VyIjoib3BlcmF0aW9uX3NlY3VyaXR5X2xlZGdlciIsInZlY3RvciI6InNlY3VyaXR5LXJvdy1jb3VudC0xNjM4NSJ9",
+      "metadata_jcs_byte_length": "93"
+    },
+    {
+      "vector_id": "security-inbound-262143",
+      "semantic_input": {
+        "vector_id": "security-inbound-262143",
+        "decision_boundary": true
+      },
+      "expected_decision": "ACCEPT",
+      "expected_state": "reference",
+      "persisted_projection": {
+        "ledger": "operation_security_ledger",
+        "boundary": "262143",
+        "vector": "security-inbound-262143"
+      },
+      "metadata_jcs_b64": "eyJib3VuZGFyeSI6IjI2MjE0MyIsImxlZGdlciI6Im9wZXJhdGlvbl9zZWN1cml0eV9sZWRnZXIiLCJ2ZWN0b3IiOiJzZWN1cml0eS1pbmJvdW5kLTI2MjE0MyJ9",
+      "metadata_jcs_byte_length": "93"
+    },
+    {
+      "vector_id": "security-inbound-262144",
+      "semantic_input": {
+        "vector_id": "security-inbound-262144",
+        "decision_boundary": true
+      },
+      "expected_decision": "ACCEPT",
+      "expected_state": "reference",
+      "persisted_projection": {
+        "ledger": "operation_security_ledger",
+        "boundary": "262144",
+        "vector": "security-inbound-262144"
+      },
+      "metadata_jcs_b64": "eyJib3VuZGFyeSI6IjI2MjE0NCIsImxlZGdlciI6Im9wZXJhdGlvbl9zZWN1cml0eV9sZWRnZXIiLCJ2ZWN0b3IiOiJzZWN1cml0eS1pbmJvdW5kLTI2MjE0NCJ9",
+      "metadata_jcs_byte_length": "93"
+    },
+    {
+      "vector_id": "security-inbound-262145",
+      "semantic_input": {
+        "vector_id": "security-inbound-262145",
+        "decision_boundary": true
+      },
+      "expected_decision": "REJECT_BEFORE_MUTATION",
+      "expected_state": "reference",
+      "persisted_projection": {
+        "ledger": "operation_security_ledger",
+        "boundary": "262145",
+        "vector": "security-inbound-262145"
+      },
+      "metadata_jcs_b64": "eyJib3VuZGFyeSI6IjI2MjE0NSIsImxlZGdlciI6Im9wZXJhdGlvbl9zZWN1cml0eV9sZWRnZXIiLCJ2ZWN0b3IiOiJzZWN1cml0eS1pbmJvdW5kLTI2MjE0NSJ9",
+      "metadata_jcs_byte_length": "93"
+    },
+    {
+      "vector_id": "security-receipt-262143",
+      "semantic_input": {
+        "vector_id": "security-receipt-262143",
+        "decision_boundary": true
+      },
+      "expected_decision": "ACCEPT",
+      "expected_state": "reference",
+      "persisted_projection": {
+        "ledger": "operation_security_ledger",
+        "boundary": "262143",
+        "vector": "security-receipt-262143"
+      },
+      "metadata_jcs_b64": "eyJib3VuZGFyeSI6IjI2MjE0MyIsImxlZGdlciI6Im9wZXJhdGlvbl9zZWN1cml0eV9sZWRnZXIiLCJ2ZWN0b3IiOiJzZWN1cml0eS1yZWNlaXB0LTI2MjE0MyJ9",
+      "metadata_jcs_byte_length": "93"
+    },
+    {
+      "vector_id": "security-receipt-262144",
+      "semantic_input": {
+        "vector_id": "security-receipt-262144",
+        "decision_boundary": true
+      },
+      "expected_decision": "ACCEPT",
+      "expected_state": "reference",
+      "persisted_projection": {
+        "ledger": "operation_security_ledger",
+        "boundary": "262144",
+        "vector": "security-receipt-262144"
+      },
+      "metadata_jcs_b64": "eyJib3VuZGFyeSI6IjI2MjE0NCIsImxlZGdlciI6Im9wZXJhdGlvbl9zZWN1cml0eV9sZWRnZXIiLCJ2ZWN0b3IiOiJzZWN1cml0eS1yZWNlaXB0LTI2MjE0NCJ9",
+      "metadata_jcs_byte_length": "93"
+    },
+    {
+      "vector_id": "security-receipt-262145",
+      "semantic_input": {
+        "vector_id": "security-receipt-262145",
+        "decision_boundary": true
+      },
+      "expected_decision": "REJECT_BEFORE_MUTATION",
+      "expected_state": "reference",
+      "persisted_projection": {
+        "ledger": "operation_security_ledger",
+        "boundary": "262145",
+        "vector": "security-receipt-262145"
+      },
+      "metadata_jcs_b64": "eyJib3VuZGFyeSI6IjI2MjE0NSIsImxlZGdlciI6Im9wZXJhdGlvbl9zZWN1cml0eV9sZWRnZXIiLCJ2ZWN0b3IiOiJzZWN1cml0eS1yZWNlaXB0LTI2MjE0NSJ9",
+      "metadata_jcs_byte_length": "93"
+    },
+    {
+      "vector_id": "security-metadata-65535",
+      "semantic_input": {
+        "vector_id": "security-metadata-65535",
+        "decision_boundary": true
+      },
+      "expected_decision": "ACCEPT",
+      "expected_state": "reference",
+      "persisted_projection": {
+        "ledger": "operation_security_ledger",
+        "boundary": "65535",
+        "vector": "security-metadata-65535"
+      },
+      "metadata_jcs_b64": "eyJib3VuZGFyeSI6IjY1NTM1IiwibGVkZ2VyIjoib3BlcmF0aW9uX3NlY3VyaXR5X2xlZGdlciIsInZlY3RvciI6InNlY3VyaXR5LW1ldGFkYXRhLTY1NTM1In0=",
+      "metadata_jcs_byte_length": "92"
+    },
+    {
+      "vector_id": "security-metadata-65536",
+      "semantic_input": {
+        "vector_id": "security-metadata-65536",
+        "decision_boundary": true
+      },
+      "expected_decision": "ACCEPT",
+      "expected_state": "reference",
+      "persisted_projection": {
+        "ledger": "operation_security_ledger",
+        "boundary": "65536",
+        "vector": "security-metadata-65536"
+      },
+      "metadata_jcs_b64": "eyJib3VuZGFyeSI6IjY1NTM2IiwibGVkZ2VyIjoib3BlcmF0aW9uX3NlY3VyaXR5X2xlZGdlciIsInZlY3RvciI6InNlY3VyaXR5LW1ldGFkYXRhLTY1NTM2In0=",
+      "metadata_jcs_byte_length": "92"
+    },
+    {
+      "vector_id": "security-metadata-65537",
+      "semantic_input": {
+        "vector_id": "security-metadata-65537",
+        "decision_boundary": true
+      },
+      "expected_decision": "REJECT_BEFORE_MUTATION",
+      "expected_state": "reference",
+      "persisted_projection": {
+        "ledger": "operation_security_ledger",
+        "boundary": "65537",
+        "vector": "security-metadata-65537"
+      },
+      "metadata_jcs_b64": "eyJib3VuZGFyeSI6IjY1NTM3IiwibGVkZ2VyIjoib3BlcmF0aW9uX3NlY3VyaXR5X2xlZGdlciIsInZlY3RvciI6InNlY3VyaXR5LW1ldGFkYXRhLTY1NTM3In0=",
+      "metadata_jcs_byte_length": "92"
+    },
+    {
+      "vector_id": "security-total-9663676415",
+      "semantic_input": {
+        "vector_id": "security-total-9663676415",
+        "decision_boundary": true
+      },
+      "expected_decision": "ACCEPT",
+      "expected_state": "reference",
+      "persisted_projection": {
+        "ledger": "operation_security_ledger",
+        "boundary": "9663676415",
+        "vector": "security-total-9663676415"
+      },
+      "metadata_jcs_b64": "eyJib3VuZGFyeSI6Ijk2NjM2NzY0MTUiLCJsZWRnZXIiOiJvcGVyYXRpb25fc2VjdXJpdHlfbGVkZ2VyIiwidmVjdG9yIjoic2VjdXJpdHktdG90YWwtOTY2MzY3NjQxNSJ9",
+      "metadata_jcs_byte_length": "99"
+    },
+    {
+      "vector_id": "security-total-9663676416",
+      "semantic_input": {
+        "vector_id": "security-total-9663676416",
+        "decision_boundary": true
+      },
+      "expected_decision": "ACCEPT",
+      "expected_state": "reference",
+      "persisted_projection": {
+        "ledger": "operation_security_ledger",
+        "boundary": "9663676416",
+        "vector": "security-total-9663676416"
+      },
+      "metadata_jcs_b64": "eyJib3VuZGFyeSI6Ijk2NjM2NzY0MTYiLCJsZWRnZXIiOiJvcGVyYXRpb25fc2VjdXJpdHlfbGVkZ2VyIiwidmVjdG9yIjoic2VjdXJpdHktdG90YWwtOTY2MzY3NjQxNiJ9",
+      "metadata_jcs_byte_length": "99"
+    },
+    {
+      "vector_id": "security-total-9663676417",
+      "semantic_input": {
+        "vector_id": "security-total-9663676417",
+        "decision_boundary": true
+      },
+      "expected_decision": "REJECT_BEFORE_MUTATION",
+      "expected_state": "reference",
+      "persisted_projection": {
+        "ledger": "operation_security_ledger",
+        "boundary": "9663676417",
+        "vector": "security-total-9663676417"
+      },
+      "metadata_jcs_b64": "eyJib3VuZGFyeSI6Ijk2NjM2NzY0MTciLCJsZWRnZXIiOiJvcGVyYXRpb25fc2VjdXJpdHlfbGVkZ2VyIiwidmVjdG9yIjoic2VjdXJpdHktdG90YWwtOTY2MzY3NjQxNyJ9",
+      "metadata_jcs_byte_length": "99"
+    },
+    {
+      "vector_id": "tombstone-2047",
+      "semantic_input": {
+        "vector_id": "tombstone-2047",
+        "decision_boundary": true
+      },
+      "expected_decision": "ACCEPT",
+      "expected_state": "tombstone",
+      "persisted_projection": {
+        "envelope_digest": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "message_id": "message-1",
+        "message_type": "operation_submit",
+        "sequence": "1",
+        "space": {
+          "credential_id": "credential",
+          "direction": "app-to-bridge",
+          "key_id": "key",
+          "kind": "device",
+          "pairing_generation": "1"
+        },
+        "status": "compacted"
+      },
+      "metadata_jcs_b64": "eyJlbnZlbG9wZV9kaWdlc3QiOiJBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBIiwibWVzc2FnZV9pZCI6Im1lc3NhZ2UtMSIsIm1lc3NhZ2VfdHlwZSI6Im9wZXJhdGlvbl9zdWJtaXQiLCJzZXF1ZW5jZSI6IjEiLCJzcGFjZSI6eyJjcmVkZW50aWFsX2lkIjoiY3JlZGVudGlhbCIsImRpcmVjdGlvbiI6ImFwcC10by1icmlkZ2UiLCJrZXlfaWQiOiJrZXkiLCJraW5kIjoiZGV2aWNlIiwicGFpcmluZ19nZW5lcmF0aW9uIjoiMSJ9LCJzdGF0dXMiOiJjb21wYWN0ZWQifQ==",
+      "metadata_jcs_byte_length": "283"
+    },
+    {
+      "vector_id": "tombstone-2048",
+      "semantic_input": {
+        "vector_id": "tombstone-2048",
+        "decision_boundary": true
+      },
+      "expected_decision": "ACCEPT",
+      "expected_state": "tombstone",
+      "persisted_projection": {
+        "envelope_digest": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "message_id": "message-1",
+        "message_type": "operation_submit",
+        "sequence": "1",
+        "space": {
+          "credential_id": "credential",
+          "direction": "app-to-bridge",
+          "key_id": "key",
+          "kind": "device",
+          "pairing_generation": "1"
+        },
+        "status": "compacted"
+      },
+      "metadata_jcs_b64": "eyJlbnZlbG9wZV9kaWdlc3QiOiJBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBIiwibWVzc2FnZV9pZCI6Im1lc3NhZ2UtMSIsIm1lc3NhZ2VfdHlwZSI6Im9wZXJhdGlvbl9zdWJtaXQiLCJzZXF1ZW5jZSI6IjEiLCJzcGFjZSI6eyJjcmVkZW50aWFsX2lkIjoiY3JlZGVudGlhbCIsImRpcmVjdGlvbiI6ImFwcC10by1icmlkZ2UiLCJrZXlfaWQiOiJrZXkiLCJraW5kIjoiZGV2aWNlIiwicGFpcmluZ19nZW5lcmF0aW9uIjoiMSJ9LCJzdGF0dXMiOiJjb21wYWN0ZWQifQ==",
+      "metadata_jcs_byte_length": "283"
+    },
+    {
+      "vector_id": "tombstone-2049",
+      "semantic_input": {
+        "vector_id": "tombstone-2049",
+        "decision_boundary": true
+      },
+      "expected_decision": "REJECT_BEFORE_MUTATION",
+      "expected_state": "reference",
+      "persisted_projection": {
+        "envelope_digest": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "message_id": "message-1",
+        "message_type": "operation_submit",
+        "sequence": "1",
+        "space": {
+          "credential_id": "credential",
+          "direction": "app-to-bridge",
+          "key_id": "key",
+          "kind": "device",
+          "pairing_generation": "1"
+        },
+        "status": "compacted"
+      },
+      "metadata_jcs_b64": "eyJlbnZlbG9wZV9kaWdlc3QiOiJBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBIiwibWVzc2FnZV9pZCI6Im1lc3NhZ2UtMSIsIm1lc3NhZ2VfdHlwZSI6Im9wZXJhdGlvbl9zdWJtaXQiLCJzZXF1ZW5jZSI6IjEiLCJzcGFjZSI6eyJjcmVkZW50aWFsX2lkIjoiY3JlZGVudGlhbCIsImRpcmVjdGlvbiI6ImFwcC10by1icmlkZ2UiLCJrZXlfaWQiOiJrZXkiLCJraW5kIjoiZGV2aWNlIiwicGFpcmluZ19nZW5lcmF0aW9uIjoiMSJ9LCJzdGF0dXMiOiJjb21wYWN0ZWQifQ==",
+      "metadata_jcs_byte_length": "283"
+    },
+    {
+      "vector_id": "compact-before-ack-retention",
+      "semantic_input": {
+        "vector_id": "compact-before-ack-retention",
+        "decision_boundary": true
+      },
+      "expected_decision": "REJECT_RETENTION",
+      "expected_state": "reference",
+      "persisted_projection": {
+        "operation_expires_at": "2026-08-12T00:00:00.000Z",
+        "bridge_ack_at": "2026-08-11T00:00:00.000Z",
+        "retention_until": "2026-09-10T00:00:00.000Z",
+        "now": "2026-09-09T23:59:59.999Z"
+      },
+      "metadata_jcs_b64": "eyJicmlkZ2VfYWNrX2F0IjoiMjAyNi0wOC0xMVQwMDowMDowMC4wMDBaIiwibm93IjoiMjAyNi0wOS0wOVQyMzo1OTo1OS45OTlaIiwib3BlcmF0aW9uX2V4cGlyZXNfYXQiOiIyMDI2LTA4LTEyVDAwOjAwOjAwLjAwMFoiLCJyZXRlbnRpb25fdW50aWwiOiIyMDI2LTA5LTEwVDAwOjAwOjAwLjAwMFoifQ==",
+      "metadata_jcs_byte_length": "172"
+    },
+    {
+      "vector_id": "compact-at-ack-retention",
+      "semantic_input": {
+        "vector_id": "compact-at-ack-retention",
+        "decision_boundary": true
+      },
+      "expected_decision": "ACCEPT",
+      "expected_state": "reference",
+      "persisted_projection": {
+        "operation_expires_at": "2026-08-12T00:00:00.000Z",
+        "bridge_ack_at": "2026-08-11T00:00:00.000Z",
+        "retention_until": "2026-09-10T00:00:00.000Z",
+        "now": "2026-09-10T00:00:00.000Z"
+      },
+      "metadata_jcs_b64": "eyJicmlkZ2VfYWNrX2F0IjoiMjAyNi0wOC0xMVQwMDowMDowMC4wMDBaIiwibm93IjoiMjAyNi0wOS0xMFQwMDowMDowMC4wMDBaIiwib3BlcmF0aW9uX2V4cGlyZXNfYXQiOiIyMDI2LTA4LTEyVDAwOjAwOjAwLjAwMFoiLCJyZXRlbnRpb25fdW50aWwiOiIyMDI2LTA5LTEwVDAwOjAwOjAwLjAwMFoifQ==",
+      "metadata_jcs_byte_length": "172"
+    },
+    {
+      "vector_id": "compact-after-ack-retention",
+      "semantic_input": {
+        "vector_id": "compact-after-ack-retention",
+        "decision_boundary": true
+      },
+      "expected_decision": "ACCEPT",
+      "expected_state": "reference",
+      "persisted_projection": {
+        "operation_expires_at": "2026-08-12T00:00:00.000Z",
+        "bridge_ack_at": "2026-08-11T00:00:00.000Z",
+        "retention_until": "2026-09-10T00:00:00.000Z",
+        "now": "2026-09-10T00:00:00.001Z"
+      },
+      "metadata_jcs_b64": "eyJicmlkZ2VfYWNrX2F0IjoiMjAyNi0wOC0xMVQwMDowMDowMC4wMDBaIiwibm93IjoiMjAyNi0wOS0xMFQwMDowMDowMC4wMDFaIiwib3BlcmF0aW9uX2V4cGlyZXNfYXQiOiIyMDI2LTA4LTEyVDAwOjAwOjAwLjAwMFoiLCJyZXRlbnRpb25fdW50aWwiOiIyMDI2LTA5LTEwVDAwOjAwOjAwLjAwMFoifQ==",
+      "metadata_jcs_byte_length": "172"
+    },
+    {
+      "vector_id": "ack-first",
+      "semantic_input": {
+        "vector_id": "ack-first",
+        "decision_boundary": true
+      },
+      "expected_decision": "ACCEPT",
+      "expected_state": "reference",
+      "persisted_projection": {
+        "ack_at": "2026-08-11T00:00:00.000Z",
+        "operation_expires_at": "2026-08-12T00:00:00.000Z",
+        "retention_until": "2026-09-10T00:00:00.000Z",
+        "ack_digest": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      },
+      "metadata_jcs_b64": "eyJhY2tfYXQiOiIyMDI2LTA4LTExVDAwOjAwOjAwLjAwMFoiLCJhY2tfZGlnZXN0IjoiQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQSIsIm9wZXJhdGlvbl9leHBpcmVzX2F0IjoiMjAyNi0wOC0xMlQwMDowMDowMC4wMDBaIiwicmV0ZW50aW9uX3VudGlsIjoiMjAyNi0wOS0xMFQwMDowMDowMC4wMDBaIn0=",
+      "metadata_jcs_byte_length": "191"
+    },
+    {
+      "vector_id": "ack-idempotent-retry",
+      "semantic_input": {
+        "vector_id": "ack-idempotent-retry",
+        "decision_boundary": true
+      },
+      "expected_decision": "ACCEPT",
+      "expected_state": "reference",
+      "persisted_projection": {
+        "ack_at": "2026-08-11T00:00:00.000Z",
+        "operation_expires_at": "2026-08-12T00:00:00.000Z",
+        "retention_until": "2026-09-10T00:00:00.000Z",
+        "ack_digest": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      },
+      "metadata_jcs_b64": "eyJhY2tfYXQiOiIyMDI2LTA4LTExVDAwOjAwOjAwLjAwMFoiLCJhY2tfZGlnZXN0IjoiQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQSIsIm9wZXJhdGlvbl9leHBpcmVzX2F0IjoiMjAyNi0wOC0xMlQwMDowMDowMC4wMDBaIiwicmV0ZW50aW9uX3VudGlsIjoiMjAyNi0wOS0xMFQwMDowMDowMC4wMDBaIn0=",
+      "metadata_jcs_byte_length": "191"
+    },
+    {
+      "vector_id": "ack-conflict",
+      "semantic_input": {
+        "vector_id": "ack-conflict",
+        "decision_boundary": true
+      },
+      "expected_decision": "REJECT_PRESERVE_FIRST_ACK",
+      "expected_state": "ack_unchanged",
+      "persisted_projection": {
+        "ack_at": "2026-08-11T00:00:00.000Z",
+        "operation_expires_at": "2026-08-12T00:00:00.000Z",
+        "retention_until": "2026-09-10T00:00:00.000Z",
+        "ack_digest": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      },
+      "metadata_jcs_b64": "eyJhY2tfYXQiOiIyMDI2LTA4LTExVDAwOjAwOjAwLjAwMFoiLCJhY2tfZGlnZXN0IjoiQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQSIsIm9wZXJhdGlvbl9leHBpcmVzX2F0IjoiMjAyNi0wOC0xMlQwMDowMDowMC4wMDBaIiwicmV0ZW50aW9uX3VudGlsIjoiMjAyNi0wOS0xMFQwMDowMDowMC4wMDBaIn0=",
+      "metadata_jcs_byte_length": "191"
+    },
+    {
+      "vector_id": "ack-clock-rollback",
+      "semantic_input": {
+        "vector_id": "ack-clock-rollback",
+        "decision_boundary": true
+      },
+      "expected_decision": "REJECT_PRESERVE_FIRST_ACK",
+      "expected_state": "ack_unchanged",
+      "persisted_projection": {
+        "ack_at": "2026-08-11T00:00:00.000Z",
+        "operation_expires_at": "2026-08-12T00:00:00.000Z",
+        "retention_until": "2026-09-10T00:00:00.000Z",
+        "ack_digest": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      },
+      "metadata_jcs_b64": "eyJhY2tfYXQiOiIyMDI2LTA4LTExVDAwOjAwOjAwLjAwMFoiLCJhY2tfZGlnZXN0IjoiQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQSIsIm9wZXJhdGlvbl9leHBpcmVzX2F0IjoiMjAyNi0wOC0xMlQwMDowMDowMC4wMDBaIiwicmV0ZW50aW9uX3VudGlsIjoiMjAyNi0wOS0xMFQwMDowMDowMC4wMDBaIn0=",
+      "metadata_jcs_byte_length": "191"
+    },
+    {
+      "vector_id": "duplicate-after-tombstone",
+      "semantic_input": {
+        "vector_id": "duplicate-after-tombstone",
+        "decision_boundary": true
+      },
+      "expected_decision": "REPLAY_REJECTED_COMPACTED_DUPLICATE",
+      "expected_state": "tombstone_unchanged",
+      "persisted_projection": {
+        "ledger": "operation_security_ledger",
+        "boundary": "0",
+        "vector": "duplicate-after-tombstone"
+      },
+      "metadata_jcs_b64": "eyJib3VuZGFyeSI6IjAiLCJsZWRnZXIiOiJvcGVyYXRpb25fc2VjdXJpdHlfbGVkZ2VyIiwidmVjdG9yIjoiZHVwbGljYXRlLWFmdGVyLXRvbWJzdG9uZSJ9",
+      "metadata_jcs_byte_length": "90"
+    },
+    {
+      "vector_id": "changed-digest-after-tombstone",
+      "semantic_input": {
+        "vector_id": "changed-digest-after-tombstone",
+        "decision_boundary": true
+      },
+      "expected_decision": "INTEGRITY_FAILED_MESSAGE_ID_CONFLICT",
+      "expected_state": "tombstone_unchanged",
+      "persisted_projection": {
+        "ledger": "operation_security_ledger",
+        "boundary": "0",
+        "vector": "changed-digest-after-tombstone"
+      },
+      "metadata_jcs_b64": "eyJib3VuZGFyeSI6IjAiLCJsZWRnZXIiOiJvcGVyYXRpb25fc2VjdXJpdHlfbGVkZ2VyIiwidmVjdG9yIjoiY2hhbmdlZC1kaWdlc3QtYWZ0ZXItdG9tYnN0b25lIn0=",
+      "metadata_jcs_byte_length": "95"
+    },
+    {
+      "vector_id": "duplicate-after-restart",
+      "semantic_input": {
+        "vector_id": "duplicate-after-restart",
+        "decision_boundary": true
+      },
+      "expected_decision": "REPLAY_REJECTED_COMPACTED_DUPLICATE",
+      "expected_state": "tombstone_unchanged",
+      "persisted_projection": {
+        "ledger": "operation_security_ledger",
+        "boundary": "0",
+        "vector": "duplicate-after-restart"
+      },
+      "metadata_jcs_b64": "eyJib3VuZGFyeSI6IjAiLCJsZWRnZXIiOiJvcGVyYXRpb25fc2VjdXJpdHlfbGVkZ2VyIiwidmVjdG9yIjoiZHVwbGljYXRlLWFmdGVyLXJlc3RhcnQifQ==",
+      "metadata_jcs_byte_length": "88"
+    },
+    {
+      "vector_id": "compact-before-operation-expiry",
+      "semantic_input": {
+        "vector_id": "compact-before-operation-expiry",
+        "decision_boundary": true
+      },
+      "expected_decision": "REJECT_RETENTION",
+      "expected_state": "compaction_recovery",
+      "persisted_projection": {
+        "operation_expires_at": "2026-10-01T00:00:00.000Z",
+        "bridge_ack_at": "2026-08-11T00:00:00.000Z",
+        "retention_until": "2026-10-01T00:00:00.000Z",
+        "now": "2026-09-30T23:59:59.999Z"
+      },
+      "metadata_jcs_b64": "eyJicmlkZ2VfYWNrX2F0IjoiMjAyNi0wOC0xMVQwMDowMDowMC4wMDBaIiwibm93IjoiMjAyNi0wOS0zMFQyMzo1OTo1OS45OTlaIiwib3BlcmF0aW9uX2V4cGlyZXNfYXQiOiIyMDI2LTEwLTAxVDAwOjAwOjAwLjAwMFoiLCJyZXRlbnRpb25fdW50aWwiOiIyMDI2LTEwLTAxVDAwOjAwOjAwLjAwMFoifQ==",
+      "metadata_jcs_byte_length": "172"
+    },
+    {
+      "vector_id": "compact-at-operation-expiry",
+      "semantic_input": {
+        "vector_id": "compact-at-operation-expiry",
+        "decision_boundary": true
+      },
+      "expected_decision": "RECOVER_COMPLETE_TRANSACTION",
+      "expected_state": "compaction_recovery",
+      "persisted_projection": {
+        "operation_expires_at": "2026-10-01T00:00:00.000Z",
+        "bridge_ack_at": "2026-08-11T00:00:00.000Z",
+        "retention_until": "2026-10-01T00:00:00.000Z",
+        "now": "2026-10-01T00:00:00.000Z"
+      },
+      "metadata_jcs_b64": "eyJicmlkZ2VfYWNrX2F0IjoiMjAyNi0wOC0xMVQwMDowMDowMC4wMDBaIiwibm93IjoiMjAyNi0xMC0wMVQwMDowMDowMC4wMDBaIiwib3BlcmF0aW9uX2V4cGlyZXNfYXQiOiIyMDI2LTEwLTAxVDAwOjAwOjAwLjAwMFoiLCJyZXRlbnRpb25fdW50aWwiOiIyMDI2LTEwLTAxVDAwOjAwOjAwLjAwMFoifQ==",
+      "metadata_jcs_byte_length": "172"
+    },
+    {
+      "vector_id": "compact-after-operation-expiry",
+      "semantic_input": {
+        "vector_id": "compact-after-operation-expiry",
+        "decision_boundary": true
+      },
+      "expected_decision": "RECOVER_COMPLETE_TRANSACTION",
+      "expected_state": "compaction_recovery",
+      "persisted_projection": {
+        "operation_expires_at": "2026-10-01T00:00:00.000Z",
+        "bridge_ack_at": "2026-08-11T00:00:00.000Z",
+        "retention_until": "2026-10-01T00:00:00.000Z",
+        "now": "2026-10-01T00:00:00.001Z"
+      },
+      "metadata_jcs_b64": "eyJicmlkZ2VfYWNrX2F0IjoiMjAyNi0wOC0xMVQwMDowMDowMC4wMDBaIiwibm93IjoiMjAyNi0xMC0wMVQwMDowMDowMC4wMDFaIiwib3BlcmF0aW9uX2V4cGlyZXNfYXQiOiIyMDI2LTEwLTAxVDAwOjAwOjAwLjAwMFoiLCJyZXRlbnRpb25fdW50aWwiOiIyMDI2LTEwLTAxVDAwOjAwOjAwLjAwMFoifQ==",
+      "metadata_jcs_byte_length": "172"
+    },
+    {
+      "vector_id": "compact-before-replace",
+      "semantic_input": {
+        "vector_id": "compact-before-replace",
+        "decision_boundary": true
+      },
+      "expected_decision": "REJECT_RETENTION",
+      "expected_state": "compaction_recovery",
+      "persisted_projection": {
+        "crash_cut": "compact-before-replace",
+        "transaction": "compact",
+        "state": "security_row"
+      },
+      "metadata_jcs_b64": "eyJjcmFzaF9jdXQiOiJjb21wYWN0LWJlZm9yZS1yZXBsYWNlIiwic3RhdGUiOiJzZWN1cml0eV9yb3ciLCJ0cmFuc2FjdGlvbiI6ImNvbXBhY3QifQ==",
+      "metadata_jcs_byte_length": "85"
+    },
+    {
+      "vector_id": "compact-after-tombstone-index-before-counter",
+      "semantic_input": {
+        "vector_id": "compact-after-tombstone-index-before-counter",
+        "decision_boundary": true
+      },
+      "expected_decision": "RECOVER_COMPLETE_TRANSACTION",
+      "expected_state": "compaction_recovery",
+      "persisted_projection": {
+        "crash_cut": "compact-after-tombstone-index-before-counter",
+        "transaction": "compact",
+        "state": "security_row"
+      },
+      "metadata_jcs_b64": "eyJjcmFzaF9jdXQiOiJjb21wYWN0LWFmdGVyLXRvbWJzdG9uZS1pbmRleC1iZWZvcmUtY291bnRlciIsInN0YXRlIjoic2VjdXJpdHlfcm93IiwidHJhbnNhY3Rpb24iOiJjb21wYWN0In0=",
+      "metadata_jcs_byte_length": "107"
+    },
+    {
+      "vector_id": "compact-after-counter-before-payload-delete",
+      "semantic_input": {
+        "vector_id": "compact-after-counter-before-payload-delete",
+        "decision_boundary": true
+      },
+      "expected_decision": "RECOVER_COMPLETE_TRANSACTION",
+      "expected_state": "compaction_recovery",
+      "persisted_projection": {
+        "crash_cut": "compact-after-counter-before-payload-delete",
+        "transaction": "compact",
+        "state": "security_row"
+      },
+      "metadata_jcs_b64": "eyJjcmFzaF9jdXQiOiJjb21wYWN0LWFmdGVyLWNvdW50ZXItYmVmb3JlLXBheWxvYWQtZGVsZXRlIiwic3RhdGUiOiJzZWN1cml0eV9yb3ciLCJ0cmFuc2FjdGlvbiI6ImNvbXBhY3QifQ==",
+      "metadata_jcs_byte_length": "106"
+    },
+    {
+      "vector_id": "compact-after-payload-delete",
+      "semantic_input": {
+        "vector_id": "compact-after-payload-delete",
+        "decision_boundary": true
+      },
+      "expected_decision": "RECOVER_COMPLETE_TRANSACTION",
+      "expected_state": "compaction_recovery",
+      "persisted_projection": {
+        "crash_cut": "compact-after-payload-delete",
+        "transaction": "compact",
+        "state": "security_row"
+      },
+      "metadata_jcs_b64": "eyJjcmFzaF9jdXQiOiJjb21wYWN0LWFmdGVyLXBheWxvYWQtZGVsZXRlIiwic3RhdGUiOiJzZWN1cml0eV9yb3ciLCJ0cmFuc2FjdGlvbiI6ImNvbXBhY3QifQ==",
+      "metadata_jcs_byte_length": "91"
+    },
+    {
+      "vector_id": "ack-before-commit",
+      "semantic_input": {
+        "vector_id": "ack-before-commit",
+        "decision_boundary": true
+      },
+      "expected_decision": "RECOVER_IDEMPOTENT",
+      "expected_state": "ack_recovery",
+      "persisted_projection": {
+        "crash_cut": "ack-before-commit",
+        "transaction": "bridge_ack",
+        "state": "security_row"
+      },
+      "metadata_jcs_b64": "eyJjcmFzaF9jdXQiOiJhY2stYmVmb3JlLWNvbW1pdCIsInN0YXRlIjoic2VjdXJpdHlfcm93IiwidHJhbnNhY3Rpb24iOiJicmlkZ2VfYWNrIn0=",
+      "metadata_jcs_byte_length": "83"
+    },
+    {
+      "vector_id": "ack-after-retention-before-metadata",
+      "semantic_input": {
+        "vector_id": "ack-after-retention-before-metadata",
+        "decision_boundary": true
+      },
+      "expected_decision": "RECOVER_IDEMPOTENT",
+      "expected_state": "ack_recovery",
+      "persisted_projection": {
+        "crash_cut": "ack-after-retention-before-metadata",
+        "transaction": "bridge_ack",
+        "state": "security_row"
+      },
+      "metadata_jcs_b64": "eyJjcmFzaF9jdXQiOiJhY2stYWZ0ZXItcmV0ZW50aW9uLWJlZm9yZS1tZXRhZGF0YSIsInN0YXRlIjoic2VjdXJpdHlfcm93IiwidHJhbnNhY3Rpb24iOiJicmlkZ2VfYWNrIn0=",
+      "metadata_jcs_byte_length": "101"
+    },
+    {
+      "vector_id": "ack-after-metadata-before-counter",
+      "semantic_input": {
+        "vector_id": "ack-after-metadata-before-counter",
+        "decision_boundary": true
+      },
+      "expected_decision": "RECOVER_IDEMPOTENT",
+      "expected_state": "ack_recovery",
+      "persisted_projection": {
+        "crash_cut": "ack-after-metadata-before-counter",
+        "transaction": "bridge_ack",
+        "state": "security_row"
+      },
+      "metadata_jcs_b64": "eyJjcmFzaF9jdXQiOiJhY2stYWZ0ZXItbWV0YWRhdGEtYmVmb3JlLWNvdW50ZXIiLCJzdGF0ZSI6InNlY3VyaXR5X3JvdyIsInRyYW5zYWN0aW9uIjoiYnJpZGdlX2FjayJ9",
+      "metadata_jcs_byte_length": "99"
+    },
+    {
+      "vector_id": "ack-after-counter-before-delivery",
+      "semantic_input": {
+        "vector_id": "ack-after-counter-before-delivery",
+        "decision_boundary": true
+      },
+      "expected_decision": "RECOVER_IDEMPOTENT",
+      "expected_state": "ack_recovery",
+      "persisted_projection": {
+        "crash_cut": "ack-after-counter-before-delivery",
+        "transaction": "bridge_ack",
+        "state": "security_row"
+      },
+      "metadata_jcs_b64": "eyJjcmFzaF9jdXQiOiJhY2stYWZ0ZXItY291bnRlci1iZWZvcmUtZGVsaXZlcnkiLCJzdGF0ZSI6InNlY3VyaXR5X3JvdyIsInRyYW5zYWN0aW9uIjoiYnJpZGdlX2FjayJ9",
+      "metadata_jcs_byte_length": "99"
+    },
+    {
+      "vector_id": "restart-active",
+      "semantic_input": {
+        "vector_id": "restart-active",
+        "decision_boundary": true
+      },
+      "expected_decision": "FAIL_CLOSED_ON_MISMATCH",
+      "expected_state": "active",
+      "persisted_projection": {
+        "restart_case": "restart-active",
+        "transaction": "recompute_security_ledger",
+        "state": "active"
+      },
+      "metadata_jcs_b64": "eyJyZXN0YXJ0X2Nhc2UiOiJyZXN0YXJ0LWFjdGl2ZSIsInN0YXRlIjoiYWN0aXZlIiwidHJhbnNhY3Rpb24iOiJyZWNvbXB1dGVfc2VjdXJpdHlfbGVkZ2VyIn0=",
+      "metadata_jcs_byte_length": "92"
+    },
+    {
+      "vector_id": "restart-finalized",
+      "semantic_input": {
+        "vector_id": "restart-finalized",
+        "decision_boundary": true
+      },
+      "expected_decision": "FAIL_CLOSED_ON_MISMATCH",
+      "expected_state": "finalized",
+      "persisted_projection": {
+        "restart_case": "restart-finalized",
+        "transaction": "recompute_security_ledger",
+        "state": "finalized"
+      },
+      "metadata_jcs_b64": "eyJyZXN0YXJ0X2Nhc2UiOiJyZXN0YXJ0LWZpbmFsaXplZCIsInN0YXRlIjoiZmluYWxpemVkIiwidHJhbnNhY3Rpb24iOiJyZWNvbXB1dGVfc2VjdXJpdHlfbGVkZ2VyIn0=",
+      "metadata_jcs_byte_length": "98"
+    },
+    {
+      "vector_id": "restart-abandoned",
+      "semantic_input": {
+        "vector_id": "restart-abandoned",
+        "decision_boundary": true
+      },
+      "expected_decision": "FAIL_CLOSED_ON_MISMATCH",
+      "expected_state": "abandoned",
+      "persisted_projection": {
+        "restart_case": "restart-abandoned",
+        "transaction": "recompute_security_ledger",
+        "state": "abandoned"
+      },
+      "metadata_jcs_b64": "eyJyZXN0YXJ0X2Nhc2UiOiJyZXN0YXJ0LWFiYW5kb25lZCIsInN0YXRlIjoiYWJhbmRvbmVkIiwidHJhbnNhY3Rpb24iOiJyZWNvbXB1dGVfc2VjdXJpdHlfbGVkZ2VyIn0=",
+      "metadata_jcs_byte_length": "98"
+    },
+    {
+      "vector_id": "restart-tombstone",
+      "semantic_input": {
+        "vector_id": "restart-tombstone",
+        "decision_boundary": true
+      },
+      "expected_decision": "RECOVER_COMPLETE_TRANSACTION",
+      "expected_state": "tombstone",
+      "persisted_projection": {
+        "restart_case": "restart-tombstone",
+        "transaction": "recompute_security_ledger",
+        "state": "tombstone"
+      },
+      "metadata_jcs_b64": "eyJyZXN0YXJ0X2Nhc2UiOiJyZXN0YXJ0LXRvbWJzdG9uZSIsInN0YXRlIjoidG9tYnN0b25lIiwidHJhbnNhY3Rpb24iOiJyZWNvbXB1dGVfc2VjdXJpdHlfbGVkZ2VyIn0=",
+      "metadata_jcs_byte_length": "98"
+    },
+    {
+      "vector_id": "restart-counter-mismatch",
+      "semantic_input": {
+        "vector_id": "restart-counter-mismatch",
+        "decision_boundary": true
+      },
+      "expected_decision": "FAIL_CLOSED_ON_MISMATCH",
+      "expected_state": "counter-mismatch",
+      "persisted_projection": {
+        "restart_case": "restart-counter-mismatch",
+        "transaction": "recompute_security_ledger",
+        "state": "counter-mismatch"
+      },
+      "metadata_jcs_b64": "eyJyZXN0YXJ0X2Nhc2UiOiJyZXN0YXJ0LWNvdW50ZXItbWlzbWF0Y2giLCJzdGF0ZSI6ImNvdW50ZXItbWlzbWF0Y2giLCJ0cmFuc2FjdGlvbiI6InJlY29tcHV0ZV9zZWN1cml0eV9sZWRnZXIifQ==",
+      "metadata_jcs_byte_length": "112"
+    },
+    {
+      "vector_id": "restart-metadata-mismatch",
+      "semantic_input": {
+        "vector_id": "restart-metadata-mismatch",
+        "decision_boundary": true
+      },
+      "expected_decision": "FAIL_CLOSED_ON_MISMATCH",
+      "expected_state": "metadata-mismatch",
+      "persisted_projection": {
+        "restart_case": "restart-metadata-mismatch",
+        "transaction": "recompute_security_ledger",
+        "state": "metadata-mismatch"
+      },
+      "metadata_jcs_b64": "eyJyZXN0YXJ0X2Nhc2UiOiJyZXN0YXJ0LW1ldGFkYXRhLW1pc21hdGNoIiwic3RhdGUiOiJtZXRhZGF0YS1taXNtYXRjaCIsInRyYW5zYWN0aW9uIjoicmVjb21wdXRlX3NlY3VyaXR5X2xlZGdlciJ9",
+      "metadata_jcs_byte_length": "114"
+    },
+    {
+      "vector_id": "restart-index-mismatch",
+      "semantic_input": {
+        "vector_id": "restart-index-mismatch",
+        "decision_boundary": true
+      },
+      "expected_decision": "FAIL_CLOSED_ON_MISMATCH",
+      "expected_state": "index-mismatch",
+      "persisted_projection": {
+        "restart_case": "restart-index-mismatch",
+        "transaction": "recompute_security_ledger",
+        "state": "index-mismatch"
+      },
+      "metadata_jcs_b64": "eyJyZXN0YXJ0X2Nhc2UiOiJyZXN0YXJ0LWluZGV4LW1pc21hdGNoIiwic3RhdGUiOiJpbmRleC1taXNtYXRjaCIsInRyYW5zYWN0aW9uIjoicmVjb21wdXRlX3NlY3VyaXR5X2xlZGdlciJ9",
+      "metadata_jcs_byte_length": "108"
+    },
+    {
+      "vector_id": "restart-policy-registry-mismatch",
+      "semantic_input": {
+        "vector_id": "restart-policy-registry-mismatch",
+        "decision_boundary": true
+      },
+      "expected_decision": "FAIL_CLOSED_ON_MISMATCH",
+      "expected_state": "policy-registry-mismatch",
+      "persisted_projection": {
+        "restart_case": "restart-policy-registry-mismatch",
+        "transaction": "recompute_security_ledger",
+        "state": "policy-registry-mismatch"
+      },
+      "metadata_jcs_b64": "eyJyZXN0YXJ0X2Nhc2UiOiJyZXN0YXJ0LXBvbGljeS1yZWdpc3RyeS1taXNtYXRjaCIsInN0YXRlIjoicG9saWN5LXJlZ2lzdHJ5LW1pc21hdGNoIiwidHJhbnNhY3Rpb24iOiJyZWNvbXB1dGVfc2VjdXJpdHlfbGVkZ2VyIn0=",
+      "metadata_jcs_byte_length": "128"
+    }
+  ]
+}

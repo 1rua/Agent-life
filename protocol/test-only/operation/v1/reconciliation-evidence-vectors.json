@@ -1,0 +1,7 @@
+{
+  "vector_set": "task7-reconciliation-evidence-v1",
+  "vectors": [
+    { "id": "late-signed-receipt-without-reference", "evidence": { "outcome": "succeeded", "evidence_kind": "late_signed_receipt", "evidence_source": "bridge-1", "observed_at": "2026-08-11T00:00:00.000Z", "reference_id": null }, "evidence_digest": "aX3sF3yBOKl8gUGqezq7J3DKnsEXY1K045xSkmD7NbY" },
+    { "id": "verified-external-state-with-reference", "evidence": { "outcome": "failed", "evidence_kind": "verified_external_state", "evidence_source": "bridge-1", "observed_at": "2026-08-11T00:00:01.000Z", "reference_id": "ref-1" }, "evidence_digest": "VKl31xKBO6vSPHazaZj9L2Dh8mwjQMGWLjxyzYHZQE4" }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "vector_set": "task7-result-digest-v1",
+  "vectors": [
+    { "id": "no-result-null", "result_present": false, "result": null, "result_digest": null },
+    { "id": "system-ui-handoff", "result_present": true, "result": { "kind": "system_ui_handoff", "external_side_effect_status": "not_observed" }, "result_digest": "pQSBh3t7g_JTOxthFRogpYXNG_AvuywOnSJLwTak2_w" },
+    { "id": "object-result", "result_present": true, "result": { "ok": true, "value": "done" }, "result_digest": "5wjEVQVVa1MLasRQuxwR1hqx1WH56wWazTZS2VBnHyE" },
+    { "id": "array-result", "result_present": true, "result": { "items": [1, "x", null] }, "result_digest": "8MFwQVwnz7_Z0REprPt-2ONZrWbH2NQch5tY1W9YENA" }
+  ]
+}

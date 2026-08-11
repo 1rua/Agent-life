@@ -1,0 +1,10 @@
+{
+  "kty": "EC",
+  "crv": "P-256",
+  "x": "4lNKNTLQj7ugLd5lnuYr0AMf4tt4VZbvUJMCRGsDCFI",
+  "y": "4PFXWkxjPMcZ3-5f2oYtdk78lsPzDuAFXELCPxhO2MY",
+  "d": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQ",
+  "alg": "ES256",
+  "use": "sig",
+  "kid": "test-bridge-command-next"
+}

@@ -1,0 +1,18 @@
+[
+  { "id": "SEC-001", "protocol_version": "1.0", "property": "IP、MagicDNS、Tailscale identity/header 不产生授权", "tests": ["auth.network-metadata-denied"] },
+  { "id": "SEC-002", "protocol_version": "1.0", "property": "服务端认证上下文是 principal/device binding 权威", "tests": ["auth.principal-injection-denied"] },
+  { "id": "SEC-003", "protocol_version": "1.0", "property": "实时设备授权与 stored-query grant 是独立判定域", "tests": ["auth.stored-query-independent"] },
+  { "id": "SEC-004", "protocol_version": "1.0", "property": "pairing/epoch/scope revision 精确匹配，撤销重授不复活旧对象", "tests": ["auth.stale-revision-denied"] },
+  { "id": "SEC-005", "protocol_version": "1.0", "property": "execution claim 未持久化前不调用副作用", "tests": ["operation.ledger-full-fails-closed"] },
+  { "id": "SEC-006", "protocol_version": "1.0", "property": "同一 operation 不因 transport/adapter 重试自动重复副作用", "tests": ["operation.ack-loss-executes-once"] },
+  { "id": "SEC-007", "protocol_version": "1.0", "property": "approval 单次使用并绑定完整参数、身份、设备和 revision", "tests": ["approval.parameter-mutation-denied"] },
+  { "id": "SEC-008", "protocol_version": "1.0", "property": "tenant/user/device/session/artifact/stream 不能交叉复用", "tests": ["isolation.cross-tenant-denied"] },
+  { "id": "SEC-009", "protocol_version": "1.0", "property": "新 connection generation fence 旧连接", "tests": ["connection.old-generation-fenced"] },
+  { "id": "SEC-010", "protocol_version": "1.0", "property": "audit 只含 allowlist 元数据且不记录正文", "tests": ["audit.forbidden-content-rejected"] },
+  { "id": "SEC-011", "protocol_version": "1.0", "property": "零保留 profile 缺失、未知或漂移时正文外发 fail closed", "tests": ["egress.zero-retention-unknown-denied"] },
+  { "id": "SEC-012", "protocol_version": "1.0", "property": "schema/registry/fake 中不存在任意 Root Shell 或 generic exec", "tests": ["schema.root-shell-absent"] },
+  { "id": "SEC-013", "protocol_version": "1.0", "property": "adapter 无可信 principal 传播时启动失败", "tests": ["auth.adapter-principal-missing"] },
+  { "id": "SEC-014", "protocol_version": "1.0", "property": "capability manifest 只描述状态，不能充当授权 token", "tests": ["auth.manifest-is-not-token"] },
+  { "id": "SEC-015", "protocol_version": "1.0", "property": "每个正式 `sms.send` 均绑定完整参数并在手机逐条批准", "tests": ["policy.sms-send-always-confirms"] },
+  { "id": "SEC-016", "protocol_version": "1.0", "property": "L4 操作在所有类型化/restricted backend 上无条件拒绝", "tests": ["policy.l4-always-denied"] }
+]

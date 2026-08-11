@@ -1,0 +1,7 @@
+{
+  "protocol_version": "0.9",
+  "profile_id": "agent-life-json-es256/0.9-fixture",
+  "negotiable": false,
+  "fixture_owner": "Task7",
+  "pending_operation_schema": "urn:agent-life:protocol:v0.9:pending-operation"
+}

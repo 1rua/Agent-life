@@ -2,14 +2,20 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+NODE_LAUNCHER="$ROOT_DIR/tools/run-node24"
 MODE="${1:-}"
 if [[ "$MODE" != "--sdk-free" && "$MODE" != "--release" ]]; then
   echo "usage: $0 --sdk-free|--release" >&2
   exit 2
 fi
 
+if [[ ! -x "$NODE_LAUNCHER" ]]; then
+  echo "SDK_FREE_BLOCKED: fixed Node 24 launcher missing ($NODE_LAUNCHER)" >&2
+  exit 1
+fi
+
 if [[ "$MODE" == "--release" ]]; then
-  if ! npm --prefix "$ROOT_DIR" run mvp:lock:check; then
+  if ! "$NODE_LAUNCHER" npm --prefix "$ROOT_DIR" run mvp:lock:check; then
     echo "RELEASE_GATE_BLOCKED: dependency lock is pending"
     exit 1
   fi
@@ -26,16 +32,7 @@ if [[ "$MODE" == "--release" ]]; then
   exit 0
 fi
 
-NODE_BIN="$ROOT_DIR/.worktrees/p0a-protocol-security-model/node_modules/.bin"
-VITEST="$NODE_BIN/vitest"
-TSC="$NODE_BIN/tsc"
-
-if [[ ! -x "$VITEST" ]]; then
-  echo "SDK_FREE_BLOCKED: Vitest launcher missing ($VITEST)" >&2
-  exit 1
-fi
-
-"$VITEST" --root "$ROOT_DIR" run \
+"$NODE_LAUNCHER" npx --no-install vitest --root "$ROOT_DIR" run \
   integrations \
   bridge-contract/test \
   bridge-runtime/test \
@@ -45,20 +42,18 @@ fi
 
 python3 -m unittest discover -s "$ROOT_DIR/apps/android/tools" -p 'test_*.py'
 
-if [[ -x "$TSC" ]]; then
-  "$TSC" --ignoreConfig --noEmit --target ES2022 --module NodeNext \
-    --moduleResolution NodeNext --strict --skipLibCheck \
-    "$ROOT_DIR"/bridge-contract/src/*.ts \
-    "$ROOT_DIR"/bridge-runtime/src/*.ts \
-    "$ROOT_DIR"/artifact-contract/src/*.ts \
-    "$ROOT_DIR"/mvp-contract/src/wire-codec.ts \
-    "$ROOT_DIR"/integrations/shared/adapter.ts \
-    "$ROOT_DIR"/integrations/hermes/adapter.ts \
-    "$ROOT_DIR"/integrations/openclaw/adapter.ts \
-    --types node --typeRoots "$ROOT_DIR/.worktrees/p0a-protocol-security-model/node_modules/@types"
-fi
+"$NODE_LAUNCHER" npx --no-install tsc --ignoreConfig --noEmit --target ES2022 --module NodeNext \
+  --moduleResolution NodeNext --strict --skipLibCheck \
+  "$ROOT_DIR"/bridge-contract/src/*.ts \
+  "$ROOT_DIR"/bridge-runtime/src/*.ts \
+  "$ROOT_DIR"/artifact-contract/src/*.ts \
+  "$ROOT_DIR"/mvp-contract/src/wire-codec.ts \
+  "$ROOT_DIR"/integrations/shared/adapter.ts \
+  "$ROOT_DIR"/integrations/hermes/adapter.ts \
+  "$ROOT_DIR"/integrations/openclaw/adapter.ts \
+  --types node --typeRoots "$ROOT_DIR/node_modules/@types"
 
-if npm --prefix "$ROOT_DIR" run mvp:lock:check >/tmp/agent-life-mvp-lock.out 2>&1; then
+if "$NODE_LAUNCHER" npm --prefix "$ROOT_DIR" run mvp:lock:check >/tmp/agent-life-mvp-lock.out 2>&1; then
   echo "LOCK_GATE_PASS"
 else
   echo "LOCK_GATE_PENDING"

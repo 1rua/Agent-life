@@ -1,0 +1,23 @@
+{
+  "vector_set": "task7-operation-state-v1",
+  "vectors": [
+    { "id": "pending-created", "valid": true, "state": { "request_status": "created", "terminal_outcome": null, "operation_reason": null } },
+    { "id": "pending-waiting-device", "valid": true, "state": { "request_status": "waiting_device", "terminal_outcome": null, "operation_reason": null } },
+    { "id": "pending-dispatching", "valid": true, "state": { "request_status": "dispatching", "terminal_outcome": null, "operation_reason": null } },
+    { "id": "pending-accepted-device", "valid": true, "state": { "request_status": "accepted_device", "terminal_outcome": null, "operation_reason": null } },
+    { "id": "pending-awaiting-approval", "valid": true, "state": { "request_status": "awaiting_approval", "terminal_outcome": null, "operation_reason": null } },
+    { "id": "pending-approved", "valid": true, "state": { "request_status": "approved", "terminal_outcome": null, "operation_reason": null } },
+    { "id": "pending-executing", "valid": true, "state": { "request_status": "executing", "terminal_outcome": null, "operation_reason": null } },
+    { "id": "terminal-succeeded", "valid": true, "state": { "request_status": null, "terminal_outcome": "succeeded", "operation_reason": null } },
+    { "id": "terminal-failed", "valid": true, "state": { "request_status": null, "terminal_outcome": "failed", "operation_reason": "INTERNAL_ERROR" } },
+    { "id": "terminal-denied", "valid": true, "state": { "request_status": null, "terminal_outcome": "denied", "operation_reason": "NOT_AUTHORIZED" } },
+    { "id": "terminal-cancelled", "valid": true, "state": { "request_status": null, "terminal_outcome": "cancelled", "operation_reason": null } },
+    { "id": "terminal-expired", "valid": true, "state": { "request_status": null, "terminal_outcome": "expired", "operation_reason": null } },
+    { "id": "terminal-result-unknown", "valid": true, "state": { "request_status": null, "terminal_outcome": "result_unknown", "operation_reason": null } },
+    { "id": "invalid-pending-terminal", "valid": false, "state": { "request_status": "executing", "terminal_outcome": "succeeded", "operation_reason": null } },
+    { "id": "invalid-failed-null-reason", "valid": false, "state": { "request_status": null, "terminal_outcome": "failed", "operation_reason": null } },
+    { "id": "invalid-denied-failure-reason", "valid": false, "state": { "request_status": null, "terminal_outcome": "denied", "operation_reason": "INTERNAL_ERROR" } },
+    { "id": "invalid-success-reason", "valid": false, "state": { "request_status": null, "terminal_outcome": "succeeded", "operation_reason": "USER_DENIED" } },
+    { "id": "invalid-unknown-outcome", "valid": false, "state": { "request_status": null, "terminal_outcome": "unknown", "operation_reason": null } }
+  ]
+}

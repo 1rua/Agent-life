@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly NODE_VERSION="v24.18.0"
+readonly NPM_VERSION="11.16.0"
+readonly NODE_ARCHIVE="node-v24.18.0-linux-x64.tar.xz"
+readonly NODE_SHA256="55aa7153f9d88f28d765fcdad5ae6945b5c0f98a36881703817e4c450fa76742"
+readonly NODE_URL="https://nodejs.org/dist/v24.18.0/${NODE_ARCHIVE}"
+
+fail() {
+  printf '%s\n' "run-node24: $*" >&2
+  exit 1
+}
+
+[ "$(uname -s)" = "Linux" ] || fail "only Linux is supported"
+[ "$(uname -m)" = "x86_64" ] || fail "only x64 is supported"
+
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+workspace_dir=$(CDPATH= cd -- "${script_dir}/.." && pwd)
+toolchains_dir="${workspace_dir}/.toolchains"
+archive_path="${toolchains_dir}/${NODE_ARCHIVE}"
+node_dir="${toolchains_dir}/node-v24.18.0-linux-x64"
+node_bin="${node_dir}/bin"
+
+mkdir -p "${toolchains_dir}"
+
+if [ ! -f "${archive_path}" ]; then
+  archive_pending="${archive_path}.pending.$$"
+  trap 'rm -f "${archive_pending}"' EXIT
+  if command -v curl >/dev/null 2>&1; then
+    curl --fail --location --proto '=https' --tlsv1.2 --output "${archive_pending}" "${NODE_URL}"
+  elif command -v wget >/dev/null 2>&1; then
+    wget --https-only --output-document="${archive_pending}" "${NODE_URL}"
+  else
+    fail "curl or wget is required to download ${NODE_URL}"
+  fi
+  actual_sha256=$(sha256sum "${archive_pending}")
+  actual_sha256=${actual_sha256%% *}
+  [ "${actual_sha256}" = "${NODE_SHA256}" ] || fail "checksum verification failed"
+  mv "${archive_pending}" "${archive_path}"
+  trap - EXIT
+fi
+
+actual_sha256=$(sha256sum "${archive_path}")
+actual_sha256=${actual_sha256%% *}
+[ "${actual_sha256}" = "${NODE_SHA256}" ] || fail "checksum verification failed"
+
+if [ ! -d "${node_dir}" ]; then
+  extract_dir=$(mktemp -d "${toolchains_dir}/.extract.XXXXXX")
+  trap 'rm -rf "${extract_dir}"' EXIT
+  tar -xJf "${archive_path}" -C "${extract_dir}"
+  extracted_node_dir="${extract_dir}/node-v24.18.0-linux-x64"
+  [ -x "${extracted_node_dir}/bin/node" ] || fail "archive does not contain the fixed Node distribution"
+  mv "${extracted_node_dir}" "${node_dir}"
+  trap - EXIT
+  rmdir "${extract_dir}"
+fi
+
+[ -x "${node_bin}/node" ] || fail "fixed node binary is unavailable"
+[ -x "${node_bin}/npm" ] || fail "fixed npm binary is unavailable"
+[ -x "${node_bin}/npx" ] || fail "fixed npx binary is unavailable"
+
+export PATH="${node_bin}:${PATH}"
+[ "$("${node_bin}/node" --version)" = "${NODE_VERSION}" ] || fail "node version verification failed"
+[ "$("${node_bin}/npm" --version)" = "${NPM_VERSION}" ] || fail "npm version verification failed"
+
+case "${1:-}" in
+  node|npm|npx)
+    command_name=$1
+    shift
+    exec "${node_bin}/${command_name}" "$@"
+    ;;
+  *)
+    fail "only node, npm, or npx may be executed"
+    ;;
+esac

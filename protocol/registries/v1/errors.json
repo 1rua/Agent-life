@@ -1,0 +1,20 @@
+{
+  "$schema": "urn:agent-life:protocol:v1:errors-registry",
+  "registry_id": "urn:agent-life:protocol:v1:registry:errors",
+  "protocol_version": "1.0",
+  "errors": [
+    { "code": "SCHEMA_INVALID", "stage": "canonical_schema", "retryable": false, "operation_reason": null, "internal_reason": "NONE" },
+    { "code": "MESSAGE_TOO_LARGE", "stage": "size", "retryable": false, "operation_reason": "PAYLOAD_TOO_LARGE", "internal_reason": "NONE" },
+    { "code": "MESSAGE_EXPIRED", "stage": "expiry", "retryable": false, "operation_reason": null, "internal_reason": "NONE" },
+    { "code": "CONNECTION_FENCED", "stage": "connection_fence", "retryable": false, "operation_reason": null, "internal_reason": "NONE" },
+    { "code": "AUTH_FAILED", "stage": "key_direction_domain_signature", "retryable": false, "operation_reason": "NOT_AUTHORIZED", "internal_reason": "NONE" },
+    { "code": "INTEGRITY_FAILED", "stage": "payload_digest", "retryable": false, "operation_reason": null, "internal_reason": "NONE" },
+    { "code": "NOT_AUTHORIZED", "stage": "authorization_revision", "retryable": false, "operation_reason": "NOT_AUTHORIZED", "internal_reason": "NONE" },
+    { "code": "REPLAY_REJECTED", "stage": "replay", "retryable": false, "operation_reason": null, "internal_reason": "NONE" },
+    { "code": "SECURITY_LEDGER_FULL", "stage": "replay", "retryable": true, "operation_reason": "SECURITY_LEDGER_FULL", "internal_reason": "NONE" },
+    { "code": "FLOW_CONTROL_VIOLATION", "stage": "execution_ledger", "retryable": true, "operation_reason": "QUEUE_LIMIT", "internal_reason": "PENDING_LIMIT" },
+    { "code": "RATE_LIMITED", "stage": "authorization_revision", "retryable": true, "operation_reason": "RATE_LIMITED", "internal_reason": "COOLDOWN" },
+    { "code": "INVALID_STATE_TRANSITION", "stage": "operation_transition", "retryable": false, "operation_reason": "INTERNAL_ERROR", "internal_reason": "NONE" },
+    { "code": "RESULT_CONFLICT", "stage": "execution_ledger", "retryable": false, "operation_reason": "INTERNAL_ERROR", "internal_reason": "RESULT_CONFLICT" }
+  ]
+}

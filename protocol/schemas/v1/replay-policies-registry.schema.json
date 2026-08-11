@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agent-life:protocol:v1:replay-policies-registry",
+  "title": "Agent Life v1 replay-policy registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "registry_id", "protocol_version", "policy_classes", "message_classification"],
+  "properties": {
+    "$schema": { "const": "urn:agent-life:protocol:v1:replay-policies-registry" },
+    "registry_id": { "const": "urn:agent-life:protocol:v1:registry:replay-policies" },
+    "protocol_version": { "const": "1.0" },
+    "policy_classes": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": { "$ref": "#/$defs/policyClass" }
+    },
+    "message_classification": {
+      "type": "array",
+      "minItems": 27,
+      "maxItems": 27,
+      "items": { "$ref": "#/$defs/classification" }
+    }
+  },
+  "$defs": {
+    "u64": { "type": "string", "pattern": "^(0|[1-9][0-9]*)$" },
+    "policyClass": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "class_id", "retention_rule_id", "max_rows_per_space",
+        "max_retained_bytes_per_space", "receipt_reservation_bytes",
+        "intent_metadata_ceiling_bytes", "tombstone_metadata_ceiling_bytes",
+        "message_types"
+      ],
+      "properties": {
+        "class_id": { "enum": ["task5_default", "operation_security_ledger"] },
+        "retention_rule_id": { "type": "string", "minLength": 1 },
+        "max_rows_per_space": { "$ref": "#/$defs/u64" },
+        "max_retained_bytes_per_space": { "$ref": "#/$defs/u64" },
+        "receipt_reservation_bytes": { "$ref": "#/$defs/u64" },
+        "intent_metadata_ceiling_bytes": { "anyOf": [{ "$ref": "#/$defs/u64" }, { "type": "null" }] },
+        "tombstone_metadata_ceiling_bytes": { "anyOf": [{ "$ref": "#/$defs/u64" }, { "type": "null" }] },
+        "message_types": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$" },
+          "minItems": 1
+        }
+      }
+    },
+    "classification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["message_type", "class_id", "retention_rule_id"],
+      "properties": {
+        "message_type": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$" },
+        "class_id": { "enum": ["task5_default", "operation_security_ledger"] },
+        "retention_rule_id": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

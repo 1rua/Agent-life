@@ -1,0 +1,14 @@
+{
+  "message_schema": "urn:agent-life:protocol:v0.9:pending-operation",
+  "operation_id": "legacy-operation-1",
+  "parameters_digest": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  "state": "pending",
+  "expires_at": "2026-08-11T00:15:00.000Z",
+  "binding": {
+    "tenant_id": "tenant-1",
+    "human_principal_id": "human-1",
+    "agent_instance_id": "agent-instance-1",
+    "workspace_id": "workspace-1",
+    "device_id": "device-1"
+  }
+}

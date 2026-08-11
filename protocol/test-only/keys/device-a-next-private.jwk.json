@@ -1,0 +1,10 @@
+{
+  "kty": "EC",
+  "crv": "P-256",
+  "x": "fPJ7GI0DT36KUjgDBLUaw8CJaeJ38hs1pgtI_EdmmXg",
+  "y": "B3dVENuO0EApPZrGn3Qw27p9reY86YIpngS3nSJ4c9E",
+  "d": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAI",
+  "alg": "ES256",
+  "use": "sig",
+  "kid": "test-device-a-next"
+}

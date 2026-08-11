@@ -1,0 +1,41 @@
+{
+  "schema_version": "1",
+  "keys": {
+    "test-device-a-current": {
+      "role": "device",
+      "generation": "current",
+      "private_jwk": "device-a-private.jwk.json",
+      "public_jwk": "device-a-public.jwk.json"
+    },
+    "test-device-a-next": {
+      "role": "device",
+      "generation": "next",
+      "private_jwk": "device-a-next-private.jwk.json",
+      "public_jwk": "device-a-next-public.jwk.json"
+    },
+    "test-bridge-command-current": {
+      "role": "bridge-command",
+      "generation": "current",
+      "private_jwk": "bridge-command-private.jwk.json",
+      "public_jwk": "bridge-command-public.jwk.json"
+    },
+    "test-bridge-command-next": {
+      "role": "bridge-command",
+      "generation": "next",
+      "private_jwk": "bridge-command-next-private.jwk.json",
+      "public_jwk": "bridge-command-next-public.jwk.json"
+    },
+    "test-adapter-a-current": {
+      "role": "adapter",
+      "generation": "current",
+      "private_jwk": "adapter-a-private.jwk.json",
+      "public_jwk": "adapter-a-public.jwk.json"
+    },
+    "test-adapter-a-next": {
+      "role": "adapter",
+      "generation": "next",
+      "private_jwk": "adapter-a-next-private.jwk.json",
+      "public_jwk": "adapter-a-next-public.jwk.json"
+    }
+  }
+}

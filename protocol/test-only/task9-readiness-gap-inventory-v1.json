@@ -1,0 +1,96 @@
+{
+  "artifact_set": "task9-event-readiness-v1",
+  "status": "CONTRACT_IMPLEMENTATION_IN_PROGRESS",
+  "decision_status": {
+    "event_lifetime": "APPROVED_PRODUCT_SECURITY_OWNER",
+    "event_replay_policy": "APPROVED_PRODUCT_SECURITY_OWNER"
+  },
+  "present": [
+    "docs/mvp/p0a-gate-decisions.md",
+    "docs/mvp/agent-handoff-status-2026-08-11.md",
+    "protocol/registries/v1/messages.json",
+    "protocol/src/schema-catalog.ts",
+    "protocol/src/control-envelope.ts",
+    "protocol/src/outbound-envelope.ts",
+    "protocol/src/replay-window.ts",
+    "protocol/src/authorization.ts",
+    "protocol/src/authorization-revision.ts",
+    "protocol/src/data-query-grant.ts",
+    "docs/protocol/v1/events.md",
+    "protocol/schemas/v1/event.schema.json",
+    "protocol/src/event-contract.ts",
+    "protocol/test/event-contract.test.ts",
+    "protocol/registries/v1/replay-policies.json",
+    "protocol/schemas/v1/replay-policies-registry.schema.json",
+    "protocol/test-only/event/v1/event-ack-vectors.json",
+    "protocol/test-only/task9-readiness-gap-inventory-v1.json"
+  ],
+  "missing": [],
+  "blocked_contracts": [
+    {
+      "id": "T9-G1-TRANSPORT_ADMISSION",
+      "state": "BLOCKED",
+      "required_artifacts": [
+        "protocol/src/control-envelope.ts#Task9MessageType-and-family-admission",
+        "protocol/src/outbound-envelope.ts#Task9MessageType-and-directional-outbound-authority",
+        "protocol/src/replay-window.ts#Task9-replay-admission"
+      ]
+    },
+    {
+      "id": "T9-G2-REPLAY_CLASSIFICATION",
+      "state": "BLOCKED",
+      "required_artifacts": [
+        "protocol/registries/v1/replay-policies.json",
+        "protocol/schemas/v1/replay-policies-registry.schema.json",
+        "protocol/registries/v1/messages.json#event-replay-eligibility-and-policy-binding"
+      ]
+    },
+    {
+      "id": "T9-G3-CLOSED_WIRE_CONTRACT",
+      "state": "BLOCKED",
+      "required_artifacts": [
+        "protocol/schemas/v1/event.schema.json",
+        "protocol/src/schema-catalog.ts#event-schema-catalog-registration",
+        "protocol/registries/v1/messages.json#device-event-and-event-ack-rows",
+        "docs/protocol/v1/events.md"
+      ]
+    },
+    {
+      "id": "T9-G4-CAPTURE_AUTHORITY",
+      "state": "BLOCKED",
+      "required_artifacts": [
+        "protocol/src/event-contract.ts#VerifiedCaptureAuthority",
+        "protocol/src/authorization-revision.ts#source-epoch-and-revision-read-port"
+      ]
+    },
+    {
+      "id": "T9-G5-ACK_DURABILITY",
+      "state": "BLOCKED",
+      "required_artifacts": [
+        "protocol/src/event-contract.ts#VerifiedEventAck-and-EventAckStore-transaction-boundary",
+        "protocol/src/replay-window.ts#event-ack-recovery-ordering"
+      ]
+    },
+    {
+      "id": "T9-G6-SERVER_ROUTING",
+      "state": "BLOCKED",
+      "required_artifacts": [
+        "protocol/src/event-contract.ts#VerifiedDeviceEvent-and-ServerSubscriptionRouter"
+      ]
+    },
+    {
+      "id": "T9-G7-PRE_REPLAY_VECTORS",
+      "state": "BLOCKED",
+      "required_artifacts": [
+        "protocol/src/control-envelope.ts#Task9-semantic-pre-replay-hook",
+        "protocol/test-only/event/v1/event-ack-vectors.json",
+        "protocol/test/event-contract.test.ts"
+      ]
+    }
+  ],
+  "non_claims": [
+    "This inventory is not a production event implementation.",
+    "It records the approved lifetime and task5_default replay class but does not claim device collection or production persistence.",
+    "It does not enable a production migration, durable cursor store, collector, subscription store or event router."
+  ]
+}

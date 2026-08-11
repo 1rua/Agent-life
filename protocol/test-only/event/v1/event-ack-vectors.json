@@ -1,0 +1,16 @@
+{
+  "vector_set": "task9-event-ack-v1",
+  "protocol_version": "1.0",
+  "vectors": [
+    {
+      "id": "event_ack_basic_metadata_cursor",
+      "payload": {
+        "source_epoch": "018f4f9a-4444-4444-8444-444444444444",
+        "source_capability": "notifications.metadata",
+        "highest_contiguous_cursor": "9"
+      },
+      "jcs_base64": "eyJoaWdoZXN0X2NvbnRpZ3VvdXNfY3Vyc29yIjoiOSIsInNvdXJjZV9jYXBhYmlsaXR5Ijoibm90aWZpY2F0aW9ucy5tZXRhZGF0YSIsInNvdXJjZV9lcG9jaCI6IjAxOGY0ZjlhLTQ0NDQtNDQ0NC04NDQ0LTQ0NDQ0NDQ0NDQ0NCJ9",
+      "utf8_bytes": "132"
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "$schema": "urn:agent-life:protocol:v1:messages-registry",
+  "registry_id": "urn:agent-life:protocol:v1:registry:messages",
+  "protocol_version": "1.0",
+  "messages": [
+    { "message_type": "enrollment_challenge", "direction": "bridge-to-app", "signature_domain": "enrollment/bridge-to-app", "schema_id": "urn:agent-life:protocol:v1:message:enrollment_challenge" },
+    { "message_type": "enrollment_response", "direction": "app-to-bridge", "signature_domain": "enrollment/app-to-bridge", "schema_id": "urn:agent-life:protocol:v1:message:enrollment_response" },
+    { "message_type": "enrollment_complete", "direction": "bridge-to-app", "signature_domain": "enrollment/bridge-to-app", "schema_id": "urn:agent-life:protocol:v1:message:enrollment_complete" },
+    { "message_type": "enrollment_error", "direction": "bridge-to-app", "signature_domain": "enrollment/bridge-to-app", "schema_id": "urn:agent-life:protocol:v1:message:enrollment_error" },
+    { "message_type": "connect_hello", "direction": "app-to-bridge", "signature_domain": "control/app-to-bridge", "schema_id": "urn:agent-life:protocol:v1:message:connect_hello" },
+    { "message_type": "connect_welcome", "direction": "bridge-to-app", "signature_domain": "control/bridge-to-app", "schema_id": "urn:agent-life:protocol:v1:message:connect_welcome" },
+    { "message_type": "device_ping", "direction": "app-to-bridge", "signature_domain": "control/app-to-bridge", "schema_id": "urn:agent-life:protocol:v1:message:device_ping" },
+    { "message_type": "bridge_ping", "direction": "bridge-to-app", "signature_domain": "control/bridge-to-app", "schema_id": "urn:agent-life:protocol:v1:message:bridge_ping" },
+    { "message_type": "device_presence", "direction": "app-to-bridge", "signature_domain": "control/app-to-bridge", "schema_id": "urn:agent-life:protocol:v1:message:device_presence" },
+    { "message_type": "device_key_rotation", "direction": "app-to-bridge", "signature_domain": "key-rotation/app-to-bridge", "schema_id": "urn:agent-life:protocol:v1:message:device_key_rotation" },
+    { "message_type": "device_key_rotation_ack", "direction": "bridge-to-app", "signature_domain": "key-rotation/bridge-to-app", "schema_id": "urn:agent-life:protocol:v1:message:device_key_rotation_ack" },
+    { "message_type": "bridge_key_rotation", "direction": "bridge-to-app", "signature_domain": "key-rotation/bridge-to-app", "schema_id": "urn:agent-life:protocol:v1:message:bridge_key_rotation" },
+    { "message_type": "bridge_key_rotation_ack", "direction": "app-to-bridge", "signature_domain": "key-rotation/app-to-bridge", "schema_id": "urn:agent-life:protocol:v1:message:bridge_key_rotation_ack" },
+    { "message_type": "adapter_key_rotation", "direction": "adapter-to-bridge", "signature_domain": "key-rotation/adapter-to-bridge", "schema_id": "urn:agent-life:protocol:v1:message:adapter_key_rotation" },
+    { "message_type": "adapter_key_rotation_ack", "direction": "bridge-to-adapter", "signature_domain": "key-rotation/bridge-to-adapter", "schema_id": "urn:agent-life:protocol:v1:message:adapter_key_rotation_ack" },
+    { "message_type": "device_event", "direction": "app-to-bridge", "signature_domain": "control/app-to-bridge", "schema_id": "urn:agent-life:protocol:v1:message:device_event" },
+    { "message_type": "event_ack", "direction": "bridge-to-app", "signature_domain": "control/bridge-to-app", "schema_id": "urn:agent-life:protocol:v1:message:event_ack" }
+  ]
+}
