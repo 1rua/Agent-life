@@ -1,0 +1,47 @@
+plugins {
+    base
+    id("com.android.application") version "8.7.3" apply false
+    id("com.android.library") version "8.7.3" apply false
+    id("org.jetbrains.kotlin.android") version "2.0.21" apply false
+}
+
+// Keep the userspace/no-VPN surface gate attached to the root check task so
+// every APK/library build evaluates the same forbidden-surface policy.
+apply(from = "$rootDir/gradle/mvp-forbidden-surfaces.gradle.kts")
+
+allprojects {
+    group = "com.agentlife"
+    version = "0.1.0-mvp"
+}
+
+subprojects {
+    plugins.withId("com.android.application") {
+        extensions.configure<com.android.build.api.dsl.ApplicationExtension> {
+            compileSdk = 35
+            defaultConfig {
+                minSdk = 34
+                targetSdk = 35
+                testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+            }
+            compileOptions {
+                sourceCompatibility = JavaVersion.VERSION_17
+                targetCompatibility = JavaVersion.VERSION_17
+            }
+        }
+    }
+    plugins.withId("com.android.library") {
+        extensions.configure<com.android.build.api.dsl.LibraryExtension> {
+            compileSdk = 35
+            defaultConfig { minSdk = 34 }
+            compileOptions {
+                sourceCompatibility = JavaVersion.VERSION_17
+                targetCompatibility = JavaVersion.VERSION_17
+            }
+        }
+    }
+    plugins.withId("org.jetbrains.kotlin.android") {
+        extensions.configure<org.jetbrains.kotlin.gradle.dsl.KotlinAndroidProjectExtension> {
+            compilerOptions.jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        }
+    }
+}

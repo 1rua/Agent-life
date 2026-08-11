@@ -1,0 +1,54 @@
+# MVP implementation handoff
+
+当前纵切包含：
+
+- `mvp-contract/schemas/v1/`：策略、通知记录/API、助手对话的闭合 schema；
+- `apps/android/`：双 APK、无系统 VPN 的 userspace Tailnet transport seam、
+  通知策略/采集器、生命周期 runtime/AES-GCM outbox，以及 source-only 的封闭 capability-port、
+  typed provider-contract 与高风险 control-port 授权边界（不宣称系统数据源/控制后端已实现）；
+- `bridge-contract/`：配对、代际 fencing、通知 query/subscribe、ACK 与
+  package/field filter 的 deterministic fake；
+- `integrations/`：Hermes/OpenClaw adapters、统一工具契约与
+  `android-device-bridge` skill。
+- `artifact-contract/`：图片/文件选择后的 digest、PoP、ticket、提交与
+  orphan reclaim source contract；不宣称对象存储或真实上传已完成。
+- `apps/android/artifact-ports/`：手机端授权选择、摘要、临时加密副本、提交回执
+  与删除顺序的 source-only typed seam；不宣称 SAF、加密实现或设备验证已完成。
+- `apps/android/core-model/AssistantHandoffContracts.kt`：assistant-holder 与主 APK
+  之间受限的文本/opaque grant typed handoff；默认 gate deny，未实现隐式 IPC。
+- `e2e/mvp/run-smoke.sh`：可在无 SDK 环境运行的跨层 smoke gate；它会把
+  真实依赖锁与 Android 设备状态显示为 `PENDING/SKIPPED`。
+- `e2e/mvp/run-readiness.sh`：串联 SDK-free smoke 与 WP-00..WP-10
+  artifact audit；`--release` 会对依赖、工具链、设备及 P0a 门禁 fail-closed。
+- `docs/mvp/mvp-dependency-lock.md` 与 `mvp-contract/tools/check-lock.ts`：
+  真实依赖的 fail-closed 控制器门禁；七行依赖证据目前仍为 PENDING。
+- `docs/mvp/p0a-gate-decisions.md`：记录已确认的 Task 7 D1–D4 与 Task 9
+  产品字面值。它不会替代 Task 9 技术预检、依赖锁、设备或生产部署门禁。
+
+## SDK-free checks
+
+```bash
+e2e/mvp/run-smoke.sh --sdk-free
+npm run mvp:lock:check  # 当前按设计失败，直到控制器填满七行证据
+```
+
+Protocol checks run in `.worktrees/p0a-protocol-security-model` with
+`npm run typecheck && npm test -- --run`.
+
+协议 worktree 当前验证为 **32 个测试文件/310 个测试，typecheck GREEN**。这表示
+协议参考契约的确定性门禁通过，不等于 Android/Bridge 生产门禁通过。Task 9
+当前仍仅提供参考契约；固定跨语言 vectors、生产 cursor/ACK durability 与
+shared pre-replay integration 仍待完成。Bridge、integrations 与 MVP schema/Bridge runtime/artifact
+联调为 16 个测试文件/98 个测试；Android SDK-free 静态门禁为 48 个测试。
+`run-readiness.sh --sdk-free` 还会逐项列出 WP-00..WP-10 的源工件和
+生产阻断原因。Bridge 仍不宣称真实网络监听或 production durable DB；当前有
+`operation.claims` 本地 durable-dispatcher，以及 SQLite migration 和 userspace
+ingress/health source seams。
+`bridge-contract/src/durable-store.ts` 提供数据库/网络无关的
+`DurableBridgeStore` transaction port 与 fail-closed marker 检查；配对、通知、
+订阅状态仍是 process-local；生产 SQLite 驱动、认证 tsnet adapter、备份恢复
+演练和部署尚未提供，因此不能将这些 source seam 视为生产 durable 实现证据。
+
+本环境没有 Java、Gradle、Android SDK、ADB 或物理设备；因此 Android
+Kotlin/JUnit、APK、P0t userspace AAR 和真实 Tailnet/Bridge E2E 仍需在锁定的
+Android CI/参考设备上执行，当前证据不宣称这些门禁已通过。

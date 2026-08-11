@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agent-life:mvp:assistant-chat:v1",
+  "title": "Agent Life assistant chat",
+  "unevaluatedProperties": false,
+  "oneOf": [
+    { "$ref": "#/$defs/request" },
+    { "$ref": "#/$defs/response" }
+  ],
+  "$defs": {
+    "attachment": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "media_type", "byte_length", "sha256", "display_name"],
+      "properties": {
+        "kind": { "enum": ["image", "file"] },
+        "media_type": { "type": "string", "minLength": 1 },
+        "byte_length": { "type": "integer", "minimum": 0, "maximum": 26214400 },
+        "sha256": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$" },
+        "display_name": { "type": "string", "minLength": 1, "maxLength": 255 }
+      }
+    },
+    "request": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "operation_id", "text", "attachments"],
+      "properties": {
+        "kind": { "const": "request" },
+        "operation_id": { "type": "string", "minLength": 1 },
+        "text": { "type": "string", "maxLength": 50000 },
+        "attachments": { "type": "array", "maxItems": 4, "items": { "$ref": "#/$defs/attachment" } }
+      }
+    },
+    "response": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "operation_id", "text", "status"],
+      "properties": {
+        "kind": { "const": "response" },
+        "operation_id": { "type": "string", "minLength": 1 },
+        "text": { "type": "string", "maxLength": 50000 },
+        "status": { "enum": ["complete", "failed"] },
+        "error": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

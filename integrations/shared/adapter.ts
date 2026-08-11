@@ -1,0 +1,500 @@
+/**
+ * Small, backend-neutral adapter contract used by the Hermes and OpenClaw
+ * fixtures.  It deliberately has no dependency on protocol/src or Android.
+ * The fake bridge below is in-memory and is only a deterministic test double.
+ */
+
+export const FROZEN_NOTIFICATION_TOOLS = Object.freeze([
+  "mobile.notifications.query",
+  "mobile.notifications.subscribe",
+  "mobile.notifications.unsubscribe",
+] as const);
+
+export type NotificationToolName = typeof FROZEN_NOTIFICATION_TOOLS[number];
+
+export const ASSISTANT_ATTACHMENT_LIMITS = Object.freeze({
+  maxFiles: 4,
+  maxFileBytes: 25 * 1024 * 1024,
+  maxMessageBytes: 50 * 1024 * 1024,
+});
+
+export const ZERO_RETENTION_UNAVAILABLE = "ZERO_RETENTION_UNAVAILABLE" as const;
+
+export type AdapterIdentity = Readonly<{
+  tenantId: string;
+  humanPrincipalId: string;
+  deviceId: string;
+  agentInstanceId: string;
+  workspaceId: string;
+  sessionId: string;
+  jobId?: string;
+}>;
+
+export type AdapterBinding = AdapterIdentity & Readonly<{
+  authorizedDeviceIds: readonly string[];
+}>;
+
+export type PairedBinding = Readonly<{
+  tenantId: string;
+  humanPrincipalId: string;
+  deviceId: string;
+  bridgeFingerprint: string;
+  pairingGeneration: bigint;
+  policyAttestationRevision: bigint;
+}>;
+
+export type NotificationRecord = Readonly<{
+  kind: "upsert" | "delete_tombstone" | "loss_marker";
+  recordId: string;
+  packageId: string | null;
+  title: string | null;
+  content: string | null;
+}>;
+
+export type NotificationEvent = Readonly<{
+  eventId: string;
+  subscriptionId: string;
+  binding: AdapterIdentity;
+  record: NotificationRecord;
+}>;
+
+export type ZeroRetentionEvidence = Readonly<{
+  provider: string;
+  profileId: string;
+  revision: string;
+  expiresAt: string;
+  /** The provider must not return a durable object/retention identifier. */
+  providerObjectRetention: "none" | "provider_retains";
+  requestResponseLoggingDisabled: boolean;
+  trainingDisabled: boolean;
+  humanReviewDisabled: boolean;
+}>;
+
+export type AssistantAttachment = Readonly<{
+  kind: "image" | "file";
+  artifactId: string;
+  filename: string;
+  mimeType: "image/jpeg" | "image/png" | "image/webp" | "application/pdf" | "text/plain";
+  sizeBytes: number;
+  sha256: string;
+}>;
+
+export type AssistantMessageInput = Readonly<{
+  messageId: string;
+  text: string;
+  attachments?: readonly AssistantAttachment[];
+}>;
+
+export type AssistantMessageResult = Readonly<{
+  messageId: string;
+  status: "accepted";
+  reply: string;
+}>;
+
+export type NotificationQueryInput = Readonly<{
+  toolCallId: string;
+  deviceId: string;
+  mode: "on_demand" | "auto_send";
+  limit: number;
+  content?: "metadata" | "content";
+  packages?: readonly string[];
+}>;
+
+export type NotificationSubscriptionInput = Readonly<{ deviceId: string; packages?: readonly string[]; content?: "metadata" | "content" }>;
+
+export type AdapterProfile = Readonly<{
+  kind: "chat" | "tool" | "event";
+  id: string;
+  authoritative: boolean;
+}>;
+
+export type AdapterOptions = Readonly<{
+  context: AdapterBinding;
+  zeroRetention?: ZeroRetentionEvidence;
+  /** Optional locked profile ID supplied by a provider-specific adapter. */
+  zeroRetentionProfileId?: string;
+  onDemand?: () => Promise<readonly NotificationRecord[]>;
+  allowNotificationContent?: boolean;
+  profiles?: readonly AdapterProfile[];
+}>;
+
+type TraceEntry = Readonly<{ kind: string; eventId?: string; operationId?: string; messageId?: string }>;
+
+export class AdapterError extends Error {
+  readonly code: string;
+  constructor(code: string) {
+    super(code);
+    this.name = "AdapterError";
+    this.code = code;
+  }
+}
+
+const cloneRecord = (record: NotificationRecord): NotificationRecord => Object.freeze({ ...record });
+
+const bindingKey = (binding: Pick<AdapterBinding, "tenantId" | "humanPrincipalId" | "deviceId" | "agentInstanceId" | "workspaceId" | "sessionId" | "jobId">): string =>
+  [binding.tenantId, binding.humanPrincipalId, binding.deviceId, binding.agentInstanceId, binding.workspaceId, binding.sessionId, binding.jobId ?? ""].join("\u0000");
+
+const pairKey = (binding: PairedBinding): string =>
+  [binding.tenantId, binding.humanPrincipalId, binding.deviceId, binding.bridgeFingerprint, binding.pairingGeneration].join("\u0000");
+
+const unicodeCodePointCompare = (left: string, right: string): number => {
+  const a = [...left].map((value) => value.codePointAt(0) ?? 0);
+  const b = [...right].map((value) => value.codePointAt(0) ?? 0);
+  for (let index = 0; index < Math.min(a.length, b.length); index += 1) {
+    if (a[index] !== b[index]) return a[index] - b[index];
+  }
+  return a.length - b.length;
+};
+
+const PACKAGE_NAME = /^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)+$/;
+
+export const validatePackageFilter = (packages: readonly string[] | undefined): readonly string[] | undefined => {
+  if (packages === undefined) return undefined;
+  if (!Array.isArray(packages) || packages.length < 1) throw new AdapterError("PACKAGE_FILTER_INVALID");
+  const copy = [...packages];
+  if (copy.some((value) => typeof value !== "string" || !PACKAGE_NAME.test(value))) throw new AdapterError("PACKAGE_FILTER_INVALID");
+  if (new Set(copy).size !== copy.length) throw new AdapterError("PACKAGE_FILTER_INVALID");
+  for (let index = 1; index < copy.length; index += 1) {
+    if (unicodeCodePointCompare(copy[index - 1], copy[index]) >= 0) throw new AdapterError("PACKAGE_FILTER_INVALID");
+  }
+  return Object.freeze(copy);
+};
+
+const hasOwn = (value: object, key: string): boolean => Object.prototype.hasOwnProperty.call(value, key);
+
+function assertObject(value: unknown, code = "REQUEST_INVALID"): asserts value is object {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) throw new AdapterError(code);
+}
+
+const assertNoModelIdentity = (value: object): void => {
+  // Principal, operation and session identity are supplied by the authenticated
+  // adapter runtime.  Rejecting these fields catches accidental model injection
+  // instead of silently ignoring an attacker-controlled value.
+  for (const key of ["tenantId", "humanPrincipalId", "agentInstanceId", "workspaceId", "sessionId", "jobId", "operationId"]) {
+    if (hasOwn(value, key)) throw new AdapterError("MODEL_IDENTITY_FIELD");
+  }
+};
+
+const assertExactKeys = (value: object, allowed: readonly string[], code = "REQUEST_FIELDS_INVALID"): void => {
+  const allowedSet = new Set(allowed);
+  if (Object.keys(value).some((key) => !allowedSet.has(key))) throw new AdapterError(code);
+};
+
+export const isCurrentZeroRetention = (evidence: ZeroRetentionEvidence | undefined, now = new Date()): evidence is ZeroRetentionEvidence => {
+  if (!evidence || !evidence.provider || !evidence.profileId || !evidence.revision) return false;
+  if (evidence.providerObjectRetention !== "none") return false;
+  if (!evidence.requestResponseLoggingDisabled || !evidence.trainingDisabled || !evidence.humanReviewDisabled) return false;
+  const expiry = Date.parse(evidence.expiresAt);
+  return Number.isFinite(expiry) && expiry > now.getTime();
+};
+
+type StoredOperation = Readonly<{ sessionId: string; mode: NotificationQueryInput["mode"]; packagesKey: string; content: "metadata" | "content"; result: readonly NotificationRecord[] }>;
+type StoredEvent = Readonly<{ event: NotificationEvent; acknowledged: boolean }>;
+type StoredSubscription = Readonly<{ binding: AdapterBinding; packages?: readonly string[]; content: "metadata" | "content" }>;
+
+/** Deterministic paired Bridge fake.  No endpoint, socket, or generic dial API is exposed. */
+class InMemoryPairedBridge {
+  #binding: PairedBinding | null = null;
+  #generation = 0n;
+  #sessionOpen = false;
+  #operations = new Map<string, StoredOperation>();
+  #claims = new Map<string, number>();
+  #subscriptions = new Map<string, StoredSubscription>();
+  #events = new Map<string, StoredEvent>();
+  #eventSequence = 0;
+  #onDemand: (() => Promise<readonly NotificationRecord[]>) | undefined;
+
+  constructor(onDemand: (() => Promise<readonly NotificationRecord[]>) | undefined) {
+    this.#onDemand = onDemand;
+  }
+
+  async open(binding: PairedBinding): Promise<FakeSession> {
+    if (this.#sessionOpen) this.#sessionOpen = false;
+    this.#binding = Object.freeze({ ...binding });
+    this.#generation += 1n;
+    this.#sessionOpen = true;
+    return this.session();
+  }
+
+  async reconnect(binding: PairedBinding): Promise<FakeSession> {
+    if (!this.#binding || pairKey(this.#binding) !== pairKey(binding)) throw new AdapterError("PAIRING_BINDING_MISMATCH");
+    return this.open(binding);
+  }
+
+  session(): FakeSession {
+    const generation = this.#generation;
+    return Object.freeze({
+      connectionGeneration: generation,
+      sendControl: async (_wire: string): Promise<void> => {
+        if (!this.#sessionOpen || generation !== this.#generation) throw new AdapterError("CONNECTION_FENCED");
+      },
+    });
+  }
+
+  #assertSession(binding: AdapterBinding): void {
+    if (!this.#sessionOpen || !this.#binding || this.#binding.tenantId !== binding.tenantId || this.#binding.humanPrincipalId !== binding.humanPrincipalId || this.#binding.deviceId !== binding.deviceId) {
+      throw new AdapterError("CONNECTION_FENCED");
+    }
+  }
+
+  async query(binding: AdapterBinding, operationId: string, sessionId: string, mode: NotificationQueryInput["mode"], packages: readonly string[] | undefined, content: "metadata" | "content"): Promise<readonly NotificationRecord[]> {
+    this.#assertSession(binding);
+    const previous = this.#operations.get(operationId);
+    if (previous) {
+      if (previous.sessionId !== sessionId) throw new AdapterError("OPERATION_IDENTITY_MISMATCH");
+      if (previous.mode !== mode || previous.packagesKey !== (packages?.join("\u0000") ?? "") || previous.content !== content) throw new AdapterError("OPERATION_PARAMETERS_MISMATCH");
+      return previous.result;
+    }
+    const captured = mode === "on_demand" && this.#onDemand ? [...(await this.#onDemand())].map(cloneRecord) : [];
+    const filtered = packages ? captured.filter((record) => record.packageId === null || packages.includes(record.packageId)) : captured;
+    const result = Object.freeze(filtered.map((record) => content === "metadata" ? Object.freeze({ ...record, content: null }) : record));
+    this.#operations.set(operationId, Object.freeze({ sessionId, mode, packagesKey: packages?.join("\u0000") ?? "", content, result }));
+    this.#claims.set(operationId, (this.#claims.get(operationId) ?? 0) + 1);
+    return result;
+  }
+
+  operationClaims(): readonly Readonly<{ operationId: string; claims: number }>[] {
+    return Object.freeze([...this.#claims].map(([operationId, claims]) => Object.freeze({ operationId, claims })));
+  }
+
+  async subscribe(binding: AdapterBinding, subscriptionId: string, packages: readonly string[] | undefined, content: "metadata" | "content"): Promise<void> {
+    this.#assertSession(binding);
+    this.#subscriptions.set(subscriptionId, Object.freeze({ binding: Object.freeze({ ...binding, authorizedDeviceIds: [...binding.authorizedDeviceIds] }), packages, content }));
+  }
+
+  async unsubscribe(binding: AdapterBinding, subscriptionId: string): Promise<boolean> {
+    this.#assertSession(binding);
+    const subscription = this.#subscriptions.get(subscriptionId);
+    if (!subscription || bindingKey(subscription.binding) !== bindingKey(binding)) return false;
+    this.#subscriptions.delete(subscriptionId);
+    return true;
+  }
+
+  publish(subscriptionId: string, record: NotificationRecord): NotificationEvent | null {
+    const subscription = this.#subscriptions.get(subscriptionId);
+    if (!subscription) throw new AdapterError("SUBSCRIPTION_NOT_FOUND");
+    if (subscription.packages && record.packageId !== null && !subscription.packages.includes(record.packageId)) return null;
+    const eventRecord = subscription.content === "metadata" ? Object.freeze({ ...record, content: null }) : cloneRecord(record);
+    const event: NotificationEvent = Object.freeze({
+      eventId: `event-${++this.#eventSequence}`,
+      subscriptionId,
+      binding: subscription.binding,
+      record: eventRecord,
+    });
+    this.#events.set(event.eventId, Object.freeze({ event, acknowledged: false }));
+    return event;
+  }
+
+  acknowledge(event: NotificationEvent): NotificationEvent {
+    const stored = this.#events.get(event.eventId);
+    if (!stored || stored.event.subscriptionId !== event.subscriptionId) throw new AdapterError("EVENT_NOT_FOUND");
+    if (bindingKey(stored.event.binding) !== bindingKey(event.binding)) throw new AdapterError("EVENT_NOT_FOUND");
+    this.#events.set(event.eventId, Object.freeze({ event: stored.event, acknowledged: true }));
+    return stored.event;
+  }
+}
+
+export type FakeSession = Readonly<{
+  connectionGeneration: bigint;
+  sendControl: (wire: string) => Promise<void>;
+}>;
+
+export type FakeAdapter = Readonly<{
+  pair: (binding: PairedBinding) => Promise<FakeSession>;
+  reconnect: (binding?: PairedBinding) => Promise<FakeSession>;
+  binding: () => PairedBinding | null;
+  tools: () => readonly NotificationToolName[];
+  queryNotifications: (input: NotificationQueryInput) => Promise<readonly NotificationRecord[]>;
+  subscribeNotifications: (input: NotificationSubscriptionInput) => Promise<Readonly<{ subscriptionId: string }>>;
+  unsubscribeNotifications: () => Promise<Readonly<{ removed: boolean }>>;
+  receiveNotificationEvent: (event: NotificationEvent) => Promise<Readonly<{ eventId: string; subscriptionId: string; record: NotificationRecord }>>;
+  /** Test-only server event source; production adapters receive this from the Bridge event hook. */
+  emitAutoSend: (record: NotificationRecord) => NotificationEvent | null;
+  sendAssistantMessage: (input: AssistantMessageInput) => Promise<AssistantMessageResult>;
+  invokeTool: (name: string, input: unknown) => Promise<unknown>;
+  operationClaims: () => readonly Readonly<{ operationId: string; claims: number }>[];
+  acknowledgedEvents: () => readonly string[];
+  assistantMetadata: () => Readonly<{ messageId: string; attachmentCount: number; attachments: readonly AssistantAttachment[] }> | null;
+  diagnostics: () => readonly TraceEntry[];
+}>;
+
+const validateProfiles = (profiles: readonly AdapterProfile[] | undefined): void => {
+  if (!profiles) return;
+  for (const kind of ["chat", "tool", "event"] as const) {
+    const authoritative = profiles.filter((profile) => profile.kind === kind && profile.authoritative);
+    if (authoritative.length === 0) throw new AdapterError("AUTHORITATIVE_PROFILE_REQUIRED");
+    if (authoritative.length > 1) throw new AdapterError("AUTHORITATIVE_PROFILE_DUPLICATE");
+  }
+};
+
+export const createFakeAdapter = (options: AdapterOptions): FakeAdapter => {
+  validateProfiles(options.profiles);
+  const context = Object.freeze({ ...options.context, authorizedDeviceIds: [...options.context.authorizedDeviceIds] });
+  const bridge = new InMemoryPairedBridge(options.onDemand);
+  const allowNotificationContent = options.allowNotificationContent === true;
+  let pairedBinding: PairedBinding | null = null;
+  let session: FakeSession | null = null;
+  let subscriptionId: string | null = null;
+  let lastMetadata: Readonly<{ messageId: string; attachmentCount: number; attachments: readonly AssistantAttachment[] }> | null = null;
+  const trace: TraceEntry[] = [];
+  const acknowledged: string[] = [];
+  const deliveredEvents = new Set<string>();
+
+  const assertDevice = (deviceId: string): void => {
+    if (!context.authorizedDeviceIds.includes(deviceId)) throw new AdapterError("DEVICE_NOT_AUTHORIZED");
+    if (!pairedBinding || pairedBinding.deviceId !== deviceId) throw new AdapterError("DEVICE_NOT_PAIRED");
+  };
+  const assertConnected = (): void => {
+    if (!session || !pairedBinding) throw new AdapterError("CONNECTION_FENCED");
+  };
+  const assertZeroRetention = (): void => {
+    if (!isCurrentZeroRetention(options.zeroRetention) || (options.zeroRetentionProfileId !== undefined && options.zeroRetention?.profileId !== options.zeroRetentionProfileId)) throw new AdapterError(ZERO_RETENTION_UNAVAILABLE);
+  };
+
+  const adapter: FakeAdapter = {
+    pair: async (binding) => {
+      if (binding.tenantId !== context.tenantId || binding.humanPrincipalId !== context.humanPrincipalId || !context.authorizedDeviceIds.includes(binding.deviceId)) throw new AdapterError("PAIRING_BINDING_MISMATCH");
+      if (pairedBinding && pairKey(pairedBinding) !== pairKey(binding)) throw new AdapterError("PAIRING_BINDING_MISMATCH");
+      pairedBinding = Object.freeze({ ...binding });
+      session = await bridge.open(binding);
+      trace.push({ kind: "paired" });
+      return session;
+    },
+    reconnect: async (binding = pairedBinding ?? (() => { throw new AdapterError("NOT_PAIRED"); })()) => {
+      if (!pairedBinding || pairKey(binding) !== pairKey(pairedBinding)) throw new AdapterError("PAIRING_BINDING_MISMATCH");
+      session = await bridge.reconnect(binding);
+      pairedBinding = Object.freeze({ ...binding });
+      trace.push({ kind: "reconnected" });
+      return session;
+    },
+    binding: () => pairedBinding,
+    queryNotifications: async (input) => {
+      assertObject(input);
+      assertNoModelIdentity(input as object);
+      assertExactKeys(input, ["toolCallId", "deviceId", "mode", "limit", "content", "packages"]);
+      if (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > 100) throw new AdapterError("LIMIT_INVALID");
+      if (input.mode !== "on_demand" && input.mode !== "auto_send") throw new AdapterError("MODE_INVALID");
+      if (input.content !== undefined && input.content !== "metadata" && input.content !== "content") throw new AdapterError("CONTENT_MODE_INVALID");
+      const packages = validatePackageFilter(input.packages);
+      assertConnected();
+      assertDevice(input.deviceId);
+      if (input.content === "content" && !allowNotificationContent) throw new AdapterError("CONTENT_DENIED");
+      const result = await bridge.query(context, input.toolCallId, context.sessionId, input.mode, packages, input.content ?? "metadata");
+      trace.push({ kind: "notification_query", operationId: input.toolCallId });
+      const bounded = result.slice(0, input.limit).map((record) => input.content === "content" ? record : Object.freeze({ ...record, content: null }));
+      return Object.freeze(bounded);
+    },
+    subscribeNotifications: async (input) => {
+      assertObject(input);
+      assertNoModelIdentity(input as object);
+      assertExactKeys(input, ["deviceId", "packages", "content"]);
+      const packages = validatePackageFilter(input.packages);
+      if (input.content !== undefined && input.content !== "metadata" && input.content !== "content") throw new AdapterError("CONTENT_MODE_INVALID");
+      const content = input.content ?? "metadata";
+      assertConnected();
+      assertDevice(input.deviceId);
+      if (content === "content" && !allowNotificationContent) throw new AdapterError("CONTENT_DENIED");
+      if (subscriptionId) await bridge.unsubscribe(context, subscriptionId);
+      subscriptionId = `sub-${context.tenantId}-${context.humanPrincipalId}-${input.deviceId}-${context.workspaceId}-${context.sessionId}-${packages?.join(".") ?? "all"}-${content}`;
+      await bridge.subscribe(context, subscriptionId, packages, content);
+      trace.push({ kind: "notification_subscribe" });
+      return Object.freeze({ subscriptionId });
+    },
+    unsubscribeNotifications: async () => {
+      assertConnected();
+      if (!subscriptionId) return Object.freeze({ removed: false });
+      const removed = await bridge.unsubscribe(context, subscriptionId);
+      subscriptionId = null;
+      trace.push({ kind: "notification_unsubscribe" });
+      return Object.freeze({ removed });
+    },
+    receiveNotificationEvent: async (event) => {
+      assertConnected();
+      if (!subscriptionId || event.subscriptionId !== subscriptionId || bindingKey(event.binding) !== bindingKey(context)) throw new AdapterError("EVENT_BINDING_MISMATCH");
+      if (!allowNotificationContent && event.record.content !== null) throw new AdapterError("CONTENT_DENIED");
+      const canonical = bridge.acknowledge(event);
+      if (deliveredEvents.has(event.eventId)) return Object.freeze({ eventId: canonical.eventId, subscriptionId: canonical.subscriptionId, record: canonical.record });
+      deliveredEvents.add(event.eventId);
+      acknowledged.push(event.eventId);
+      trace.push({ kind: "notification_event", eventId: event.eventId });
+      return Object.freeze({ eventId: canonical.eventId, subscriptionId: canonical.subscriptionId, record: canonical.record });
+    },
+    emitAutoSend: (record) => {
+      assertConnected();
+      if (!subscriptionId) throw new AdapterError("SUBSCRIPTION_NOT_FOUND");
+      return bridge.publish(subscriptionId, record);
+    },
+    sendAssistantMessage: async (input) => {
+      assertObject(input);
+      assertNoModelIdentity(input as object);
+      assertExactKeys(input, ["messageId", "text", "attachments"]);
+      assertConnected();
+      assertZeroRetention();
+      if (!input.messageId || typeof input.text !== "string" || input.text.length === 0) throw new AdapterError("ASSISTANT_TEXT_REQUIRED");
+      if (input.attachments !== undefined && !Array.isArray(input.attachments)) throw new AdapterError("ATTACHMENT_INVALID");
+      const attachments = [...(input.attachments ?? [])];
+      if (attachments.length > ASSISTANT_ATTACHMENT_LIMITS.maxFiles) throw new AdapterError("ATTACHMENT_LIMIT");
+      let totalBytes = 0;
+      const metadata = attachments.map((attachment) => {
+        if (attachment === null || typeof attachment !== "object" || Array.isArray(attachment)) throw new AdapterError("ATTACHMENT_INVALID");
+        assertExactKeys(attachment, ["kind", "artifactId", "filename", "mimeType", "sizeBytes", "sha256"], "ATTACHMENT_INVALID");
+        if (!attachment.artifactId || !attachment.filename || !/^[a-f0-9]{64}$/.test(attachment.sha256) || !Number.isSafeInteger(attachment.sizeBytes) || attachment.sizeBytes < 0 || attachment.sizeBytes > ASSISTANT_ATTACHMENT_LIMITS.maxFileBytes) throw new AdapterError("ATTACHMENT_INVALID");
+        if (!["image/jpeg", "image/png", "image/webp", "application/pdf", "text/plain"].includes(attachment.mimeType)) throw new AdapterError("ATTACHMENT_UNSUPPORTED");
+        if (attachment.filename.includes("/") || attachment.filename.includes("\\")) throw new AdapterError("ATTACHMENT_INVALID");
+        if (attachment.kind === "image" && !attachment.mimeType.startsWith("image/")) throw new AdapterError("ATTACHMENT_INVALID");
+        if (attachment.kind === "file" && attachment.mimeType.startsWith("image/")) throw new AdapterError("ATTACHMENT_INVALID");
+        totalBytes += attachment.sizeBytes;
+        return Object.freeze({ kind: attachment.kind, artifactId: attachment.artifactId, filename: attachment.filename, mimeType: attachment.mimeType, sizeBytes: attachment.sizeBytes, sha256: attachment.sha256 });
+      });
+      if (totalBytes > ASSISTANT_ATTACHMENT_LIMITS.maxMessageBytes) throw new AdapterError("ATTACHMENT_LIMIT");
+      // Only metadata is retained for deterministic diagnostics. Text and bytes
+      // are handed to the selected provider ephemerally and never logged/spooled.
+      lastMetadata = Object.freeze({ messageId: input.messageId, attachmentCount: metadata.length, attachments: Object.freeze(metadata) });
+      trace.push({ kind: "assistant_message", messageId: input.messageId });
+      return Object.freeze({ messageId: input.messageId, status: "accepted", reply: "fixture-reply" });
+    },
+    invokeTool: async (name, input) => {
+      if (name === "mobile.notifications.query") return adapter.queryNotifications(input as NotificationQueryInput);
+      if (name === "mobile.notifications.subscribe") return adapter.subscribeNotifications(input as NotificationSubscriptionInput);
+      if (name === "mobile.notifications.unsubscribe") return adapter.unsubscribeNotifications();
+      throw new AdapterError("UNKNOWN_TOOL");
+    },
+    tools: () => FROZEN_NOTIFICATION_TOOLS,
+    operationClaims: () => bridge.operationClaims(),
+    acknowledgedEvents: () => Object.freeze([...acknowledged]),
+    assistantMetadata: () => lastMetadata,
+    diagnostics: () => Object.freeze(trace.map((entry) => Object.freeze({ ...entry }))),
+  };
+  return adapter;
+};
+
+export const fixtureContext = (): AdapterBinding => Object.freeze({
+  tenantId: "tenant-a",
+  humanPrincipalId: "human-a",
+  deviceId: "device-a",
+  agentInstanceId: "agent-a",
+  workspaceId: "workspace-a",
+  sessionId: "session-a",
+  jobId: "job-a",
+  authorizedDeviceIds: Object.freeze(["device-a"]),
+});
+
+export const fixtureBinding = (): PairedBinding => Object.freeze({
+  tenantId: "tenant-a",
+  humanPrincipalId: "human-a",
+  deviceId: "device-a",
+  bridgeFingerprint: "bridge-a",
+  pairingGeneration: 1n,
+  policyAttestationRevision: 1n,
+});
+
+export const fixtureZeroRetentionEvidence = (): ZeroRetentionEvidence => Object.freeze({
+  provider: "fixture-provider",
+  profileId: "fixture-zero-retention-v1",
+  revision: "2026-08-11.1",
+  expiresAt: "2099-01-01T00:00:00.000Z",
+  providerObjectRetention: "none",
+  requestResponseLoggingDisabled: true,
+  trainingDisabled: true,
+  humanReviewDisabled: true,
+});

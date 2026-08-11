@@ -1,0 +1,10 @@
+#!/usr/bin/env sh
+# Lightweight handoff launcher for environments that provide the locked
+# Gradle distribution. The wrapper JAR is intentionally not vendored in this
+# SDK-free spike; use the official Gradle 8.9 distribution when available.
+set -eu
+if ! command -v gradle >/dev/null 2>&1; then
+  echo "Gradle 8.9 is required (no gradle executable found); install the locked Android toolchain first." >&2
+  exit 127
+fi
+exec gradle "$@"
