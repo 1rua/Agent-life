@@ -64,6 +64,21 @@ const expectedByTask = {
     ["adapter_key_rotation", "adapter-to-bridge", "key-rotation/adapter-to-bridge", "urn:agent-life:protocol:v1:message:adapter_key_rotation", "adapter"],
     ["adapter_key_rotation_ack", "bridge-to-adapter", "key-rotation/bridge-to-adapter", "urn:agent-life:protocol:v1:message:adapter_key_rotation_ack", "bridge-command"],
   ],
+  task7: [
+    ["operation_submit", "adapter-to-bridge", "adapter/adapter-to-bridge", "urn:agent-life:protocol:v1:message:operation_submit", "adapter"],
+    ["operation_get", "adapter-to-bridge", "adapter/adapter-to-bridge", "urn:agent-life:protocol:v1:message:operation_get", "adapter"],
+    ["operation_wait", "adapter-to-bridge", "adapter/adapter-to-bridge", "urn:agent-life:protocol:v1:message:operation_wait", "adapter"],
+    ["operation_cancel", "adapter-to-bridge", "adapter/adapter-to-bridge", "urn:agent-life:protocol:v1:message:operation_cancel", "adapter"],
+    ["operation_reconcile", "adapter-to-bridge", "adapter/adapter-to-bridge", "urn:agent-life:protocol:v1:message:operation_reconcile", "adapter"],
+    ["operation_command", "bridge-to-app", "control/bridge-to-app", "urn:agent-life:protocol:v1:message:operation_command", "bridge-command"],
+    ["operation_receipt", "app-to-bridge", "receipt/device", "urn:agent-life:protocol:v1:message:operation_receipt", "device"],
+    ["operation_receipt_ack", "bridge-to-app", "control/bridge-to-app", "urn:agent-life:protocol:v1:message:operation_receipt_ack", "bridge-command"],
+    ["receipt_replay", "app-to-bridge", "control/app-to-bridge", "urn:agent-life:protocol:v1:message:receipt_replay", "device"],
+    ["operation_snapshot", "bridge-to-adapter", "adapter/bridge-to-adapter", "urn:agent-life:protocol:v1:message:operation_snapshot", "bridge-command"],
+    ["device_protocol_error", "app-to-bridge", "control/app-to-bridge", "urn:agent-life:protocol:v1:message:device_protocol_error", "device"],
+    ["bridge_protocol_error", "bridge-to-app", "control/bridge-to-app", "urn:agent-life:protocol:v1:message:bridge_protocol_error", "bridge-command"],
+    ["adapter_protocol_error", "bridge-to-adapter", "adapter/bridge-to-adapter", "urn:agent-life:protocol:v1:message:adapter_protocol_error", "bridge-command"],
+  ],
 } as const;
 
 const registryByType = new Map(loadMessageRegistry().messages.map((entry) => [entry.message_type as MessageType, entry]));
@@ -153,17 +168,8 @@ const collectIds = (value: unknown, ids: string[] = []): string[] => {
   return ids;
 };
 
-// Task 7's independent schema leaves are catalogued before their cumulative
-// messages.json rows.  Keep this test scoped to the locked production registry
-// until the Task 7 replay/Task 6 TTL contracts are integrated.
-const TASK7_PENDING_MESSAGE_TYPES = new Set([
-  "operation_submit", "operation_get", "operation_wait", "operation_cancel", "operation_reconcile",
-  "operation_command", "operation_receipt", "operation_receipt_ack", "receipt_replay", "operation_snapshot",
-  "device_protocol_error", "bridge_protocol_error", "adapter_protocol_error",
-]);
-
 describe("locked message registry", () => {
-  it("freezes the exact cumulative Task 5 direction/domain/signer-role matrix", () => {
+  it("freezes the exact cumulative Task 9 direction/domain/signer-role matrix", () => {
     const registry = loadMessageRegistry();
     validateSchema("urn:agent-life:protocol:v1:messages-registry", registry);
     const actual = registry.messages.map((entry) => [
@@ -173,6 +179,7 @@ describe("locked message registry", () => {
     ]);
     expect(actual.slice(0, expectedByTask.task4.length)).toEqual(expectedByTask.task4);
     expect(actual.slice(expectedByTask.task4.length)).toEqual([
+      ...expectedByTask.task7,
       ["device_event", "app-to-bridge", "control/app-to-bridge", "urn:agent-life:protocol:v1:message:device_event", "device"],
       ["event_ack", "bridge-to-app", "control/bridge-to-app", "urn:agent-life:protocol:v1:message:event_ack", "bridge-command"],
     ]);
@@ -185,7 +192,6 @@ describe("locked message registry", () => {
     expect(registry.messages.every((entry) => domains.has(entry.signature_domain))).toBe(true);
     const productionPayloadIds = PROTOCOL_SCHEMA_DOCUMENTS.flatMap((document) => collectIds(document))
       .filter((id) => id.startsWith("urn:agent-life:protocol:v1:message:"))
-      .filter((id) => !TASK7_PENDING_MESSAGE_TYPES.has(id.slice("urn:agent-life:protocol:v1:message:".length)))
       .sort();
     expect([...new Set(productionPayloadIds)]).toEqual(registry.messages.map((entry) => entry.schema_id).sort());
     expect(productionPayloadIds).toHaveLength(new Set(productionPayloadIds).size);

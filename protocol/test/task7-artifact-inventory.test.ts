@@ -27,6 +27,7 @@ describe("Task 7 independent artifact inventory", () => {
     expect(Object.keys(inventory.decision_status).sort()).toEqual(["D1", "D2", "D3", "D4"]);
     expect(Object.values(inventory.decision_status).every((value) => value === "APPROVED_USER_CONFIRMED")).toBe(true);
     expect(new Set([...inventory.present, ...inventory.pending]).size).toBe(inventory.present.length + inventory.pending.length);
+    expect(inventory.pending).toEqual([]);
     for (const path of inventory.present) expect(existsSync(new URL(`../../${path}`, import.meta.url))).toBe(true);
     for (const path of inventory.pending.filter((value) => !value.includes("#"))) {
       expect(existsSync(new URL(`../../${path}`, import.meta.url))).toBe(false);
@@ -39,5 +40,12 @@ describe("Task 7 independent artifact inventory", () => {
     expect(inventory.present).toContain("protocol/schemas/v1/replay-policies-registry.schema.json");
     expect(inventory.present).toContain("protocol/registries/v1/replay-policies.json");
     expect(inventory.present).toContain("protocol/test-only/replay/v1/compaction-recovery-vectors.json");
+    expect(inventory.present).toEqual(expect.arrayContaining([
+      "protocol/test-only/replay/v1/intent-metadata-device-v1.json",
+      "protocol/test-only/replay/v1/intent-metadata-adapter-v1.json",
+      "protocol/test-only/replay/v1/intent-metadata-adapter-empty-scope-v1.json",
+      "protocol/test-only/operation/v1/receipt-replay-vectors.json",
+      "protocol/registries/v1/messages.json#Task7-13-rows",
+    ]));
   });
 });

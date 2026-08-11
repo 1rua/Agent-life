@@ -1,5 +1,6 @@
 import { canonicalBytes, sha256B64Url } from "./encoding.js";
 import { randomBytes } from "node:crypto";
+import replayPoliciesFixture from "../registries/v1/replay-policies.json" with { type: "json" };
 import { loadMessageRegistry, type MessageRegistryEntry } from "./message-registry.js";
 import type { Clock, SignerRole } from "./ports.js";
 import type { SignatureDomain } from "./profile.js";
@@ -101,6 +102,15 @@ type LockedReplayPolicyDescriptor =
 export type LockedReplayPolicy = Readonly<LockedReplayPolicyDescriptor & {
   readonly [lockedReplayPolicyBrand]: true;
 }>;
+
+const TASK5_DEFAULT_POLICY: LockedReplayPolicy = Object.freeze({
+  ...LOCKED_REPLAY_POLICY_DESCRIPTORS.task5Default,
+  [lockedReplayPolicyBrand]: true as const,
+});
+const OPERATION_SECURITY_LEDGER_POLICY: LockedReplayPolicy = Object.freeze({
+  ...LOCKED_REPLAY_POLICY_DESCRIPTORS.operationSecurityLedger,
+  [lockedReplayPolicyBrand]: true as const,
+});
 
 const replayClaimBrand: unique symbol = Symbol("replay-claim");
 export type ReplayClaim<TMessageType extends string = Task5MessageType> = Readonly<{
@@ -353,18 +363,34 @@ const isLeaseId = (value: unknown): value is string =>
   && Buffer.from(value, "base64url").toString("base64url") === value;
 const isOpaqueId = (value: unknown): value is string =>
   isString(value) && /^[A-Za-z0-9._~-]{1,128}$/.test(value);
-const task5Registry = new Map(loadMessageRegistry().messages
-  .filter((entry) => Object.hasOwn({
-    device_ping: true, bridge_ping: true, device_presence: true,
-    device_key_rotation: true, device_key_rotation_ack: true,
-    bridge_key_rotation: true, bridge_key_rotation_ack: true,
-    adapter_key_rotation: true, adapter_key_rotation_ack: true,
-    device_event: true, event_ack: true,
-  }, entry.message_type))
+type ReplayClassification = Readonly<{
+  message_type: string;
+  class_id: PersistedReplayPolicy["class_id"];
+  retention_rule_id: PersistedReplayPolicy["retention_rule_id"];
+}>;
+const replayClassifications = new Map<string, ReplayClassification>();
+for (const row of replayPoliciesFixture.message_classification as readonly ReplayClassification[]) {
+  if (replayClassifications.has(row.message_type)) throw new Error("INVALID_REPLAY_POLICY_REGISTRY");
+  replayClassifications.set(row.message_type, row);
+}
+const replayMessageRegistry = new Map(loadMessageRegistry().messages
+  .filter((entry) => replayClassifications.has(entry.message_type))
   .map((entry) => [entry.message_type, entry]));
+const lockedPolicyForMessageType = (messageType: string): LockedReplayPolicy | null => {
+  const classification = replayClassifications.get(messageType);
+  if (classification?.class_id === REPLAY_POLICY_LITERALS.task5Default.class_id
+    && classification.retention_rule_id === REPLAY_POLICY_LITERALS.task5Default.retention_rule_id) {
+    return TASK5_DEFAULT_POLICY;
+  }
+  if (classification?.class_id === REPLAY_POLICY_LITERALS.operationSecurityLedger.class_id
+    && classification.retention_rule_id === REPLAY_POLICY_LITERALS.operationSecurityLedger.retention_rule_id) {
+    return OPERATION_SECURITY_LEDGER_POLICY;
+  }
+  return null;
+};
 const validRegistryIdentity = (registry: Record<string, unknown>): boolean => {
   if (!Object.values(registry).every(isString)) return false;
-  const row = task5Registry.get(registry.message_type as string);
+  const row = replayMessageRegistry.get(registry.message_type as string);
   if (!row) return false;
   const signerRole = row.direction === "app-to-bridge" ? "device"
     : row.direction === "adapter-to-bridge" ? "adapter" : "bridge-command";
@@ -394,7 +420,10 @@ const validateMetadata = (metadata: unknown): metadata is PersistedReplayIntentM
   if (!exactKeys(policy, ["class_id", "retention_rule_id"])) return false;
   const validPolicy = Object.values(REPLAY_POLICY_LITERALS).some((candidate) =>
     policy.class_id === candidate.class_id && policy.retention_rule_id === candidate.retention_rule_id);
-  if (!validPolicy || !exactKeys(binding, ["adapter_credential_generation", "agent_instance_id", "agent_principal_id", "connection_generation", "credential_id", "device_id", "direction", "human_principal_id", "kind", "pairing_generation", "scope_ceiling", "tenant_id", "workspace_id"])
+  const classification = replayClassifications.get(registry.message_type as string);
+  if (!validPolicy || !classification
+    || policy.class_id !== classification.class_id || policy.retention_rule_id !== classification.retention_rule_id
+    || !exactKeys(binding, ["adapter_credential_generation", "agent_instance_id", "agent_principal_id", "connection_generation", "credential_id", "device_id", "direction", "human_principal_id", "kind", "pairing_generation", "scope_ceiling", "tenant_id", "workspace_id"])
     || !exactKeys(lease, ["adapter_credential_lease_id", "connection_lease_id", "kind"])
     || !exactKeys(space, ["adapter_credential_generation", "credential_id", "direction", "key_id", "kind", "pairing_generation"])) return false;
   if (binding.kind === "device" && lease.kind === "device_connection" && space.kind === "device") {
@@ -621,11 +650,6 @@ const replaySpaceKey = (space: ReplaySpace): string => space.kind === "device"
   ? `device\u0000${space.credentialId}\u0000${space.pairingGeneration}\u0000${space.keyId}\u0000${space.direction}`
   : `adapter\u0000${space.credentialId}\u0000${space.adapterCredentialGeneration}\u0000${space.keyId}\u0000${space.direction}`;
 
-const TASK5_DEFAULT_POLICY: LockedReplayPolicy = Object.freeze({
-  ...LOCKED_REPLAY_POLICY_DESCRIPTORS.task5Default,
-  [lockedReplayPolicyBrand]: true as const,
-});
-
 const validateOpaquePersistenceId = (value: string): string => {
   const decoded = Buffer.from(value, "base64url");
   if (decoded.byteLength !== 32 || Buffer.from(decoded).toString("base64url") !== value) throw new Error("INTEGRITY_FAILED");
@@ -705,7 +729,16 @@ export class DeterministicReplayLedger<TMessageType extends string = Task5Messag
       || !/^(0|[1-9][0-9]*)$/.test(sequenceText) || typeof expiresAt !== "string") return null;
     const sequence = BigInt(sequenceText);
     const key = replaySpaceKey(space);
-    const retentionBase = Math.max(Date.parse(expiresAt), Date.parse(admittedAt) + 86_400_000);
+    const replayPolicy = lockedPolicyForMessageType(envelope.messageType);
+    if (!replayPolicy) return null;
+    let retentionBase: number;
+    if (replayPolicy.classId === REPLAY_POLICY_LITERALS.operationSecurityLedger.class_id) {
+      const operationExpiresAt = envelope.payload.operation_expires_at;
+      if (!isTimestampString(operationExpiresAt)) return null;
+      retentionBase = Date.parse(operationExpiresAt);
+    } else {
+      retentionBase = Math.max(Date.parse(expiresAt), Date.parse(admittedAt) + 86_400_000);
+    }
     return deepFreeze({
       claimId: sha256B64Url(canonicalBytes({ envelope_digest: envelope.envelopeDigest, message_id: messageId, replay_space: key })),
       space: deepFreeze({ ...space }),
@@ -715,7 +748,7 @@ export class DeterministicReplayLedger<TMessageType extends string = Task5Messag
       envelopeDigest: envelope.envelopeDigest,
       expiresAt,
       retentionUntil: new Date(retentionBase).toISOString(),
-      replayPolicy: TASK5_DEFAULT_POLICY,
+      replayPolicy,
       [replayClaimBrand]: true,
     });
   }

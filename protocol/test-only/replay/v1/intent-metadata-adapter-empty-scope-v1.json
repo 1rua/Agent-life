@@ -1,0 +1,51 @@
+{
+  "vector_id": "intent-metadata-adapter-empty-scope-v1",
+  "semantic_input": {
+    "admitted_at": "2026-08-08T00:00:01.000Z",
+    "claim_id": "26y3ayS0ekJtzbGc3fPTzPKMO3KpmRzgLTlISv1W4Tc",
+    "registry_identity": {
+      "direction": "adapter-to-bridge",
+      "envelope_schema_id": "urn:agent-life:protocol:v1:envelope:operation_submit",
+      "header_schema_id": "urn:agent-life:protocol:v1:header:operation_submit",
+      "message_schema_id": "urn:agent-life:protocol:v1:message:operation_submit",
+      "message_type": "operation_submit",
+      "signature_domain": "adapter/adapter-to-bridge",
+      "signer_role": "adapter"
+    },
+    "replay_policy": {
+      "class_id": "operation_security_ledger",
+      "retention_rule_id": "retain_until_max_operation_expires_at_or_bridge_ack_at_plus_2592000_seconds_v1"
+    },
+    "retention_until": "2026-08-08T00:15:00.000Z",
+    "binding_snapshot": {
+      "adapter_credential_generation": "4",
+      "agent_instance_id": "agent-instance",
+      "agent_principal_id": "agent-principal",
+      "connection_generation": null,
+      "credential_id": "adapter-credential",
+      "device_id": null,
+      "direction": "adapter-to-bridge",
+      "human_principal_id": "human",
+      "kind": "adapter",
+      "pairing_generation": null,
+      "scope_ceiling": [],
+      "tenant_id": "tenant",
+      "workspace_id": "workspace"
+    },
+    "lease_ref": {
+      "adapter_credential_lease_id": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "connection_lease_id": null,
+      "kind": "adapter_credential"
+    },
+    "space": {
+      "adapter_credential_generation": "4",
+      "credential_id": "adapter-credential",
+      "direction": "adapter-to-bridge",
+      "key_id": "key-1",
+      "kind": "adapter",
+      "pairing_generation": null
+    }
+  },
+  "metadata_jcs_b64": "eyJhZG1pdHRlZF9hdCI6IjIwMjYtMDgtMDhUMDA6MDA6MDEuMDAwWiIsImJpbmRpbmdfc25hcHNob3QiOnsiYWRhcHRlcl9jcmVkZW50aWFsX2dlbmVyYXRpb24iOiI0IiwiYWdlbnRfaW5zdGFuY2VfaWQiOiJhZ2VudC1pbnN0YW5jZSIsImFnZW50X3ByaW5jaXBhbF9pZCI6ImFnZW50LXByaW5jaXBhbCIsImNvbm5lY3Rpb25fZ2VuZXJhdGlvbiI6bnVsbCwiY3JlZGVudGlhbF9pZCI6ImFkYXB0ZXItY3JlZGVudGlhbCIsImRldmljZV9pZCI6bnVsbCwiZGlyZWN0aW9uIjoiYWRhcHRlci10by1icmlkZ2UiLCJodW1hbl9wcmluY2lwYWxfaWQiOiJodW1hbiIsImtpbmQiOiJhZGFwdGVyIiwicGFpcmluZ19nZW5lcmF0aW9uIjpudWxsLCJzY29wZV9jZWlsaW5nIjpbXSwidGVuYW50X2lkIjoidGVuYW50Iiwid29ya3NwYWNlX2lkIjoid29ya3NwYWNlIn0sImNsYWltX2lkIjoiMjZ5M2F5UzBla0p0emJHYzNmUFR6UEtNTzNLcG1SemdMVGxJU3YxVzRUYyIsImxlYXNlX3JlZiI6eyJhZGFwdGVyX2NyZWRlbnRpYWxfbGVhc2VfaWQiOiJBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBIiwiY29ubmVjdGlvbl9sZWFzZV9pZCI6bnVsbCwia2luZCI6ImFkYXB0ZXJfY3JlZGVudGlhbCJ9LCJyZWdpc3RyeV9pZGVudGl0eSI6eyJkaXJlY3Rpb24iOiJhZGFwdGVyLXRvLWJyaWRnZSIsImVudmVsb3BlX3NjaGVtYV9pZCI6InVybjphZ2VudC1saWZlOnByb3RvY29sOnYxOmVudmVsb3BlOm9wZXJhdGlvbl9zdWJtaXQiLCJoZWFkZXJfc2NoZW1hX2lkIjoidXJuOmFnZW50LWxpZmU6cHJvdG9jb2w6djE6aGVhZGVyOm9wZXJhdGlvbl9zdWJtaXQiLCJtZXNzYWdlX3NjaGVtYV9pZCI6InVybjphZ2VudC1saWZlOnByb3RvY29sOnYxOm1lc3NhZ2U6b3BlcmF0aW9uX3N1Ym1pdCIsIm1lc3NhZ2VfdHlwZSI6Im9wZXJhdGlvbl9zdWJtaXQiLCJzaWduYXR1cmVfZG9tYWluIjoiYWRhcHRlci9hZGFwdGVyLXRvLWJyaWRnZSIsInNpZ25lcl9yb2xlIjoiYWRhcHRlciJ9LCJyZXBsYXlfcG9saWN5Ijp7ImNsYXNzX2lkIjoib3BlcmF0aW9uX3NlY3VyaXR5X2xlZGdlciIsInJldGVudGlvbl9ydWxlX2lkIjoicmV0YWluX3VudGlsX21heF9vcGVyYXRpb25fZXhwaXJlc19hdF9vcl9icmlkZ2VfYWNrX2F0X3BsdXNfMjU5MjAwMF9zZWNvbmRzX3YxIn0sInJldGVudGlvbl91bnRpbCI6IjIwMjYtMDgtMDhUMDA6MTU6MDAuMDAwWiIsInNwYWNlIjp7ImFkYXB0ZXJfY3JlZGVudGlhbF9nZW5lcmF0aW9uIjoiNCIsImNyZWRlbnRpYWxfaWQiOiJhZGFwdGVyLWNyZWRlbnRpYWwiLCJkaXJlY3Rpb24iOiJhZGFwdGVyLXRvLWJyaWRnZSIsImtleV9pZCI6ImtleS0xIiwia2luZCI6ImFkYXB0ZXIiLCJwYWlyaW5nX2dlbmVyYXRpb24iOm51bGx9fQ==",
+  "metadata_jcs_byte_length": "1390"
+}
