@@ -86,4 +86,17 @@ describe("versioned Bridge migration runner", () => {
     expect(adapter.applied).toEqual([]);
     expect(adapter.version).toBe(0);
   });
+
+  it("reopens from the committed version without replaying migrations", async () => {
+    const adapter = fakeAdapter();
+    const migrations: MigrationStep[] = [
+      { id: "bridge-0001", from: 0, to: 1, apply: async () => undefined },
+      { id: "bridge-0002", from: 1, to: 2, apply: async () => undefined },
+    ];
+    await expect(new MigrationRunner(adapter, migrations).run())
+      .resolves.toEqual({ from: 0, to: 2, applied: ["bridge-0001", "bridge-0002"] });
+    await expect(new MigrationRunner(adapter, migrations).run())
+      .resolves.toEqual({ from: 2, to: 2, applied: [] });
+    expect(adapter.applied).toEqual(["0->1", "1->2"]);
+  });
 });

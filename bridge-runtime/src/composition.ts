@@ -1,13 +1,17 @@
 import {
   assertDurableBridgeStore,
+  DURABLE_BRIDGE_STORE_PORT,
   type DurableBridgeStore,
+  type DurableBridgeTransaction,
 } from "../../bridge-contract/src/durable-store.js";
+import { assertConnectedSqliteBridgeAdapter, type SqliteBridgeAdapterPort } from "../../bridge-contract/src/persistence.js";
+import type { PairingTicket, PairingTicketInput } from "../../bridge-contract/src/pairing-service.js";
 import {
   NotificationService,
   type NotificationServiceOptions,
 } from "../../bridge-contract/src/notification-service.js";
 import { PairingService } from "../../bridge-contract/src/pairing-service.js";
-import { BridgeServiceError, type Authorize } from "../../bridge-contract/src/service-types.js";
+import { BridgeServiceError, type Authorize, type BridgeIdentity } from "../../bridge-contract/src/service-types.js";
 import { NotificationStore } from "../../bridge-contract/src/notification-store.js";
 import { SubscriptionStore } from "../../bridge-contract/src/subscription-store.js";
 import {
@@ -15,6 +19,15 @@ import {
   DurableOperationDispatcher,
   type DurableOperationDispatcher as DurableOperationDispatcherType,
 } from "./durable-operation-dispatcher.js";
+import { DurableBridgeStateRepositories } from "./durable-state-repositories.js";
+import {
+  assertBridgeLease,
+  assertConnectedBridgeLeaseCoordinator,
+  assertConnectedPairingTicketVerifier,
+  type BridgeLease,
+  type BridgeLeaseCoordinatorPort,
+  type PairingTicketVerifierPort,
+} from "./production-ports.js";
 
 export type DurableBridgeCompositionOptions = Readonly<{
   /** Unknown is intentional: an unmarked process-local store must fail closed. */
@@ -83,4 +96,125 @@ export const createDurableBridgeComposition = async (
       "subscription.events",
     ] as const),
   });
+};
+
+const FENCED_COMPOSITION_SCOPE = "bridge.runtime" as const;
+
+class FencedDurableBridgeStore implements DurableBridgeStore {
+  readonly port = DURABLE_BRIDGE_STORE_PORT;
+  readonly durability = "durable" as const;
+  readonly #leases: BridgeLeaseCoordinatorPort;
+  #lease: BridgeLease;
+
+  constructor(leases: BridgeLeaseCoordinatorPort, lease: BridgeLease) {
+    this.#leases = leases;
+    this.#lease = lease;
+  }
+
+  transact<T>(scope: string, work: (transaction: DurableBridgeTransaction) => Promise<T> | T): Promise<T> {
+    return this.#leases.transact(this.#lease, scope, work);
+  }
+
+  async renew(): Promise<BridgeLease> {
+    const renewed = await this.#leases.renew(this.#lease);
+    this.#lease = assertBridgeLease(renewed, { scope: this.#lease.scope, ownerId: this.#lease.ownerId });
+    return this.#lease;
+  }
+
+  close(): Promise<void> {
+    return this.#leases.release(this.#lease);
+  }
+}
+
+export type FencedDurableBridgeCompositionOptions = Readonly<{
+  persistence: unknown;
+  leases: unknown;
+  pairingVerifier: unknown;
+  ownerId: string;
+  leaseTtlMs: number;
+  clock?: () => number;
+}>;
+
+export type FencedDurableBridgeComposition = Readonly<{
+  persistence: SqliteBridgeAdapterPort;
+  state: DurableBridgeStateRepositories;
+  operations: DurableOperationDispatcherType;
+  pairing: Readonly<{
+    accept(candidate: unknown): Promise<PairingTicketInput>;
+    current(identity: BridgeIdentity): Promise<PairingTicketInput | null>;
+  }>;
+  durableNamespaces: readonly [
+    "pairing.tickets",
+    "pairing.bindings",
+    "notification.records",
+    "notification.positions",
+    "subscription.bindings",
+    "subscription.events",
+    "operation.claims",
+    "operation.replay-associations",
+  ];
+  productionClaim: "source-seam-only";
+  pendingDependencyLocks: readonly ["MVP-DEP-BRIDGE", "MVP-DEP-TSNET"];
+  renewLease(): Promise<BridgeLease>;
+  close(): Promise<void>;
+}>;
+
+/**
+ * Production-shaped, fail-closed composition boundary.
+ *
+ * Construction requires externally connected SQLite, ticket-verification and
+ * lease ports. The repository does not ship any of those adapters and this
+ * function therefore remains source-level composition evidence only.
+ */
+export const createFencedDurableBridgeComposition = async (
+  options: FencedDurableBridgeCompositionOptions,
+): Promise<FencedDurableBridgeComposition> => {
+  if (!options || typeof options !== "object") throw new BridgeServiceError("BRIDGE_COMPOSITION_OPTIONS_INVALID");
+  const persistence = assertConnectedSqliteBridgeAdapter(options.persistence);
+  const leases = assertConnectedBridgeLeaseCoordinator(options.leases);
+  const pairingVerifier: PairingTicketVerifierPort = assertConnectedPairingTicketVerifier(options.pairingVerifier);
+  if (typeof options.ownerId !== "string" || options.ownerId.length === 0) throw new BridgeServiceError("BRIDGE_LEASE_OWNER_INVALID");
+  if (!Number.isSafeInteger(options.leaseTtlMs) || options.leaseTtlMs < 1) throw new BridgeServiceError("BRIDGE_LEASE_TTL_INVALID");
+  const acquired = assertBridgeLease(await leases.acquire({
+    scope: FENCED_COMPOSITION_SCOPE,
+    ownerId: options.ownerId,
+    ttlMs: options.leaseTtlMs,
+  }), { scope: FENCED_COMPOSITION_SCOPE, ownerId: options.ownerId });
+  const fencedStore = new FencedDurableBridgeStore(leases, acquired);
+  try {
+    const state = await DurableBridgeStateRepositories.open({
+      store: fencedStore,
+      ...(options.clock === undefined ? {} : { clock: options.clock }),
+    });
+    const operations = await DurableOperationDispatcher.open({ store: fencedStore });
+    return Object.freeze({
+      persistence,
+      state,
+      operations,
+      pairing: Object.freeze({
+        accept: async (candidate: unknown): Promise<PairingTicketInput> => {
+          const verified: PairingTicket = await pairingVerifier.verify(candidate);
+          return state.pairing.acceptVerified(verified);
+        },
+        current: state.pairing.current.bind(state.pairing),
+      }),
+      durableNamespaces: Object.freeze([
+        "pairing.tickets",
+        "pairing.bindings",
+        "notification.records",
+        "notification.positions",
+        "subscription.bindings",
+        "subscription.events",
+        "operation.claims",
+        "operation.replay-associations",
+      ] as const),
+      productionClaim: "source-seam-only" as const,
+      pendingDependencyLocks: Object.freeze(["MVP-DEP-BRIDGE", "MVP-DEP-TSNET"] as const),
+      renewLease: fencedStore.renew.bind(fencedStore),
+      close: fencedStore.close.bind(fencedStore),
+    });
+  } catch (caught) {
+    await fencedStore.close().catch(() => undefined);
+    throw caught;
+  }
 };

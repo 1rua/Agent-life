@@ -40,7 +40,7 @@ or SDK-free result is promoted to a release pass.
 | WP-03 | PASS | PENDING | Policy/collector/outbox plus lifecycle/runtime outbox composition, closed capability/control-port and typed provider-contract sources and host/static seams exist; Android providers/tests need the toolchain/device. |
 | WP-04 | PASS | PASS (SDK-free) | Fake paired transport and cross-layer trace tests run in the host smoke. |
 | WP-05 | PASS | PENDING | Userspace transport seam exists; no locked AAR or physical P0t evidence. |
-| WP-06 | PASS | PENDING | Bridge contract exposes `OperationDispatcherPort`, SQLite/migration and userspace-ingress/health seams; the local runtime persists `operation.claims` through a fail-closed durable composition root. Pairing/notification/subscription state and production deployment remain pending. |
+| WP-06 | PASS | PENDING | Runtime durable repositories cover pairing, notification cursors, subscriptions/events, ACKs, operation claims and replay associations; fenced composition and backup/restore drill seams fail closed on missing external ports. Locked SQLite/secret/lease/tsnet adapters and production deployment evidence remain pending. |
 | WP-07 | PASS | PENDING | Hermes/OpenClaw adapter/manifest/skill seams exist; official release/profile locks are pending. |
 | WP-08 | PASS | PENDING | Isolated holder source plus shared bounded text/opaque-grant hand-off and a default-deny main-APK gate exist; Android/model lock and connected tests are pending. |
 | WP-09 | PASS | PENDING | SDK-free harness exists; physical Android/Bridge/plugin E2E cannot run yet. |
@@ -85,10 +85,10 @@ P0t, AAR, or production-Bridge requirement.
 - No locked Tailscale userspace AAR/resource artifact or production Bridge
   runtime/database deployment is present. `bridge-runtime/` now contains
   source-level SQLite adapter/migration and userspace-ingress/health ports in
-  addition to the deterministic local `fs/promises` adapter and operation-claim
-  dispatcher. These remain source/test seams until a locked SQLite driver,
-  authenticated adapter and deployment are supplied. Pairing, notification and
-  subscription state are still process-local.
+  addition to the deterministic local `fs/promises` adapter, durable state
+  repositories and operation/replay dispatcher. The fenced composition and
+  backup/restore drill are source/test seams until locked SQLite, secret-store,
+  lease and authenticated tsnet adapters plus deployment evidence are supplied.
 - The Android capability/control ports are source-only contracts. SMS, calls,
   contacts, clipboard, location, Health Connect, sensors, calendar, alarms,
   Accessibility and MediaProjection adapters still require their own
@@ -109,14 +109,17 @@ contract/static iteration only and is not production-ready.
 ## WP-06 local adapter evidence
 
 The repository now includes `bridge-runtime/`, a deterministic local
-`fs/promises` implementation of the reviewed `DurableBridgeStore` port and a
-durable operation-claim adapter wired into `NotificationService` by an explicit
-composition root. Its focused evidence is:
+`fs/promises` implementation of the reviewed `DurableBridgeStore` port, durable
+state repositories, operation/replay dispatcher, fenced composition port and
+backup/restore verification seam. Its focused evidence is:
 
 ```text
 bridge-runtime/test/file-backed-store.test.ts: 9 tests passed
-bridge-runtime/test/durable-operation-dispatcher.test.ts: 6 tests passed
-bridge-runtime/test/migration-runner.test.ts: 3 tests passed
+bridge-runtime/test/durable-operation-dispatcher.test.ts: 8 tests passed
+bridge-runtime/test/durable-state-repositories.test.ts: 6 tests passed
+bridge-runtime/test/production-composition.test.ts: 3 tests passed
+bridge-runtime/test/backup-restore-drill.test.ts: 1 test passed
+bridge-runtime/test/migration-runner.test.ts: 5 tests passed
 bridge-runtime/test/ingress-health.test.ts: 7 tests passed
 bridge-contract/test/persistence-contract.test.ts: 3 tests passed
 strict TypeScript check of bridge-runtime/src: passed with the workspace Node types
@@ -127,9 +130,8 @@ rollback, serialized transactions, closed namespaces, deterministic scans,
 orphan/temp cleanup, and recovery from a missing/invalid manifest. This is a
 source/test artifact only. It does not satisfy the production `MVP-DEP-BRIDGE`
 lock: the repository has source-level ingress, migration and health ports, but
-no authenticated tsnet adapter, locked SQLite driver, secret store, database
-deployment, backup/restore drill or multi-process locking is present. The
-adapter's `durability: "durable"` value and the
-composition's `durableNamespaces: ["operation.claims"]` metadata are therefore
-only explicit port markers required by the contract and must not be read as a
-release readiness pass.
+no authenticated tsnet adapter, locked SQLite driver, secret store, production
+lease coordinator, database deployment or live backup/restore drill is present.
+The local adapter's `durability: "durable"` value, fake connected-port tests and
+`productionClaim: "source-seam-only"` metadata must not be read as a release
+readiness pass.

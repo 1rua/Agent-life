@@ -172,7 +172,9 @@ describe("FileBackedBridgeStore (deterministic local WP-06 adapter)", () => {
       version: 1,
       generation: 4,
       namespaces: Object.fromEntries(BRIDGE_STORE_NAMESPACES
-        .filter((namespace) => namespace !== "authorization.grants" && namespace !== "authorization.revisions")
+        .filter((namespace) => namespace !== "authorization.grants"
+          && namespace !== "authorization.revisions"
+          && namespace !== "operation.replay-associations")
         .map((namespace) => [namespace, namespace === "notification.records"
           ? [{ key: "device-a/1", value: { recordId: "legacy" } }]
           : []])),

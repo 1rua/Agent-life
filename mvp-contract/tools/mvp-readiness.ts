@@ -302,7 +302,7 @@ export const auditReleaseBlockers = (): ReleaseBlocker[] => {
     } else {
       blockers.push({
         code: "BRIDGE-RUNTIME-PRODUCTION",
-        detail: "source-level SQLite migration and userspace-ingress/health ports exist, but the locked SQLite driver, authenticated adapter, pairing/notification/subscription durability, backup/restore drill and deployment are pending",
+        detail: "durable pairing/notification/subscription/ACK/replay repositories plus migration, lease and backup/restore verification ports exist, but locked SQLite, secret-store, lease and authenticated tsnet adapters plus live deployment/drill evidence are pending",
       });
     }
   }

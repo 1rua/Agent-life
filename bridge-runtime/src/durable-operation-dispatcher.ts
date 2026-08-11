@@ -12,6 +12,7 @@ import { sessionKey } from "../../bridge-contract/src/service-types.js";
 
 export const DURABLE_OPERATION_DISPATCHER_PORT = "agent-life.operation-dispatcher.v1" as const;
 const OPERATION_NAMESPACE = "operation.claims" as const;
+const REPLAY_ASSOCIATION_NAMESPACE = "operation.replay-associations" as const;
 const OPERATION_SCOPE = "operation.claim" as const;
 
 type JsonValue = null | boolean | number | string | JsonValue[] | { readonly [key: string]: JsonValue };
@@ -24,6 +25,17 @@ type StoredOperation = Readonly<{
   status: "pending" | "completed";
   claims: number;
   result?: unknown;
+}>;
+
+type StoredReplayAssociation = Readonly<{
+  operationId: string;
+  sessionKey: string;
+  payloadDigest: string;
+}>;
+
+export type ReplayAssociationInput = Readonly<{
+  replayKey: string;
+  payloadDigest: string;
 }>;
 
 export type DurableOperationDispatcherOptions = Readonly<{
@@ -113,6 +125,32 @@ const assertStoredOperation = (key: string, value: unknown): StoredOperation => 
   });
 };
 
+const assertReplayAssociationInput = (value: ReplayAssociationInput): void => {
+  if (!isRecord(value) || typeof value.replayKey !== "string" || value.replayKey.length === 0
+    || typeof value.payloadDigest !== "string" || value.payloadDigest.length === 0
+    || Object.keys(value).some((field) => field !== "replayKey" && field !== "payloadDigest")) {
+    throw new BridgeServiceError("REPLAY_ASSOCIATION_INVALID");
+  }
+};
+
+const assertStoredReplayAssociation = (key: string, value: unknown): StoredReplayAssociation => {
+  if (typeof key !== "string" || key.length === 0 || !isRecord(value)) {
+    throw new BridgeServiceError("DURABLE_REPLAY_ASSOCIATION_STATE_INVALID");
+  }
+  const allowed = new Set(["operationId", "payloadDigest", "sessionKey"]);
+  if (Object.keys(value).length !== allowed.size || Object.keys(value).some((field) => !allowed.has(field))
+    || typeof value.operationId !== "string" || value.operationId.length === 0
+    || typeof value.sessionKey !== "string" || value.sessionKey.length === 0
+    || typeof value.payloadDigest !== "string" || value.payloadDigest.length === 0) {
+    throw new BridgeServiceError("DURABLE_REPLAY_ASSOCIATION_STATE_INVALID");
+  }
+  return Object.freeze({
+    operationId: value.operationId,
+    sessionKey: value.sessionKey,
+    payloadDigest: value.payloadDigest,
+  });
+};
+
 const cloneStored = (value: StoredOperation): StoredOperation => Object.freeze({
   ...value,
   ...(Object.prototype.hasOwnProperty.call(value, "result") ? { result: value.result } : {}),
@@ -121,10 +159,11 @@ const cloneStored = (value: StoredOperation): StoredOperation => Object.freeze({
 /**
  * Durable operation claim/result ledger used by the Bridge composition root.
  *
- * It persists only the `operation.claims` domain through the reviewed
- * `DurableBridgeStore` port. The action itself remains outside the transaction;
- * callers must therefore make external side effects idempotent or use an
- * outbox. This class does not provide network, authentication, or a database.
+ * It persists `operation.claims` and optional
+ * `operation.replay-associations` through the reviewed `DurableBridgeStore`
+ * port. The action itself remains outside the transaction; callers must
+ * therefore make external side effects idempotent or use an outbox. This class
+ * does not provide network, authentication, or a database.
  */
 export class DurableOperationDispatcher implements OperationDispatcherPort {
   readonly port = DURABLE_OPERATION_DISPATCHER_PORT;
@@ -139,6 +178,11 @@ export class DurableOperationDispatcher implements OperationDispatcherPort {
 
   static async open(options: DurableOperationDispatcherOptions): Promise<DurableOperationDispatcher> {
     const dispatcher = new DurableOperationDispatcher(options.store);
+    await runDurableBridgeTransaction(dispatcher.#store, "operation.replay.validate", async (transaction) => {
+      for (const entry of await transaction.scan(REPLAY_ASSOCIATION_NAMESPACE)) {
+        assertStoredReplayAssociation(entry.key, entry.value);
+      }
+    });
     const entries = await dispatcher.#scan();
     for (const entry of entries) {
       const operation = assertStoredOperation(entry.key, entry.value);
@@ -161,9 +205,27 @@ export class DurableOperationDispatcher implements OperationDispatcherPort {
   }
 
   async execute<T>(request: OperationRequest, action: () => Promise<T> | T): Promise<T> {
+    return this.#execute(request, undefined, action);
+  }
+
+  /**
+   * Claims an operation and binds its authenticated replay key in the same
+   * durable transaction. The external side effect remains outside that
+   * transaction and must follow the operation recovery policy.
+   */
+  async executeWithReplay<T>(
+    request: OperationRequest,
+    association: ReplayAssociationInput,
+    action: () => Promise<T> | T,
+  ): Promise<T> {
+    assertReplayAssociationInput(association);
+    return this.#execute(request, association, action);
+  }
+
+  async #execute<T>(request: OperationRequest, association: ReplayAssociationInput | undefined, action: () => Promise<T> | T): Promise<T> {
     assertOperationId(request.operationId);
     if (typeof action !== "function") throw new BridgeServiceError("OPERATION_ACTION_INVALID");
-    const claim = await this.#begin(request);
+    const claim = await this.#begin(request, association);
     if (claim.existing) return claim.result as T;
     try {
       const result = await action();
@@ -180,10 +242,25 @@ export class DurableOperationDispatcher implements OperationDispatcherPort {
       .map(([operationId, operation]) => Object.freeze({ operationId, claims: operation.claims })));
   }
 
-  async #begin(request: OperationRequest): Promise<Readonly<{ existing: boolean; result?: unknown }>> {
+  async #begin(request: OperationRequest, association?: ReplayAssociationInput): Promise<Readonly<{ existing: boolean; result?: unknown }>> {
     const requestedSessionKey = sessionKey(request.session);
     const parametersDigest = this.#parametersDigest(request.parameters ?? null);
     const outcome = await runDurableBridgeTransaction(this.#store, OPERATION_SCOPE, async (transaction) => {
+      if (association !== undefined) {
+        const rawAssociation = await transaction.read(REPLAY_ASSOCIATION_NAMESPACE, association.replayKey);
+        if (rawAssociation !== null) {
+          const previousAssociation = assertStoredReplayAssociation(association.replayKey, rawAssociation);
+          if (previousAssociation.sessionKey !== requestedSessionKey) throw new BridgeServiceError("REPLAY_ASSOCIATION_IDENTITY_MISMATCH");
+          if (previousAssociation.operationId !== request.operationId) throw new BridgeServiceError("REPLAY_ASSOCIATION_OPERATION_MISMATCH");
+          if (previousAssociation.payloadDigest !== association.payloadDigest) throw new BridgeServiceError("REPLAY_ASSOCIATION_DIGEST_MISMATCH");
+        } else {
+          await transaction.write(REPLAY_ASSOCIATION_NAMESPACE, association.replayKey, {
+            operationId: request.operationId,
+            sessionKey: requestedSessionKey,
+            payloadDigest: association.payloadDigest,
+          });
+        }
+      }
       const raw = await transaction.read(OPERATION_NAMESPACE, request.operationId);
       if (raw !== null) {
         const previous = assertStoredOperation(request.operationId, raw);

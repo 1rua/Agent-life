@@ -195,4 +195,47 @@ describe("DurableOperationDispatcher", () => {
     }, async () => [{ sourceEpoch: 999n }]))
       .resolves.toMatchObject([{ recordId: "mail-1", sourceEpoch: 1n, cursor: 1n }]);
   });
+
+  it("atomically associates a replay key with its operation claim across reopen", async () => {
+    const root = await makeRoot();
+    const store = await FileBackedBridgeStore.open({ rootDir: root });
+    const request = { operationId: "op-associated", session: session(), parameters: { kind: "device_event" } };
+    const association = { replayKey: "device-event:key-a", payloadDigest: "sha256:payload-a" };
+    const first = await DurableOperationDispatcher.open({ store });
+    let calls = 0;
+    await expect(first.executeWithReplay(request, association, async () => {
+      calls += 1;
+      return { accepted: true };
+    })).resolves.toEqual({ accepted: true });
+
+    const reopened = await DurableOperationDispatcher.open({ store });
+    await expect(reopened.executeWithReplay(request, association, async () => {
+      calls += 1;
+      return { accepted: false };
+    })).resolves.toEqual({ accepted: true });
+    expect(calls).toBe(1);
+    await expect(reopened.executeWithReplay(
+      { ...request, operationId: "op-other" },
+      association,
+      async () => ({ accepted: false }),
+    )).rejects.toMatchObject({ code: "REPLAY_ASSOCIATION_OPERATION_MISMATCH" });
+    await expect(reopened.executeWithReplay(
+      request,
+      { ...association, payloadDigest: "sha256:payload-other" },
+      async () => ({ accepted: false }),
+    )).rejects.toMatchObject({ code: "REPLAY_ASSOCIATION_DIGEST_MISMATCH" });
+  });
+
+  it("fails closed when a reopened replay association is incomplete", async () => {
+    const root = await makeRoot();
+    const store = await FileBackedBridgeStore.open({ rootDir: root });
+    await runDurableBridgeTransaction(store, "test.seed", (transaction) => transaction.write(
+      "operation.replay-associations" as never,
+      "device-event:key-a",
+      { operationId: "op-associated" },
+    ));
+
+    await expect(DurableOperationDispatcher.open({ store }))
+      .rejects.toMatchObject({ code: "DURABLE_REPLAY_ASSOCIATION_STATE_INVALID" });
+  });
 });

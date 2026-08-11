@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { PairingService, type PairingTicketInput } from "../../bridge-contract/src/pairing-service.js";
 import {
@@ -140,7 +141,7 @@ describe("Bridge health", () => {
 
 describe("deployment templates", () => {
   it("do not publish a public socket and keep the dependency lock explicit", async () => {
-    const root = join(process.cwd(), "bridge-runtime", "deploy");
+    const root = fileURLToPath(new URL("../deploy/", import.meta.url));
     const systemd = await readFile(join(root, "agent-life-bridge.service"), "utf8");
     const compose = await readFile(join(root, "docker-compose.yml"), "utf8");
     expect(systemd).toContain("BRIDGE_INGRESS_TRANSPORT=tsnet-userspace");

@@ -13,12 +13,44 @@ export {
   assertDurableOperationDispatcher,
   isDurableOperationDispatcher,
 } from "./durable-operation-dispatcher.js";
-export type { DurableOperationDispatcherOptions } from "./durable-operation-dispatcher.js";
-export { createDurableBridgeComposition } from "./composition.js";
+export type {
+  DurableOperationDispatcherOptions,
+  ReplayAssociationInput,
+} from "./durable-operation-dispatcher.js";
+export {
+  createDurableBridgeComposition,
+  createFencedDurableBridgeComposition,
+} from "./composition.js";
 export type {
   DurableBridgeComposition,
   DurableBridgeCompositionOptions,
+  FencedDurableBridgeComposition,
+  FencedDurableBridgeCompositionOptions,
 } from "./composition.js";
+export {
+  DurableBridgeStateRepositories,
+  DurableNotificationRepository,
+  DurablePairingRepository,
+  DurableSubscriptionRepository,
+} from "./durable-state-repositories.js";
+export type { DurableBridgeStateRepositoriesOptions } from "./durable-state-repositories.js";
+export {
+  BRIDGE_LEASE_COORDINATOR_PORT,
+  PAIRING_TICKET_VERIFIER_PORT,
+  assertBridgeLease,
+  assertConnectedBridgeLeaseCoordinator,
+  assertConnectedPairingTicketVerifier,
+} from "./production-ports.js";
+export type {
+  BridgeLease,
+  BridgeLeaseCoordinatorPort,
+  PairingTicketVerifierPort,
+} from "./production-ports.js";
+export { runBridgeBackupRestoreDrill } from "./backup-restore-drill.js";
+export type {
+  BridgeBackupRestoreDrillOptions,
+  BridgeBackupRestoreDrillReport,
+} from "./backup-restore-drill.js";
 export type {
   FileBackedBridgeManifest,
   FileBackedBridgeStoreOptions,

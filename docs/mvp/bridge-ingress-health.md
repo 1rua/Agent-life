@@ -13,10 +13,13 @@ does not claim to open a real Tailscale socket.
 
 Before dispatching a control frame, the seam verifies the paired Bridge
 fingerprint, pairing generation, current connection generation and replay key.
-The in-memory replay and generation implementations are deterministic test
-adapters. A production implementation must delegate signature, durable replay
-and key rotation decisions to the accepted P0a ports and persist the admission
-atomically with the operation claim.
+The in-memory replay and generation implementations remain deterministic test
+adapters. The runtime now provides a separate durable
+`executeWithReplay` transaction that associates an already-authenticated replay
+key with its operation claim. It does not verify signatures or rotate keys. A
+production ingress must still delegate those decisions to the accepted P0a
+ports and call the durable association only after authenticated userspace
+admission.
 
 `bridge-runtime/src/health.ts` supplies framework-neutral `GET` routes:
 
@@ -26,6 +29,6 @@ atomically with the operation claim.
 The systemd and Compose templates under `bridge-runtime/deploy/` keep the
 listener private: there is no host-port mapping or systemd `ListenStream`, and
 both templates require an explicit tsnet lock. The Compose image digest is a
-placeholder until the controller locks it. Physical Tailscale, database,
-migration, backup/restore and Android end-to-end evidence are still release
-gates.
+placeholder until the controller locks it. Physical Tailscale, locked database,
+secret-store/lease adapters, live migration/backup/restore and Android
+end-to-end evidence are still release gates.

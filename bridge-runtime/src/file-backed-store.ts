@@ -17,14 +17,14 @@ import { BridgeServiceError, compareCodePoints } from "../../bridge-contract/src
  * implementation of that boundary.
  */
 export const FILE_BACKED_BRIDGE_STORE_FORMAT = "agent-life.bridge-store.file.v1" as const;
-// Version 2 adds the authorization persistence partitions to the closed
-// namespace set. This local fixture has no production migration claim; old
-// generations are intentionally rejected and rebuilt rather than silently
-// interpreting a v1 snapshot with a different schema.
-export const FILE_BACKED_BRIDGE_STORE_VERSION = 2 as const;
+// Version 3 adds replay associations to the closed namespace set. This local
+// fixture upgrades v1/v2 snapshots by initializing new partitions; it still
+// makes no production migration or multi-process database claim.
+export const FILE_BACKED_BRIDGE_STORE_VERSION = 3 as const;
 
-const STATE_FORMAT = "agent-life.bridge-store.state.v2" as const;
-const LEGACY_STATE_FORMAT = "agent-life.bridge-store.state.v1" as const;
+const STATE_FORMAT = "agent-life.bridge-store.state.v3" as const;
+const LEGACY_STATE_FORMAT_V2 = "agent-life.bridge-store.state.v2" as const;
+const LEGACY_STATE_FORMAT_V1 = "agent-life.bridge-store.state.v1" as const;
 const MANIFEST_FILE = "manifest.json" as const;
 const GENERATIONS_DIR = "generations" as const;
 const SCOPE_PATTERN = /^[a-z0-9][a-z0-9._/-]{0,127}$/;
@@ -158,12 +158,13 @@ const parseManifest = (value: unknown): FileBackedBridgeManifest | null => {
 const parseState = (value: unknown, expectedGeneration: number): StateMap | null => {
   if (!isObject(value) || !exactKeys(value, ["format", "generation", "namespaces", "version"])) return null;
   const isCurrent = value.format === STATE_FORMAT && value.version === FILE_BACKED_BRIDGE_STORE_VERSION;
-  const isLegacy = value.format === LEGACY_STATE_FORMAT && value.version === 1;
-  if (!isCurrent && !isLegacy) return null;
+  const isLegacyV2 = value.format === LEGACY_STATE_FORMAT_V2 && value.version === 2;
+  const isLegacyV1 = value.format === LEGACY_STATE_FORMAT_V1 && value.version === 1;
+  if (!isCurrent && !isLegacyV2 && !isLegacyV1) return null;
   if (value.generation !== expectedGeneration) return null;
-  const expectedNamespaces = isLegacy
-    ? BRIDGE_STORE_NAMESPACES.filter((namespace) => namespace !== "authorization.grants" && namespace !== "authorization.revisions")
-    : BRIDGE_STORE_NAMESPACES;
+  const expectedNamespaces = BRIDGE_STORE_NAMESPACES.filter((namespace) =>
+    (!isLegacyV1 || (namespace !== "authorization.grants" && namespace !== "authorization.revisions"))
+    && (!(isLegacyV1 || isLegacyV2) || namespace !== "operation.replay-associations"));
   if (!isObject(value.namespaces) || !exactKeys(value.namespaces, expectedNamespaces)) return null;
 
   const state = emptyState();

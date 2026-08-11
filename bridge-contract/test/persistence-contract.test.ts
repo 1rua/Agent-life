@@ -20,6 +20,7 @@ describe("Bridge persistence contract", () => {
       "subscription.bindings",
       "subscription.events",
       "operation.claims",
+      "operation.replay-associations",
       "assistant.metadata",
     ]);
     expect(BRIDGE_STORE_NAMESPACES).toEqual(BRIDGE_PERSISTENCE_NAMESPACES);

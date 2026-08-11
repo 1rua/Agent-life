@@ -23,6 +23,7 @@ export const BRIDGE_PERSISTENCE_NAMESPACES = Object.freeze([
   "subscription.bindings",
   "subscription.events",
   "operation.claims",
+  "operation.replay-associations",
   "assistant.metadata",
 ] as const);
 
