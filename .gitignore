@@ -22,8 +22,25 @@ apps/android/**/*.aab
 
 # OS
 .DS_Store
+Thumbs.db
 
 # Coverage
 *.lcov
 /coverage/
 /test-results/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+/logs/
+
+# Temp
+*.tmp
+*.swp
+*.swo
+*~
+*.bak
