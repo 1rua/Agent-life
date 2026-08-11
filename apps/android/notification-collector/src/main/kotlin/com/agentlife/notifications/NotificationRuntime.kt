@@ -1,8 +1,11 @@
 package com.agentlife.notifications
 
 import com.agentlife.core.model.AuthorizationDecision
+import com.agentlife.core.model.NotificationCaptureResult
 import com.agentlife.core.model.NotificationAuthorization
 import com.agentlife.core.model.NotificationOutbox
+import com.agentlife.policy.PersistentNotificationPolicyAuthority
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collect
@@ -17,26 +20,66 @@ class NotificationRuntime(
     initialCollector: AndroidNotificationCollector,
     private val outbox: NotificationOutbox?,
     private val scope: CoroutineScope,
+    private val egressGate: NotificationRecordEgressGate = NotificationRecordEgressGate { true },
+    private val dispatcher: NotificationBridgeDispatcher? = null,
+    private val policyAuthority: PersistentNotificationPolicyAuthority? = null,
+    private val failureReporter: NotificationRuntimeFailureReporter = NotificationRuntimeFailureReporter { },
 ) {
     private val lock = Any()
     private var collector: AndroidNotificationCollector = initialCollector
     private var subscription: Job? = null
+    private var recovery: Job? = null
+    private var policyRegistration: AutoCloseable? = null
 
     fun currentCollector(): AndroidNotificationCollector = synchronized(lock) { collector }
 
     /** Idempotent: a listener lifecycle can call start more than once safely. */
     fun start() = synchronized(lock) {
-        if (subscription?.isActive == true || outbox == null) return@synchronized
-        subscription = scope.launch {
-            collector.observeAutoSend().collect { capture ->
-                capture.records.forEach { record -> outbox.enqueueAccepted(record) }
+        if (subscription?.isActive == true) return@synchronized
+        policyAuthority?.let { authority ->
+            collector.applyPolicyBlocking(authority.snapshot().policy)
+            policyRegistration?.close()
+            policyRegistration = authority.addListener { state ->
+                synchronized(lock) { collector.applyPolicyBlocking(state.policy) }
             }
         }
+        if (outbox == null) return@synchronized
+        subscription = scope.launch {
+            collector.observeAutoSend().collect { capture ->
+                persistAndDispatch(capture)
+            }
+        }
+        recovery = dispatcher?.let { value -> scope.launch { value.dispatchPending() } }
     }
 
     fun stop() = synchronized(lock) {
         subscription?.cancel()
         subscription = null
+        recovery?.cancel()
+        recovery = null
+        policyRegistration?.close()
+        policyRegistration = null
+    }
+
+    /** Shared deterministic boundary used by the flow and revoke-race tests. */
+    internal suspend fun persistAndDispatch(capture: NotificationCaptureResult) {
+        val sink = outbox ?: return
+        capture.records.forEach { record ->
+            if (!egressGate.allows(record)) return@forEach
+            try {
+                sink.enqueueAccepted(record)
+            } catch (failure: Throwable) {
+                if (failure is CancellationException) throw failure
+                failureReporter.report(NotificationRuntimeFailure.OUTBOX_WRITE_FAILED)
+                return@forEach
+            }
+        }
+        try {
+            dispatcher?.dispatchPending()
+        } catch (failure: Throwable) {
+            if (failure is CancellationException) throw failure
+            failureReporter.report(NotificationRuntimeFailure.DISPATCH_RETRY_PENDING)
+        }
     }
 
     /** Keep the test/device injection seam while preserving the outbox sink. */
@@ -44,15 +87,22 @@ class NotificationRuntime(
         val wasActive = subscription?.isActive == true
         subscription?.cancel()
         collector = value
+        policyAuthority?.let { collector.applyPolicyBlocking(it.snapshot().policy) }
         subscription = null
         if (wasActive && outbox != null) {
             subscription = scope.launch {
                 collector.observeAutoSend().collect { capture ->
-                    capture.records.forEach { record -> outbox.enqueueAccepted(record) }
+                    persistAndDispatch(capture)
                 }
             }
         }
     }
+}
+
+enum class NotificationRuntimeFailure { OUTBOX_WRITE_FAILED, DISPATCH_RETRY_PENDING }
+
+fun interface NotificationRuntimeFailureReporter {
+    fun report(failure: NotificationRuntimeFailure)
 }
 
 fun interface NotificationRuntimeFactory {
