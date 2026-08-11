@@ -25,8 +25,8 @@ all seven dependency-lock rows, an ADB-connected API-34+ reference device, the
 locked Java/Gradle toolchain, the real Bridge runtime and the Tailscale AAR,
 plus accepted P0t and reviewed protocol gates. The accepted product choices
 are recorded in [p0a-gate-decisions.md](p0a-gate-decisions.md); Task 9's
-technical preflight remains a separate blocker until its contracts are
-implemented and reviewed. Any missing prerequisite emits
+bounded pre-replay authority gate is reviewed, while vectors, durable
+cursor/ACK storage and deployed routing remain separate blockers. Any missing prerequisite emits
 `RELEASE_READINESS_BLOCKED` and `RELEASE_GATE_BLOCKED` with a reason; no fake
 or SDK-free result is promoted to a release pass.
 
@@ -52,11 +52,11 @@ test execution and the release gate as separate observable steps.
 
 ## Protocol gate snapshot
 
-The companion protocol worktree currently reports **32 test files / 310 tests
+The companion protocol worktree currently reports **32 test files / 334 tests
 and typecheck GREEN**. This is a deterministic reference-contract gate, not
-production evidence. Task 9 remains technical-gate `reference_contract_only`:
-fixed cross-language vectors, production cursor/ACK durability and shared
-pre-replay integration are still pending.
+production evidence. Task 9's bounded pre-replay authority gate is GREEN with
+the full mismatch, precedence and allow-path matrix; fixed cross-language
+vectors, production cursor/ACK durability and deployed routing remain pending.
 
 ## Synchronized P0a decisions
 
@@ -78,9 +78,10 @@ P0t, AAR, or production-Bridge requirement.
 
 - `npm run mvp:lock:check` fails closed because all seven controller rows are
   `pending`.
-- This environment has no Java, Gradle, Android SDK/ADB or connected reference
-  device; `apps/android/gradlew --no-daemon check` therefore cannot establish a
-  build or P0t result.
+- Local JDK 17, Android SDK platform/build-tools and `adb` are present, but the
+  locked Gradle 8.9 distribution was not downloaded, the NDK install is only a
+  stub, and no reference device is connected; `apps/android/gradlew --no-daemon
+  check` therefore cannot establish a build or P0t result.
 - No locked Tailscale userspace AAR/resource artifact or production Bridge
   runtime/database deployment is present. `bridge-runtime/` now contains
   source-level SQLite adapter/migration and userspace-ingress/health ports in
@@ -97,9 +98,9 @@ P0t, AAR, or production-Bridge requirement.
 - Task 7 D1–D4 are accepted as product/security choices, and Task 9's
   `device_event`/`event_ack` lifetimes (`24h`/`5min`) plus `task5_default`
   replay policy are accepted. Task 9's reference contract is covered by the
-  32-file/310-test protocol snapshot, but fixed vectors, production
-  cursor/ACK durability and shared pre-replay integration remain pending and
-  release-blocking.
+  32-file/334-test protocol snapshot, but fixed vectors, production
+  cursor/ACK durability and deployed routing remain pending and release-
+  blocking.
 
 These are explicit fail-closed states, not test failures hidden by the
 SDK-free report. The current implementation is therefore suitable for

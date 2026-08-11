@@ -30,10 +30,10 @@ schema, vector, implementation, or production evidence gates.
 | Replay policy | **`task5_default`** | Device events and ACKs use the existing default replay protections; they do not create a caller-selected or second replay policy. |
 
 The Task 9 **product literals are accepted**. The checked-in Task 9 event
-contract is a reference contract only. Its fixed cross-language vectors,
-production cursor/ACK durability, and shared pre-replay integration remain
-pending, so the Task 9 technical readiness preflight is still a release
-blocker.
+contract now includes a bounded pre-replay authority gate with mismatch,
+precedence and allow-path coverage. Fixed cross-language vectors, production
+cursor/ACK durability and deployed routing remain pending, so the Task 9
+technical readiness preflight is still a release blocker.
 
 ## Machine-readable acceptance lines
 

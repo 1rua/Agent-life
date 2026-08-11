@@ -1,4 +1,28 @@
 .worktrees/
 **/node_modules/
 **/__pycache__/
-_env_info.txt
+.env_check.txt
+.toolchains/
+
+# Android
+apps/android/local.properties
+apps/android/.gradle/
+apps/android/**/build/
+apps/android/**/*.apk
+apps/android/**/*.aab
+
+# Gradle
+.gradle/
+**/.gradle/
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+
+# Coverage
+*.lcov
+/coverage/
+/test-results/

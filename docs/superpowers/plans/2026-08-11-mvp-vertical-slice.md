@@ -12,10 +12,10 @@
 
 | Area | Worktree | Status | Evidence / remaining gate |
 | --- | --- | --- | --- |
-| Task 5 transport/security | `.worktrees/p0a-protocol-security-model` / `feat/p0a-protocol-security-model` | implementation GREEN, commit pending at this checkpoint | 32 protocol files / 310 tests and typecheck pass; release integration still requires review record and merge |
+| Task 5 transport/security | `.worktrees/p0a-protocol-security-model` / `feat/p0a-protocol-security-model` | implementation GREEN, merge pending at this checkpoint | 32 protocol test files / 334 tests and typecheck pass; release integration still requires review record and merge |
 | Task 6 authorization/grants | protocol worktree | reference-contract GREEN | capability, revision, grant, egress, risk and replay-association seams pass; production ingress/lock still pending |
 | Task 7 operations/artifacts | protocol worktree | independent slice GREEN, canonical gate partial | operation reducer/ledger, schemas, error/migration fixtures and vectors pass; replay-policy/message rows and any unresolved product-dependent vectors remain gated |
-| Task 9 events/ACK | protocol worktree | reference contract only | accepted literals are `device_event=24h`, `event_ack=5m`, replay `task5_default`; production cursor/ACK durability and shared pre-replay integration remain pending |
+| Task 9 events/ACK | protocol worktree | bounded reference slice GREEN | accepted literals are `device_event=24h`, `event_ack=5m`, replay `task5_default`; the pre-replay authority gate and mismatch/precedence matrix are covered, while fixed cross-language vectors, production cursor/ACK durability and deployed routing remain pending |
 | WP-00..WP-10 MVP source slice | main checkout | SDK-free GREEN | `run-smoke.sh --sdk-free`: 16 Vitest files / 98 tests, Android static 48/48; release gate intentionally blocked by locks/toolchain/device/production adapters |
 
 The two worktrees are intentionally committed independently: the protocol branch

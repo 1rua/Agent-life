@@ -35,10 +35,10 @@ npm run mvp:lock:check  # 当前按设计失败，直到控制器填满七行证
 Protocol checks run in `.worktrees/p0a-protocol-security-model` with
 `npm run typecheck && npm test -- --run`.
 
-协议 worktree 当前验证为 **32 个测试文件/310 个测试，typecheck GREEN**。这表示
+协议 worktree 当前验证为 **32 个测试文件/334 个测试，typecheck GREEN**。这表示
 协议参考契约的确定性门禁通过，不等于 Android/Bridge 生产门禁通过。Task 9
-当前仍仅提供参考契约；固定跨语言 vectors、生产 cursor/ACK durability 与
-shared pre-replay integration 仍待完成。Bridge、integrations 与 MVP schema/Bridge runtime/artifact
+当前的 bounded pre-replay authority gate、拒绝矩阵与允许路径已覆盖；固定跨语言
+vectors、生产 cursor/ACK durability 与部署路由仍待完成。Bridge、integrations 与 MVP schema/Bridge runtime/artifact
 联调为 16 个测试文件/98 个测试；Android SDK-free 静态门禁为 48 个测试。
 `run-readiness.sh --sdk-free` 还会逐项列出 WP-00..WP-10 的源工件和
 生产阻断原因。Bridge 仍不宣称真实网络监听或 production durable DB；当前有
@@ -49,6 +49,7 @@ ingress/health source seams。
 订阅状态仍是 process-local；生产 SQLite 驱动、认证 tsnet adapter、备份恢复
 演练和部署尚未提供，因此不能将这些 source seam 视为生产 durable 实现证据。
 
-本环境没有 Java、Gradle、Android SDK、ADB 或物理设备；因此 Android
-Kotlin/JUnit、APK、P0t userspace AAR 和真实 Tailnet/Bridge E2E 仍需在锁定的
-Android CI/参考设备上执行，当前证据不宣称这些门禁已通过。
+本环境已有 JDK 17、Android SDK platform/build-tools 与 `adb`，但没有可用的锁定
+Gradle 8.9、完整 NDK 或物理设备；因此 Android Kotlin/JUnit、APK、P0t
+userspace AAR 和真实 Tailnet/Bridge E2E 仍需在锁定的 Android CI/参考设备上执行，
+当前证据不宣称这些门禁已通过。

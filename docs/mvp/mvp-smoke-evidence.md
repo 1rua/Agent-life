@@ -12,10 +12,11 @@ The current run currently exercises 16 Vitest files / 98 tests and 48 Android ho
 tests. It also runs the strict TypeScript boundary check for Bridge and
 Hermes/OpenClaw adapters. The smoke output ends with `SDK_FREE_PASS`.
 
-The companion protocol worktree currently reports **32 test files / 310 tests
+The companion protocol worktree currently reports **32 test files / 334 tests
 and typecheck GREEN**. This is reference-contract evidence only. Task 9 still
-blocks release because fixed cross-language vectors, production cursor/ACK
-durability and shared pre-replay integration are pending.
+has a bounded pre-replay authority gate and full mismatch/precedence/allow-path
+coverage; fixed cross-language vectors, production cursor/ACK durability and
+deployed routing still block release.
 
 The Vitest set includes the M1.1 artifact-ticket contract: selected-media
 limits, digest/PoP binding, interrupted-upload replacement, commit-gated local
@@ -46,7 +47,10 @@ The same run reports `LOCK_GATE_PENDING`: all seven controller dependency rows
 in `docs/mvp/mvp-dependency-lock.md` are explicitly pending, so real Android,
 userspace Tailnet, Bridge runtime, provider and artifact work cannot be called
 production-ready. It reports `ANDROID_QA_SKIPPED` because this environment has
-no `adb`, Java, Gradle, Kotlin compiler or physical/emulated device.
+no connected physical/emulated device. The local JDK, Android SDK
+platform/build-tools and `adb` are present, but the locked Gradle 8.9
+distribution and complete NDK are not, so Android compilation and device
+execution remain unverified.
 
 This document is content-free and does not claim APK installation, a Tailscale
 AAR, a durable database, or a Hermes/OpenClaw production gateway. The

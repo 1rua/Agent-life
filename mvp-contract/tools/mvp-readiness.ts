@@ -199,17 +199,34 @@ const readText = (path: string): string | null => {
   }
 };
 
-const commandAvailable = (command: string): boolean => {
-  const result = spawnSync("bash", ["-lc", `command -v ${command}`], {
-    cwd: ROOT,
-    stdio: "ignore",
-  });
-  return result.status === 0;
+const localCommandCandidates = (command: string): string[] => {
+  const candidates = [
+    process.env.JAVA_HOME ? resolve(process.env.JAVA_HOME, "bin", command) : "",
+    resolve(ROOT, ".toolchains/jdk-17.0.20+8/bin", command),
+    resolve(ROOT, ".toolchains/jdk-25.0.4+7/bin", command),
+    resolve(ROOT, ".toolchains/android-sdk/platform-tools", command),
+  ];
+  return candidates.filter((candidate) => candidate.length > 0);
 };
 
+const resolveCommand = (command: string): string | null => {
+  const result = spawnSync("bash", ["-lc", `command -v ${command}`], {
+    cwd: ROOT,
+    encoding: "utf8",
+  });
+  if (result.status === 0) {
+    const resolved = String(result.stdout ?? "").trim();
+    if (resolved.length > 0) return resolved;
+  }
+  return localCommandCandidates(command).find((candidate) => existsSync(candidate)) ?? null;
+};
+
+const commandAvailable = (command: string): boolean => resolveCommand(command) !== null;
+
 const adbConnected = (): boolean => {
-  if (!commandAvailable("adb")) return false;
-  const result = spawnSync("adb", ["devices"], { cwd: ROOT, encoding: "utf8" });
+  const adb = resolveCommand("adb");
+  if (!adb) return false;
+  const result = spawnSync(adb, ["devices"], { cwd: ROOT, encoding: "utf8" });
   return result.status === 0 && /\tdevice(?:\s|$)/m.test(String(result.stdout ?? ""));
 };
 
@@ -300,10 +317,10 @@ export const auditReleaseBlockers = (): ReleaseBlocker[] => {
 
   // Product/security choices are recorded in the main checkout so this audit
   // does not infer approval from an implementation worktree's review status.
-  // Task 9 deliberately has a second, production-facing gate: its current
-  // reference contract is useful for conformance work, but vectors, durable
-  // cursor/ACK storage and shared pre-replay integration are not production
-  // evidence. That gate remains fail-closed until explicitly reviewed.
+  // Task 9 deliberately has a second, production-facing gate: the bounded
+  // pre-replay authority gate is reviewed, but vectors, durable cursor/ACK
+  // storage and deployed routing are not production evidence. Keep that gate
+  // fail-closed until those artifacts are explicitly accepted.
   const decisions = readText(P0A_DECISIONS_PATH);
   const hasAcceptedDecision = (decisionId: string, value: string): boolean => {
     if (!decisions) return false;
@@ -337,7 +354,7 @@ export const auditReleaseBlockers = (): ReleaseBlocker[] => {
   } else if (!hasAcceptedDecision("TASK9-technical-gate", "production_ready")) {
     blockers.push({
       code: "TASK9-REVIEW",
-      detail: "Task 9 product literals are accepted, but only a reference contract is present; vectors, production durability and pre-replay integration remain pending",
+      detail: "Task 9 product literals and bounded pre-replay authority gate are accepted, but fixed vectors, production durability and deployed routing remain pending",
     });
   }
   return blockers;

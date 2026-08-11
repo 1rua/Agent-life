@@ -1,8 +1,9 @@
 # P0t userspace transport spike evidence
 
-Status: source-level spike only (2026-08-11). No Android SDK, Java, Gradle or
-physical API-34 device is available in this workspace, so this document does
-not claim the P0t gate passed.
+Status: source-level spike and reproducible AAR-input gate only (2026-08-11).
+The host now has a Go toolchain, gomobile command, JDK and Android SDK command
+line tools, but it does not contain a reviewed Tailscale Go source checkout or
+an installed NDK. This document does not claim the P0t gate passed.
 
 ## Implemented boundary
 
@@ -37,17 +38,62 @@ distinct manifest packages. The Kotlin/JUnit behavior tests live in
 `apps/android/transport/src/test` and run when the locked Android toolchain is
 available.
 
-## Current environment result (2026-08-11)
+## Reproducible AAR input gate (2026-08-11)
 
-The required device/toolchain probe was attempted: `adb` is not installed, no
-`java`, `gradle`, or `kotlinc` executable is available, and
-`apps/android/gradlew --no-daemon check` exits with the wrapper's
-“Gradle 8.9 is required” message. This is recorded as **SKIPPED / not a P0t
-pass**, not as a build failure that can be worked around with another transport.
+`apps/android/tailnet-core/tools/verify-tsnet-aar-inputs.sh` deliberately
+accepts only a local, clean Tailscale Git checkout with all of the following:
+
+- `go.mod` declaring exactly `module tailscale.com` and `tsnet/tsnet.go`;
+- `TSNET_SOURCE_COMMIT` matching the checkout's exact `HEAD`;
+- explicit Go, gomobile, SDK and installed-NDK paths.
+
+It neither downloads source nor writes a dependency lock. Its blocked result is
+therefore a reproducible supply-chain result rather than a substitute AAR:
+
+```text
+$ PATH="$PWD/.toolchains/go/bin:$PATH" \
+  GO_BIN="$PWD/.toolchains/go/bin/go" \
+  GOMOBILE_BIN="$PWD/.toolchains/go/bin/gomobile" \
+  ANDROID_HOME="$PWD/.toolchains/android-sdk" \
+  ANDROID_NDK_HOME="$PWD/.toolchains/android-sdk/ndk/27.0.12077973" \
+  TSNET_SOURCE_DIR="$PWD/third_party/tailscale" \
+  TSNET_SOURCE_COMMIT=unlocked \
+  bash apps/android/tailnet-core/tools/verify-tsnet-aar-inputs.sh
+TSNET_AAR_INPUTS_BLOCKED: TSNET_SOURCE_DIR is not a directory: .../third_party/tailscale
+MVP-DEP-TSNET remains pending; no AAR was built.
+$ echo $?
+2
+```
+
+The focused SDK-free regression command is:
+
+```text
+bash apps/android/tailnet-core/tools/test_verify_tsnet_aar_inputs.sh
+```
+
+It verifies that a missing source directory cannot be silently accepted.
+
+## Current host probe (2026-08-11)
+
+- Go is `go1.25.12`; `gomobile help bind` is available when that Go bin directory
+  is on `PATH` and documents Android AAR output.
+- JDK is Temurin `17.0.20`; `adb` is platform-tools `37.0.1`.
+- `ANDROID_NDK_HOME=.toolchains/android-sdk/ndk/27.0.12077973` is not an
+  installed NDK: it currently contains only `.installer/.installData` (4 KiB).
+- There is no local `tailscale.com` Go module, `tsnet/tsnet.go`, or reviewed
+  source commit. No `tsnet-android` AAR was created, so there is no artifact
+  checksum to record.
+
+This is recorded as **BLOCKED / not a P0t pass**, not as a build failure that
+can be worked around with another transport.
 
 ## Required device evidence before declaring P0t pass
 
-Run the locked toolchain on arm64-v8a and x86_64 API 34+ environments:
+After the controller provides the reviewed Tailscale checkout, installs the
+full NDK and freezes its inputs, run the input gate first, then the exact
+project build command selected for the narrow bound-client Go package. Record
+the AAR SHA-256 only after that command succeeds. Then run the locked toolchain
+on arm64-v8a and x86_64 API 34+ environments:
 
 ```text
 apps/android/gradlew --no-daemon :tailnet-core:connectedAndroidTest :transport:connectedAndroidTest
