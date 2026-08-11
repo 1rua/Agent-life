@@ -4,7 +4,7 @@ import com.agentlife.core.model.VerifiedPairingTransportBinding
 
 /**
  * Narrow userspace-core seam. The only application operation is opening the
- * enrollment-ticket-bound Bridge; there is no generic node socket API.
+ * enrollment-ticket-bound Bridge; there is no generic node networking API.
  */
 interface TailscaleUserspaceCore {
     suspend fun start(nodeIdentity: String, stateStore: NoBackupTailnetStateStore)

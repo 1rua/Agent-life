@@ -1,8 +1,39 @@
 #!/usr/bin/env sh
-# Lightweight handoff launcher for environments that provide the locked
-# Gradle distribution. The wrapper JAR is intentionally not vendored in this
-# SDK-free spike; use the official Gradle 8.9 distribution when available.
+# Lightweight handoff launcher for the locked local toolchain. The wrapper JAR
+# is intentionally not vendored in this SDK-free spike; when the project-local
+# toolchain exists, discover it automatically, otherwise use PATH/JAVA_HOME.
 set -eu
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+PROJECT_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)
+TOOLCHAIN_ROOT="$PROJECT_ROOT/.toolchains"
+
+if [ -z "${JAVA_HOME:-}" ] && [ -x "$TOOLCHAIN_ROOT/jdk-17.0.20+8/bin/java" ]; then
+  JAVA_HOME="$TOOLCHAIN_ROOT/jdk-17.0.20+8"
+  export JAVA_HOME
+fi
+
+if [ -z "${ANDROID_HOME:-}" ] && [ -d "$TOOLCHAIN_ROOT/android-sdk" ]; then
+  ANDROID_HOME="$TOOLCHAIN_ROOT/android-sdk"
+  export ANDROID_HOME
+fi
+
+if [ -z "${ANDROID_SDK_ROOT:-}" ] && [ -d "$TOOLCHAIN_ROOT/android-sdk" ]; then
+  ANDROID_SDK_ROOT="$TOOLCHAIN_ROOT/android-sdk"
+  export ANDROID_SDK_ROOT
+fi
+
+if [ -z "${GRADLE_USER_HOME:-}" ]; then
+  GRADLE_USER_HOME="$PROJECT_ROOT/.gradle"
+  export GRADLE_USER_HOME
+fi
+
+LOCAL_GRADLE_BIN="$TOOLCHAIN_ROOT/gradle/gradle-8.9/bin"
+if [ -x "$LOCAL_GRADLE_BIN/gradle" ]; then
+  PATH="$LOCAL_GRADLE_BIN${PATH:+:$PATH}"
+  export PATH
+fi
+
 if ! command -v gradle >/dev/null 2>&1; then
   echo "Gradle 8.9 is required (no gradle executable found); install the locked Android toolchain first." >&2
   exit 127

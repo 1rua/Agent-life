@@ -2,7 +2,7 @@ package com.agentlife.core.model
 
 /**
  * The only mobile transport boundary. A caller supplies a server-verified
- * binding, never an address, URL, route or socket handle.
+ * binding, never an address, URL, route or generic network handle.
  */
 interface PairedBridgeTransport {
     suspend fun open(binding: VerifiedPairingTransportBinding): BridgeSession

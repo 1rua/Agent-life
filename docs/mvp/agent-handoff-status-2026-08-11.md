@@ -17,6 +17,9 @@ MVP source slice 和 SDK-free 合同测试。主 worktree 与协议 worktree 均
 不要把以下结果写成 APK、真实设备、生产 Bridge 或生产 Agent Gateway 已经
 可用。
 
+本文件末尾的“根目录同步快照”覆盖本文早先关于协议仍只存在于独立
+worktree 的历史描述；历史段落保留，便于追溯同步前的状态。
+
 ## 2. Worktree、提交与验证入口
 
 | 区域 | 路径/分支 | 当前提交 | 状态 |
@@ -310,3 +313,40 @@ git diff --check
 
 任何后续 agent 在宣称“完成”前，应同时更新本文件对应表项、追加测试证据，
 并记录仍未通过的生产 gate。
+
+## 9. 根目录同步快照（2026-08-11）
+
+本次已将 worktree 中“已有提交、路径不覆盖根目录用户未提交改动”的进度
+同步到根目录 `main`。同步提交链为：
+
+| 域 | 根目录提交 | 同步内容 | 当前证据/边界 |
+| --- | --- | --- | --- |
+| P0a 协议整合 | `5ddfbe6`（来源 `08ac7eb`） | 保留 P0a 双亲历史、Node 24 launcher、协议 schema/registry/tests、clean-clone inventory 修复 | Task 1 review clean；需在根目录重新跑协议全量与 readiness |
+| Task 7 artifacts | `b2372b6`（来源 `23fec97`） | 5 个 canonical artifacts、13 条 registry rows、replay classification/vector tests | focused 93/93、typecheck 为 agent 证据；Node 22 engine warning，需根目录 fresh verify |
+| Bridge durable slice | `b4132a4`（来源 `ac6d38b`） | pairing/notification/subscription/replay durable repositories、fenced composition、backup/restore drill | agent 证据 runtime 39/39、Bridge+contract 69/69；SQLite/secret-store/lease/部署仍 pending |
+| Android notification | `b7a7b40..5c8d9d7`（来源 `4a3107e..4cfb124`） | 修复 Kotlin baseline、local authority persistence、AES-GCM outbox、ACK/retry dispatcher、Application/Keystore composition | 已提交但尚无独立 review report；真实设备/Android release gate 未宣称 |
+
+根目录仍保留用户原有的 4 个未提交编译环境改动：
+
+- `apps/android/gradlew`；
+- `apps/android/core-model/src/main/kotlin/com/agentlife/core/model/TransportContracts.kt`；
+- `apps/android/tailnet-core/src/main/kotlin/com/agentlife/tailnet/core/TailscaleUserspaceCore.kt`；
+- `apps/android/tools/test_transport_boundary.py`。
+
+以下进度仍只存在于 worktree，未同步到根目录：
+
+1. **Task 9 durable event/ACK/cursor/router**：`agent/task9-durable` 已有
+   `f48c6e5`、`1014b4d`，但当前 worktree 存在未解决的 `composition.ts`、
+   `index.ts`、`run-smoke.sh` 冲突；不得 cherry-pick 这条未收敛链。
+2. **Android providers/control**：`agent/android-provider-control` 仍有
+   未提交的 `apps/android/platform-adapters/`、settings/manifest/ports/static
+   gate 改动；provider agent 因额度限制中断，尚无可同步 commit 或完成报告。
+
+同步后的根目录状态仍不是生产发布批准：
+
+- `MVP-DEP-ANDROID/TSNET/BRIDGE/HERMES/OPENCLAW/MODEL/ARTIFACT` 7 行仍为
+  `pending`；
+- 无 API 34+ connected device、无锁定 tsnet AAR、无真实 Bridge DB/secret-store/
+  authenticated ingress/deployment evidence；
+- Task 9 durable path、Android provider/control、物理 P0t 与 Agent/Assistant
+  production integration 仍未完成。

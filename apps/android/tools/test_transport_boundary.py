@@ -42,6 +42,12 @@ class TransportBoundaryTest(unittest.TestCase):
         missing = [str(path.relative_to(ROOT)) for path in expected if not path.is_file()]
         self.assertEqual([], missing)
 
+    def test_gradle_launcher_discovers_project_toolchain(self):
+        launcher = (ROOT / "gradlew").read_text(encoding="utf-8")
+        self.assertIn("jdk-17.0.20+8", launcher)
+        self.assertIn("gradle-8.9/bin", launcher)
+        self.assertIn("android-sdk", launcher)
+
     def test_closed_contract_modules_are_registered_and_scanned(self):
         """A source-only module must still be compiled and covered by no-VPN CI.
 
