@@ -16,6 +16,7 @@ import java.security.GeneralSecurityException
 import java.security.SecureRandom
 import java.util.concurrent.atomic.AtomicLong
 import javax.crypto.Cipher
+import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
@@ -77,36 +78,49 @@ class OutboxCorrupted(message: String, cause: Throwable? = null) : IllegalStateE
  */
 class NotificationOutboxStore(
     private val persistence: EncryptedOutboxPersistence,
-    encryptionKey: ByteArray,
+    private val encryptionKey: SecretKey,
     private val ackVerifier: EventAckVerifier = EventAckVerifier { _, _ -> false },
     private val eventIds: EventIdSource = DefaultEventIdSource,
+    private val maxEvents: Int = MAX_EVENTS,
 ) : NotificationOutbox {
-    private val key = SecretKeySpec(encryptionKey.copyOf(), "AES")
     private val events = LinkedHashMap<String, DurableEvent>()
     private val lock = Any()
 
     init {
-        require(encryptionKey.size == 16 || encryptionKey.size == 24 || encryptionKey.size == 32) {
-            "outbox key must be 128, 192 or 256 bits"
-        }
+        require(encryptionKey.algorithm.equals("AES", ignoreCase = true)) { "outbox key must use AES" }
+        require(maxEvents in 2..MAX_EVENTS) { "outbox capacity must be between 2 and $MAX_EVENTS" }
         restore()
     }
+
+    constructor(
+        persistence: EncryptedOutboxPersistence,
+        encryptionKey: ByteArray,
+        ackVerifier: EventAckVerifier = EventAckVerifier { _, _ -> false },
+        eventIds: EventIdSource = DefaultEventIdSource,
+        maxEvents: Int = MAX_EVENTS,
+    ) : this(
+        persistence = persistence,
+        encryptionKey = SecretKeySpec(validateKeyBytes(encryptionKey), "AES"),
+        ackVerifier = ackVerifier,
+        eventIds = eventIds,
+        maxEvents = maxEvents,
+    )
 
     override suspend fun enqueueAccepted(record: NotificationRecordV1): DurableEvent = enqueueAcceptedBlocking(record)
 
     fun enqueueAcceptedBlocking(record: NotificationRecordV1): DurableEvent = synchronized(lock) {
-        var eventId: String
-        var attempts = 0
-        do {
-            eventId = eventIds.nextId()
-            require(eventId.isNotBlank()) { "event ID must not be blank" }
-            attempts += 1
-            check(attempts <= 100) { "event ID source returned duplicates" }
-        } while (events.containsKey(eventId))
-        val event = DurableEvent(eventId, record, encodeEventWire(eventId, record))
-        events[eventId] = event
-        persist()
-        event.copy(eventWire = event.eventWire.copyOf())
+        val snapshot = LinkedHashMap(events)
+        try {
+            if (events.size >= maxEvents) compactForBackpressure(record)
+            val event = createEvent(record)
+            events[event.eventId] = event
+            persist()
+            event.copy(eventWire = event.eventWire.copyOf())
+        } catch (failure: RuntimeException) {
+            events.clear()
+            events.putAll(snapshot)
+            throw failure
+        }
     }
 
     override suspend fun acknowledge(eventId: String, eventAckWire: ByteArray) =
@@ -186,7 +200,7 @@ class NotificationOutboxStore(
         SecureRandom().nextBytes(iv)
         return try {
             val cipher = Cipher.getInstance(TRANSFORMATION)
-            cipher.init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(TAG_BITS, iv))
+            cipher.init(Cipher.ENCRYPT_MODE, encryptionKey, GCMParameterSpec(TAG_BITS, iv))
             val ciphertext = cipher.doFinal(plain)
             ByteArrayOutputStream().use { output ->
                 output.write(iv)
@@ -204,7 +218,7 @@ class NotificationOutboxStore(
             val iv = envelope.copyOfRange(0, IV_BYTES)
             val ciphertext = envelope.copyOfRange(IV_BYTES, envelope.size)
             Cipher.getInstance(TRANSFORMATION).run {
-                init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(TAG_BITS, iv))
+                init(Cipher.DECRYPT_MODE, encryptionKey, GCMParameterSpec(TAG_BITS, iv))
                 doFinal(ciphertext)
             }
         } catch (failure: GeneralSecurityException) {
@@ -231,6 +245,44 @@ class NotificationOutboxStore(
         }
     } catch (failure: Throwable) {
         throw OutboxCorrupted("event decode failed", failure)
+    }
+
+    private fun createEvent(record: NotificationRecordV1): DurableEvent {
+        var eventId: String
+        var attempts = 0
+        do {
+            eventId = eventIds.nextId()
+            require(eventId.isNotBlank()) { "event ID must not be blank" }
+            attempts += 1
+            check(attempts <= 100) { "event ID source returned duplicates" }
+        } while (events.containsKey(eventId))
+        return DurableEvent(eventId, record, encodeEventWire(eventId, record))
+    }
+
+    /** Replace evicted events with a durable range marker; no record vanishes silently. */
+    private fun compactForBackpressure(incoming: NotificationRecordV1) {
+        val dropCount = events.size - maxEvents + 2
+        val dropped = events.values.take(dropCount)
+        require(dropped.isNotEmpty()) { "backpressure compaction needs an event" }
+        dropped.forEach { events.remove(it.eventId) }
+        val lostFrom = dropped.minOf { event ->
+            (event.record as? NotificationRecordV1.LossMarker)?.loss?.lostFromCursor ?: event.record.cursor
+        }
+        val lostTo = dropped.maxOf { event ->
+            (event.record as? NotificationRecordV1.LossMarker)?.loss?.lostToCursor ?: event.record.cursor
+        }
+        val markerRecord = NotificationRecordV1.LossMarker(
+            sourceEpoch = incoming.sourceEpoch,
+            occurrenceId = "outbox-loss:$lostFrom:$lostTo",
+            recordKey = "outbox-loss:$lostFrom:$lostTo",
+            recordRevision = maxOf(1uL, incoming.recordRevision),
+            cursor = lostTo,
+            capturedAtEpochMs = incoming.capturedAtEpochMs,
+            captureRevision = incoming.captureRevision,
+            loss = NotificationLoss(lostFrom, lostTo, "OUTBOX_BACKPRESSURE"),
+        )
+        val marker = createEvent(markerRecord)
+        events[marker.eventId] = marker
     }
 
     private fun writeRecord(output: DataOutputStream, record: NotificationRecordV1) {
@@ -321,6 +373,13 @@ class NotificationOutboxStore(
         private const val MAGIC = "AGENT_LIFE_OUTBOX_V1"
         private const val EVENT_MAGIC = "AGENT_LIFE_EVENT_V1"
         private val utf8 = StandardCharsets.UTF_8
+
+        private fun validateKeyBytes(value: ByteArray): ByteArray {
+            require(value.size == 16 || value.size == 24 || value.size == 32) {
+                "outbox key must be 128, 192 or 256 bits"
+            }
+            return value.copyOf()
+        }
 
         private fun writeString(output: DataOutputStream, value: String) {
             val bytes = value.toByteArray(utf8)
