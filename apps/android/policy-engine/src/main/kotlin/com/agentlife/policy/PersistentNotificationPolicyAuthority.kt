@@ -1,0 +1,235 @@
+package com.agentlife.policy
+
+import com.agentlife.core.model.AuthorizationDecision
+import com.agentlife.core.model.NotificationAuthorization
+import com.agentlife.core.model.NotificationCollectionPolicyV1
+import com.agentlife.core.model.NotificationFieldAccess
+import com.agentlife.core.model.NotificationRecordV1
+import com.agentlife.core.model.NotificationRuleMode
+import com.agentlife.core.model.PolicyRevisionRace
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.io.DataInputStream
+import java.io.DataOutputStream
+import java.io.File
+import java.nio.charset.StandardCharsets
+import java.util.concurrent.CopyOnWriteArrayList
+
+/** Persistence supplied by app-private no-backup storage. */
+interface NotificationPolicyPersistence {
+    fun read(): ByteArray?
+    fun write(value: ByteArray)
+}
+
+class InMemoryNotificationPolicyPersistence : NotificationPolicyPersistence {
+    private var value: ByteArray? = null
+
+    override fun read(): ByteArray? = value?.copyOf()
+
+    override fun write(value: ByteArray) {
+        this.value = value.copyOf()
+    }
+}
+
+/** File adapter intended only for a child of Context.noBackupFilesDir. */
+class FileNotificationPolicyPersistence(private val file: File) : NotificationPolicyPersistence {
+    override fun read(): ByteArray? = if (file.isFile) file.readBytes() else null
+
+    override fun write(value: ByteArray) {
+        file.parentFile?.mkdirs()
+        val parent = file.parentFile ?: file.absoluteFile.parentFile ?: error("policy file has no parent")
+        val temporary = File(parent, "${file.name}.tmp")
+        temporary.writeBytes(value)
+        check(temporary.renameTo(file)) { "unable to atomically persist notification policy" }
+    }
+}
+
+class PolicyStateCorrupted(message: String, cause: Throwable? = null) : IllegalStateException(message, cause)
+
+data class NotificationAuthoritySnapshot(
+    val policy: NotificationCollectionPolicyV1,
+    val authorizationRevision: ULong,
+    val granted: Boolean,
+    val corrupted: Boolean = false,
+)
+
+/**
+ * Durable, device-local notification authority. Remote control/Agent message
+ * contracts receive only this class's read-only NotificationAuthorization
+ * view; only the separately wired local controller can change consent.
+ */
+class PersistentNotificationPolicyAuthority(
+    private val persistence: NotificationPolicyPersistence,
+) : NotificationAuthorization {
+    private val lock = Any()
+    private val listeners = CopyOnWriteArrayList<(NotificationAuthoritySnapshot) -> Unit>()
+    private var current: NotificationAuthoritySnapshot = restore()
+
+    fun snapshot(): NotificationAuthoritySnapshot = synchronized(lock) {
+        current.copy(policy = current.policy.copy(packageIds = current.policy.packageIds.toList()))
+    }
+
+    fun localController(): LocalNotificationPolicyController = LocalNotificationPolicyController(this)
+
+    fun addListener(listener: (NotificationAuthoritySnapshot) -> Unit): AutoCloseable {
+        listeners += listener
+        return AutoCloseable { listeners -= listener }
+    }
+
+    override fun decide(
+        packageName: String,
+        fieldAccess: NotificationFieldAccess,
+        policyRevision: ULong,
+    ): AuthorizationDecision {
+        val state = snapshot()
+        if (state.corrupted) return AuthorizationDecision.deny("LOCAL_POLICY_CORRUPTED")
+        if (!state.granted) return AuthorizationDecision.deny("LOCAL_GRANT_REQUIRED")
+        if (policyRevision != state.policy.policyRevision) {
+            return AuthorizationDecision.deny("AUTHORIZATION_REVISION_STALE")
+        }
+        if (fieldAccess != state.policy.fieldAccess) {
+            return AuthorizationDecision.deny("FIELD_ACCESS_NOT_GRANTED")
+        }
+        if (!matches(state.policy, packageName)) return AuthorizationDecision.deny("PACKAGE_NOT_ALLOWED")
+        return AuthorizationDecision.allow()
+    }
+
+    /** Current-revision gate shared by enqueue and Bridge dispatch. */
+    fun allows(record: NotificationRecordV1): Boolean {
+        val state = snapshot()
+        if (state.corrupted || !state.granted || record.captureRevision != state.policy.policyRevision) return false
+        if (record is NotificationRecordV1.LossMarker) return true
+        val metadata = record.metadata ?: return false
+        if (!matches(state.policy, metadata.packageName)) return false
+        return record.content == null || state.policy.fieldAccess == NotificationFieldAccess.CONTENT
+    }
+
+    internal fun applyLocal(
+        policy: NotificationCollectionPolicyV1,
+        authorizationRevision: ULong,
+        granted: Boolean,
+    ) {
+        val next = synchronized(lock) {
+            val previous = current
+            if (previous.corrupted) throw PolicyStateCorrupted("notification policy evidence is corrupted")
+            if (policy.policyRevision < previous.policy.policyRevision) {
+                throw PolicyRevisionRace("policy revision rollback")
+            }
+            if (authorizationRevision < previous.authorizationRevision) {
+                throw PolicyRevisionRace("authorization revision rollback")
+            }
+            if (policy.policyRevision == previous.policy.policyRevision && policy != previous.policy) {
+                throw PolicyRevisionRace("policy contents changed without a revision")
+            }
+            if (authorizationRevision == previous.authorizationRevision && granted != previous.granted) {
+                throw PolicyRevisionRace("authorization changed without a revision")
+            }
+            if (policy != previous.policy && authorizationRevision == previous.authorizationRevision) {
+                throw PolicyRevisionRace("policy changed without an authorization revision")
+            }
+            NotificationAuthoritySnapshot(
+                policy = policy.copy(packageIds = policy.packageIds.toList()),
+                authorizationRevision = authorizationRevision,
+                granted = granted,
+            ).also { candidate ->
+                // Commit durable state before exposing a grant in memory.
+                persistence.write(encode(candidate))
+                current = candidate
+            }
+        }
+        listeners.forEach { it(next) }
+    }
+
+    private fun restore(): NotificationAuthoritySnapshot {
+        val bytes = persistence.read() ?: return DEFAULT
+        return try {
+            decode(bytes)
+        } catch (_: Throwable) {
+            // Preserve corrupt bytes for local diagnostics/recovery and deny.
+            DEFAULT.copy(corrupted = true)
+        }
+    }
+
+    private fun matches(policy: NotificationCollectionPolicyV1, packageName: String): Boolean {
+        if (packageName.isBlank()) return false
+        return when (policy.mode) {
+            NotificationRuleMode.ALLOWLIST -> packageName in policy.packageIds
+            NotificationRuleMode.DENYLIST -> packageName !in policy.packageIds
+        }
+    }
+
+    private fun encode(value: NotificationAuthoritySnapshot): ByteArray = ByteArrayOutputStream().use { bytes ->
+        DataOutputStream(bytes).use { output ->
+            writeString(output, MAGIC)
+            output.writeLong(value.authorizationRevision.toLong())
+            output.writeBoolean(value.granted)
+            output.writeByte(value.policy.mode.ordinal)
+            output.writeByte(value.policy.fieldAccess.ordinal)
+            output.writeLong(value.policy.policyRevision.toLong())
+            output.writeInt(value.policy.packageIds.size)
+            value.policy.packageIds.forEach { writeString(output, it) }
+        }
+        bytes.toByteArray()
+    }
+
+    private fun decode(bytes: ByteArray): NotificationAuthoritySnapshot = DataInputStream(
+        ByteArrayInputStream(bytes),
+    ).use { input ->
+        check(readString(input) == MAGIC) { "policy format mismatch" }
+        val authorizationRevision = input.readLong().toULong()
+        val granted = input.readBoolean()
+        val mode = NotificationRuleMode.entries.getOrNull(input.readUnsignedByte()) ?: error("invalid policy mode")
+        val access = NotificationFieldAccess.entries.getOrNull(input.readUnsignedByte()) ?: error("invalid field access")
+        val policyRevision = input.readLong().toULong()
+        val count = input.readInt()
+        require(count in 0..MAX_PACKAGES) { "invalid package count" }
+        val packages = List(count) { readString(input) }
+        check(input.available() == 0) { "policy trailing bytes" }
+        NotificationAuthoritySnapshot(
+            policy = NotificationCollectionPolicyV1(mode, packages, access, policyRevision),
+            authorizationRevision = authorizationRevision,
+            granted = granted,
+        )
+    }
+
+    private fun writeString(output: DataOutputStream, value: String) {
+        val bytes = value.toByteArray(UTF8)
+        require(bytes.size <= MAX_STRING_BYTES) { "policy string is too large" }
+        output.writeInt(bytes.size)
+        output.write(bytes)
+    }
+
+    private fun readString(input: DataInputStream): String {
+        val size = input.readInt()
+        require(size in 0..MAX_STRING_BYTES) { "invalid policy string size" }
+        return String(ByteArray(size).also(input::readFully), UTF8)
+    }
+
+    companion object {
+        private const val MAGIC = "AGENT_LIFE_NOTIFICATION_AUTHORITY_V1"
+        private const val MAX_PACKAGES = 10_000
+        private const val MAX_STRING_BYTES = 1024
+        private val UTF8 = StandardCharsets.UTF_8
+        private val DEFAULT = NotificationAuthoritySnapshot(
+            policy = NotificationCollectionPolicyV1.default(),
+            authorizationRevision = 0u,
+            granted = false,
+        )
+    }
+}
+
+/** Mutation capability intentionally held only by local Android settings UI. */
+class LocalNotificationPolicyController internal constructor(
+    private val authority: PersistentNotificationPolicyAuthority,
+) {
+    fun apply(
+        policy: NotificationCollectionPolicyV1,
+        authorizationRevision: ULong,
+        granted: Boolean,
+    ) = authority.applyLocal(policy, authorizationRevision, granted)
+
+    fun revoke(authorizationRevision: ULong) {
+        val snapshot = authority.snapshot()
+        authority.applyLocal(snapshot.policy, authorizationRevision, granted = false)
+    }
+}
