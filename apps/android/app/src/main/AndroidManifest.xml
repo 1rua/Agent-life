@@ -4,6 +4,7 @@
     <uses-permission android:name="android.permission.INTERNET" />
 
     <application
+        android:name=".AgentLifeApplication"
         android:allowBackup="false"
         android:label="Agent Life"
         android:supportsRtl="true">

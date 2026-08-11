@@ -17,4 +17,5 @@ dependencies {
     implementation(project(":policy-engine"))
     implementation(project(":notification-collector"))
     implementation(project(":encrypted-store"))
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
 }
