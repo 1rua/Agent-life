@@ -10,7 +10,20 @@ export const FROZEN_NOTIFICATION_TOOLS = Object.freeze([
   "mobile.notifications.unsubscribe",
 ] as const);
 
+export const FROZEN_SMS_TOOLS = Object.freeze([
+  "mobile.sms.query",
+  "mobile.sms.subscribe",
+  "mobile.sms.unsubscribe",
+] as const);
+
 export type NotificationToolName = typeof FROZEN_NOTIFICATION_TOOLS[number];
+export type SmsToolName = typeof FROZEN_SMS_TOOLS[number];
+export type AdapterToolName = NotificationToolName | SmsToolName;
+
+const FROZEN_ADAPTER_TOOLS: readonly AdapterToolName[] = Object.freeze([
+  ...FROZEN_NOTIFICATION_TOOLS,
+  ...FROZEN_SMS_TOOLS,
+]);
 
 export const ASSISTANT_ATTACHMENT_LIMITS = Object.freeze({
   maxFiles: 4,
@@ -58,6 +71,28 @@ export type NotificationEvent = Readonly<{
   record: NotificationRecord;
 }>;
 
+export type SmsRecord = Readonly<{
+  recordId: string;
+  senderAddress: string | null;
+  threadId: string | null;
+  messageAtEpochMs: bigint;
+  observedAtEpochMs: bigint;
+  read: boolean;
+  subscriptionId: number | null;
+  body: string;
+  sourceEpoch: bigint;
+  cursorProviderId: bigint;
+  captureRevision: bigint;
+  policyRevision: bigint;
+}>;
+
+export type SmsEvent = Readonly<{
+  eventId: string;
+  subscriptionId: string;
+  binding: AdapterIdentity;
+  record: SmsRecord;
+}>;
+
 export type ZeroRetentionEvidence = Readonly<{
   provider: string;
   profileId: string;
@@ -102,6 +137,14 @@ export type NotificationQueryInput = Readonly<{
 
 export type NotificationSubscriptionInput = Readonly<{ deviceId: string; packages?: readonly string[]; content?: "metadata" | "content" }>;
 
+export type SmsQueryInput = Readonly<{
+  toolCallId: string;
+  deviceId: string;
+  limit: number;
+}>;
+
+export type SmsSubscriptionInput = Readonly<{ deviceId: string }>;
+
 export type AdapterProfile = Readonly<{
   kind: "chat" | "tool" | "event";
   id: string;
@@ -114,6 +157,7 @@ export type AdapterOptions = Readonly<{
   /** Optional locked profile ID supplied by a provider-specific adapter. */
   zeroRetentionProfileId?: string;
   onDemand?: () => Promise<readonly NotificationRecord[]>;
+  onDemandSms?: () => Promise<readonly SmsRecord[]>;
   allowNotificationContent?: boolean;
   profiles?: readonly AdapterProfile[];
 }>;
@@ -130,6 +174,33 @@ export class AdapterError extends Error {
 }
 
 const cloneRecord = (record: NotificationRecord): NotificationRecord => Object.freeze({ ...record });
+const cloneSmsRecord = (record: SmsRecord): SmsRecord => Object.freeze({ ...record });
+
+const MAX_U64 = 18_446_744_073_709_551_615n;
+const SMS_RECORD_ID = /^sms:[1-9][0-9]*$/;
+const SMS_RECORD_KEYS = new Set([
+  "recordId", "senderAddress", "threadId", "messageAtEpochMs", "observedAtEpochMs", "read",
+  "subscriptionId", "body", "sourceEpoch", "cursorProviderId", "captureRevision", "policyRevision",
+]);
+
+const isU64 = (value: unknown): value is bigint => typeof value === "bigint" && value >= 0n && value <= MAX_U64;
+
+const validateSmsRecord = (record: SmsRecord): void => {
+  if (typeof record !== "object" || record === null || Array.isArray(record)) throw new AdapterError("SMS_RECORD_INVALID");
+  const keys = Object.keys(record);
+  if (keys.length !== SMS_RECORD_KEYS.size || keys.some((key) => !SMS_RECORD_KEYS.has(key))) throw new AdapterError("SMS_RECORD_INVALID");
+  if (typeof record.recordId !== "string" || !SMS_RECORD_ID.test(record.recordId)) throw new AdapterError("SMS_RECORD_INVALID");
+  if ((record.senderAddress !== null && typeof record.senderAddress !== "string")
+    || (record.threadId !== null && typeof record.threadId !== "string")) throw new AdapterError("SMS_RECORD_INVALID");
+  if (![record.messageAtEpochMs, record.observedAtEpochMs, record.sourceEpoch, record.cursorProviderId, record.captureRevision, record.policyRevision].every(isU64)) {
+    throw new AdapterError("SMS_RECORD_INVALID");
+  }
+  if (typeof record.read !== "boolean" || typeof record.body !== "string") throw new AdapterError("SMS_RECORD_INVALID");
+  if (record.subscriptionId !== null
+    && (!Number.isSafeInteger(record.subscriptionId) || record.subscriptionId < 0 || record.subscriptionId > 2_147_483_647)) {
+    throw new AdapterError("SMS_RECORD_INVALID");
+  }
+};
 
 const bindingKey = (binding: Pick<AdapterBinding, "tenantId" | "humanPrincipalId" | "deviceId" | "agentInstanceId" | "workspaceId" | "sessionId" | "jobId">): string =>
   [binding.tenantId, binding.humanPrincipalId, binding.deviceId, binding.agentInstanceId, binding.workspaceId, binding.sessionId, binding.jobId ?? ""].join("\u0000");
@@ -170,7 +241,10 @@ const assertNoModelIdentity = (value: object): void => {
   // Principal, operation and session identity are supplied by the authenticated
   // adapter runtime.  Rejecting these fields catches accidental model injection
   // instead of silently ignoring an attacker-controlled value.
-  for (const key of ["tenantId", "humanPrincipalId", "agentInstanceId", "workspaceId", "sessionId", "jobId", "operationId"]) {
+  for (const key of [
+    "tenantId", "humanPrincipalId", "agentInstanceId", "workspaceId", "sessionId", "jobId", "operationId",
+    "model", "modelId", "modelIdentity", "providerModelId",
+  ]) {
     if (hasOwn(value, key)) throw new AdapterError("MODEL_IDENTITY_FIELD");
   }
 };
@@ -191,6 +265,9 @@ export const isCurrentZeroRetention = (evidence: ZeroRetentionEvidence | undefin
 type StoredOperation = Readonly<{ sessionId: string; mode: NotificationQueryInput["mode"]; packagesKey: string; content: "metadata" | "content"; result: readonly NotificationRecord[] }>;
 type StoredEvent = Readonly<{ event: NotificationEvent; acknowledged: boolean }>;
 type StoredSubscription = Readonly<{ binding: AdapterBinding; packages?: readonly string[]; content: "metadata" | "content" }>;
+type StoredSmsOperation = Readonly<{ sessionId: string; deviceId: string; limit: number; result: readonly SmsRecord[] }>;
+type StoredSmsEvent = Readonly<{ event: SmsEvent; acknowledged: boolean }>;
+type StoredSmsSubscription = Readonly<{ binding: AdapterBinding }>;
 
 /** Deterministic paired Bridge fake.  No endpoint, socket, or generic dial API is exposed. */
 class InMemoryPairedBridge {
@@ -198,14 +275,20 @@ class InMemoryPairedBridge {
   #generation = 0n;
   #sessionOpen = false;
   #operations = new Map<string, StoredOperation>();
+  #operationKinds = new Map<string, "notification" | "sms">();
+  #smsOperations = new Map<string, StoredSmsOperation>();
   #claims = new Map<string, number>();
   #subscriptions = new Map<string, StoredSubscription>();
   #events = new Map<string, StoredEvent>();
+  #smsSubscriptions = new Map<string, StoredSmsSubscription>();
+  #smsEvents = new Map<string, StoredSmsEvent>();
   #eventSequence = 0;
   #onDemand: (() => Promise<readonly NotificationRecord[]>) | undefined;
+  #onDemandSms: (() => Promise<readonly SmsRecord[]>) | undefined;
 
-  constructor(onDemand: (() => Promise<readonly NotificationRecord[]>) | undefined) {
+  constructor(onDemand: (() => Promise<readonly NotificationRecord[]>) | undefined, onDemandSms: (() => Promise<readonly SmsRecord[]>) | undefined) {
     this.#onDemand = onDemand;
+    this.#onDemandSms = onDemandSms;
   }
 
   async open(binding: PairedBinding): Promise<FakeSession> {
@@ -239,6 +322,7 @@ class InMemoryPairedBridge {
 
   async query(binding: AdapterBinding, operationId: string, sessionId: string, mode: NotificationQueryInput["mode"], packages: readonly string[] | undefined, content: "metadata" | "content"): Promise<readonly NotificationRecord[]> {
     this.#assertSession(binding);
+    if (this.#operationKinds.get(operationId) === "sms") throw new AdapterError("OPERATION_PARAMETERS_MISMATCH");
     const previous = this.#operations.get(operationId);
     if (previous) {
       if (previous.sessionId !== sessionId) throw new AdapterError("OPERATION_IDENTITY_MISMATCH");
@@ -249,6 +333,27 @@ class InMemoryPairedBridge {
     const filtered = packages ? captured.filter((record) => record.packageId === null || packages.includes(record.packageId)) : captured;
     const result = Object.freeze(filtered.map((record) => content === "metadata" ? Object.freeze({ ...record, content: null }) : record));
     this.#operations.set(operationId, Object.freeze({ sessionId, mode, packagesKey: packages?.join("\u0000") ?? "", content, result }));
+    this.#operationKinds.set(operationId, "notification");
+    this.#claims.set(operationId, (this.#claims.get(operationId) ?? 0) + 1);
+    return result;
+  }
+
+  async querySms(binding: AdapterBinding, operationId: string, sessionId: string, deviceId: string, limit: number): Promise<readonly SmsRecord[]> {
+    this.#assertSession(binding);
+    if (this.#operationKinds.get(operationId) === "notification") throw new AdapterError("OPERATION_PARAMETERS_MISMATCH");
+    const previous = this.#smsOperations.get(operationId);
+    if (previous) {
+      if (previous.sessionId !== sessionId) throw new AdapterError("OPERATION_IDENTITY_MISMATCH");
+      if (previous.deviceId !== deviceId || previous.limit !== limit) throw new AdapterError("OPERATION_PARAMETERS_MISMATCH");
+      return previous.result;
+    }
+    const captured = this.#onDemandSms ? await this.#onDemandSms() : [];
+    const result = Object.freeze([...captured].map((record) => {
+      validateSmsRecord(record);
+      return cloneSmsRecord(record);
+    }).slice(0, limit));
+    this.#smsOperations.set(operationId, Object.freeze({ sessionId, deviceId, limit, result }));
+    this.#operationKinds.set(operationId, "sms");
     this.#claims.set(operationId, (this.#claims.get(operationId) ?? 0) + 1);
     return result;
   }
@@ -292,6 +397,43 @@ class InMemoryPairedBridge {
     this.#events.set(event.eventId, Object.freeze({ event: stored.event, acknowledged: true }));
     return stored.event;
   }
+
+  async subscribeSms(binding: AdapterBinding, subscriptionId: string): Promise<void> {
+    this.#assertSession(binding);
+    this.#smsSubscriptions.set(subscriptionId, Object.freeze({
+      binding: Object.freeze({ ...binding, authorizedDeviceIds: [...binding.authorizedDeviceIds] }),
+    }));
+  }
+
+  async unsubscribeSms(binding: AdapterBinding, subscriptionId: string): Promise<boolean> {
+    this.#assertSession(binding);
+    const subscription = this.#smsSubscriptions.get(subscriptionId);
+    if (!subscription || bindingKey(subscription.binding) !== bindingKey(binding)) return false;
+    this.#smsSubscriptions.delete(subscriptionId);
+    return true;
+  }
+
+  publishSms(subscriptionId: string, record: SmsRecord): SmsEvent {
+    const subscription = this.#smsSubscriptions.get(subscriptionId);
+    if (!subscription) throw new AdapterError("SUBSCRIPTION_NOT_FOUND");
+    validateSmsRecord(record);
+    const event = Object.freeze({
+      eventId: `sms-event-${++this.#eventSequence}`,
+      subscriptionId,
+      binding: subscription.binding,
+      record: cloneSmsRecord(record),
+    });
+    this.#smsEvents.set(event.eventId, Object.freeze({ event, acknowledged: false }));
+    return event;
+  }
+
+  acknowledgeSms(event: SmsEvent): SmsEvent {
+    const stored = this.#smsEvents.get(event.eventId);
+    if (!stored || stored.event.subscriptionId !== event.subscriptionId
+      || bindingKey(stored.event.binding) !== bindingKey(event.binding)) throw new AdapterError("EVENT_NOT_FOUND");
+    this.#smsEvents.set(event.eventId, Object.freeze({ event: stored.event, acknowledged: true }));
+    return stored.event;
+  }
 }
 
 export type FakeSession = Readonly<{
@@ -303,13 +445,19 @@ export type FakeAdapter = Readonly<{
   pair: (binding: PairedBinding) => Promise<FakeSession>;
   reconnect: (binding?: PairedBinding) => Promise<FakeSession>;
   binding: () => PairedBinding | null;
-  tools: () => readonly NotificationToolName[];
+  tools: () => readonly AdapterToolName[];
   queryNotifications: (input: NotificationQueryInput) => Promise<readonly NotificationRecord[]>;
   subscribeNotifications: (input: NotificationSubscriptionInput) => Promise<Readonly<{ subscriptionId: string }>>;
   unsubscribeNotifications: () => Promise<Readonly<{ removed: boolean }>>;
   receiveNotificationEvent: (event: NotificationEvent) => Promise<Readonly<{ eventId: string; subscriptionId: string; record: NotificationRecord }>>;
   /** Test-only server event source; production adapters receive this from the Bridge event hook. */
   emitAutoSend: (record: NotificationRecord) => NotificationEvent | null;
+  querySms: (input: SmsQueryInput) => Promise<readonly SmsRecord[]>;
+  subscribeSms: (input: SmsSubscriptionInput) => Promise<Readonly<{ subscriptionId: string }>>;
+  unsubscribeSms: () => Promise<Readonly<{ removed: boolean }>>;
+  receiveSmsEvent: (event: SmsEvent) => Promise<Readonly<{ eventId: string; subscriptionId: string; record: SmsRecord }>>;
+  /** Test-only server event source; production adapters receive this from the Bridge event hook. */
+  emitSmsAutoSend: (record: SmsRecord) => SmsEvent;
   sendAssistantMessage: (input: AssistantMessageInput) => Promise<AssistantMessageResult>;
   invokeTool: (name: string, input: unknown) => Promise<unknown>;
   operationClaims: () => readonly Readonly<{ operationId: string; claims: number }>[];
@@ -330,11 +478,12 @@ const validateProfiles = (profiles: readonly AdapterProfile[] | undefined): void
 export const createFakeAdapter = (options: AdapterOptions): FakeAdapter => {
   validateProfiles(options.profiles);
   const context = Object.freeze({ ...options.context, authorizedDeviceIds: [...options.context.authorizedDeviceIds] });
-  const bridge = new InMemoryPairedBridge(options.onDemand);
+  const bridge = new InMemoryPairedBridge(options.onDemand, options.onDemandSms);
   const allowNotificationContent = options.allowNotificationContent === true;
   let pairedBinding: PairedBinding | null = null;
   let session: FakeSession | null = null;
   let subscriptionId: string | null = null;
+  let smsSubscriptionId: string | null = null;
   let lastMetadata: Readonly<{ messageId: string; attachmentCount: number; attachments: readonly AssistantAttachment[] }> | null = null;
   const trace: TraceEntry[] = [];
   const acknowledged: string[] = [];
@@ -424,6 +573,61 @@ export const createFakeAdapter = (options: AdapterOptions): FakeAdapter => {
       if (!subscriptionId) throw new AdapterError("SUBSCRIPTION_NOT_FOUND");
       return bridge.publish(subscriptionId, record);
     },
+    querySms: async (input) => {
+      assertObject(input);
+      assertNoModelIdentity(input as object);
+      assertExactKeys(input, ["toolCallId", "deviceId", "limit"]);
+      if (typeof input.toolCallId !== "string" || input.toolCallId.length === 0) throw new AdapterError("TOOL_CALL_ID_INVALID");
+      if (!Number.isSafeInteger(input.limit) || input.limit < 1 || input.limit > 10_000) throw new AdapterError("LIMIT_INVALID");
+      assertConnected();
+      assertDevice(input.deviceId);
+      assertZeroRetention();
+      const result = await bridge.querySms(context, input.toolCallId, context.sessionId, input.deviceId, input.limit);
+      trace.push({ kind: "sms_query", operationId: input.toolCallId });
+      return result;
+    },
+    subscribeSms: async (input) => {
+      assertObject(input);
+      assertNoModelIdentity(input as object);
+      assertExactKeys(input, ["deviceId"]);
+      assertConnected();
+      assertDevice(input.deviceId);
+      if (smsSubscriptionId) await bridge.unsubscribeSms(context, smsSubscriptionId);
+      smsSubscriptionId = `sms-sub-${context.tenantId}-${context.humanPrincipalId}-${input.deviceId}-${context.workspaceId}-${context.sessionId}`;
+      await bridge.subscribeSms(context, smsSubscriptionId);
+      trace.push({ kind: "sms_subscribe" });
+      return Object.freeze({ subscriptionId: smsSubscriptionId });
+    },
+    unsubscribeSms: async () => {
+      assertConnected();
+      if (!smsSubscriptionId) return Object.freeze({ removed: false });
+      const removed = await bridge.unsubscribeSms(context, smsSubscriptionId);
+      smsSubscriptionId = null;
+      trace.push({ kind: "sms_unsubscribe" });
+      return Object.freeze({ removed });
+    },
+    receiveSmsEvent: async (event) => {
+      assertConnected();
+      if (!smsSubscriptionId || event.subscriptionId !== smsSubscriptionId || bindingKey(event.binding) !== bindingKey(context)) {
+        throw new AdapterError("EVENT_BINDING_MISMATCH");
+      }
+      assertZeroRetention();
+      const canonical = bridge.acknowledgeSms(event);
+      if (deliveredEvents.has(event.eventId)) return Object.freeze({
+        eventId: canonical.eventId,
+        subscriptionId: canonical.subscriptionId,
+        record: canonical.record,
+      });
+      deliveredEvents.add(event.eventId);
+      acknowledged.push(event.eventId);
+      trace.push({ kind: "sms_event", eventId: event.eventId });
+      return Object.freeze({ eventId: canonical.eventId, subscriptionId: canonical.subscriptionId, record: canonical.record });
+    },
+    emitSmsAutoSend: (record) => {
+      assertConnected();
+      if (!smsSubscriptionId) throw new AdapterError("SUBSCRIPTION_NOT_FOUND");
+      return bridge.publishSms(smsSubscriptionId, record);
+    },
     sendAssistantMessage: async (input) => {
       assertObject(input);
       assertNoModelIdentity(input as object);
@@ -457,9 +661,17 @@ export const createFakeAdapter = (options: AdapterOptions): FakeAdapter => {
       if (name === "mobile.notifications.query") return adapter.queryNotifications(input as NotificationQueryInput);
       if (name === "mobile.notifications.subscribe") return adapter.subscribeNotifications(input as NotificationSubscriptionInput);
       if (name === "mobile.notifications.unsubscribe") return adapter.unsubscribeNotifications();
+      if (name === "mobile.sms.query") return adapter.querySms(input as SmsQueryInput);
+      if (name === "mobile.sms.subscribe") return adapter.subscribeSms(input as SmsSubscriptionInput);
+      if (name === "mobile.sms.unsubscribe") {
+        assertObject(input);
+        assertNoModelIdentity(input);
+        assertExactKeys(input, []);
+        return adapter.unsubscribeSms();
+      }
       throw new AdapterError("UNKNOWN_TOOL");
     },
-    tools: () => FROZEN_NOTIFICATION_TOOLS,
+    tools: () => FROZEN_ADAPTER_TOOLS,
     operationClaims: () => bridge.operationClaims(),
     acknowledgedEvents: () => Object.freeze([...acknowledged]),
     assistantMetadata: () => lastMetadata,

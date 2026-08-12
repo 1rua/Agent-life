@@ -64,7 +64,7 @@ describe("shared Agent adapter contract", () => {
       packageId: null,
       title: null,
       content: null,
-    });
+    })!;
 
     await expect(adapter.receiveNotificationEvent(event)).resolves.toMatchObject({
       eventId: "event-1",

@@ -21,4 +21,18 @@ describe("Hermes adapter", () => {
     ] }))
       .toThrowError("AUTHORITATIVE_PROFILE_DUPLICATE");
   });
+
+  it("routes the closed SMS operations through the shared adapter", async () => {
+    const adapter = createHermesAdapter({
+      context: fixtureContext(),
+      zeroRetention: fixtureZeroRetentionEvidence(),
+      onDemandSms: async () => [],
+    });
+    await adapter.pair(fixtureBinding());
+    await expect(adapter.invokeTool("mobile.sms.query", { toolCallId: "hermes-sms", deviceId: "device-a", limit: 1 }))
+      .resolves.toEqual([]);
+    expect(HERMES_PLUGIN_MANIFEST.tools).toEqual([
+      "mobile.sms.query", "mobile.sms.subscribe", "mobile.sms.unsubscribe",
+    ]);
+  });
 });
