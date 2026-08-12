@@ -43,5 +43,51 @@ enum class SmsSyncInterval {
             MINUTES_15 -> 15 * 60 * 1000L
             MINUTES_30 -> 30 * 60 * 1000L
             MINUTES_60 -> 60 * 60 * 1000L
+    }
+}
+
+/** A locally scheduled SMS batch is not an Agent-originated request. */
+data class LocalSmsAutoSendRequest(
+    val policyRevision: ULong,
+    val authorizationRevision: ULong,
+)
+
+/** Snapshot supplied only by the app-local SMS consent authority. */
+data class LocalSmsAutoSendState(
+    val grant: CapabilityGrant?,
+    val authorizationRevision: ULong,
+)
+
+/**
+ * Mints the existing typed AUTO_SEND access object for a local scheduler. It
+ * deliberately does not inspect [CapabilityGrant.agentMayRequest]: that flag
+ * controls remote Agent requests, not device-local periodic consent.
+ */
+class LocalSmsAutoSendAuthorizer {
+    fun authorize(
+        request: LocalSmsAutoSendRequest,
+        localState: LocalSmsAutoSendState,
+        availability: CapabilityAvailability,
+    ): AuthorizedAutoSendSubscription? {
+        val grant = localState.grant ?: return null
+        if (availability != CapabilityAvailability.READY ||
+            grant.capability != MobileDataCapability.SMS ||
+            grant.filter != CapabilityFilter.Sms ||
+            !grant.autoSendEnabled ||
+            grant.policyRevision != request.policyRevision ||
+            localState.authorizationRevision != request.authorizationRevision
+        ) {
+            return null
         }
+        return AuthorizedCapabilityAccess.AutoSend(
+            AgentDataRequest(
+                requestId = "local-sms-auto-sync",
+                capability = MobileDataCapability.SMS,
+                mode = DataSyncMode.AUTO_SEND,
+                filter = CapabilityFilter.Sms,
+                policyRevision = request.policyRevision,
+            ),
+            grant.policyRevision,
+        )
+    }
 }

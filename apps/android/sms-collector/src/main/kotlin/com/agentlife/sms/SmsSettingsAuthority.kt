@@ -72,7 +72,10 @@ class PersistentSmsSettingsAuthority(
     fun snapshot(): SmsSettingsSnapshot = synchronized(lock) { current }
 
     fun capabilityGrant(): CapabilityGrant? {
-        val state = snapshot()
+        return capabilityGrant(snapshot())
+    }
+
+    internal fun capabilityGrant(state: SmsSettingsSnapshot): CapabilityGrant? {
         if (state.corrupted || !state.granted) return null
         return CapabilityGrant(
             capability = MobileDataCapability.SMS,

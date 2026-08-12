@@ -4,15 +4,11 @@ import android.app.job.JobInfo
 import android.app.job.JobScheduler
 import android.content.ComponentName
 import android.content.Context
-import com.agentlife.capability.AgentDataRequest
-import com.agentlife.capability.AgentRequestAuthorization
-import com.agentlife.capability.AgentRequestAuthorizer
 import com.agentlife.capability.AuthorizedAutoSendSubscription
 import com.agentlife.capability.CapabilityAvailability
-import com.agentlife.capability.CapabilityFilter
-import com.agentlife.capability.DataSyncMode
-import com.agentlife.capability.DefaultAgentRequestAuthorizer
-import com.agentlife.capability.MobileDataCapability
+import com.agentlife.capability.LocalSmsAutoSendAuthorizer
+import com.agentlife.capability.LocalSmsAutoSendRequest
+import com.agentlife.capability.LocalSmsAutoSendState
 import com.agentlife.capability.SmsSyncInterval
 
 /** Platform-neutral schedule control owned by the local settings composition. */
@@ -23,7 +19,7 @@ interface SmsJobScheduler {
 
 /** Android framework boundary kept small enough for host-side scheduler tests. */
 internal interface AndroidSmsJobScheduler {
-    fun schedulePersistedPeriodic(jobId: Int, periodMs: Long)
+    fun schedulePersistedPeriodic(jobId: Int, periodMs: Long): Boolean
     fun cancel(jobId: Int)
 }
 
@@ -32,6 +28,8 @@ internal data class ScheduledPeriodicSmsJob(
     val periodMs: Long,
     val persisted: Boolean,
 )
+
+class SmsJobSchedulingException : IllegalStateException("SMS periodic job scheduling failed")
 
 /** Android [JobScheduler] adapter; it creates only the SMS periodic job. */
 class AndroidSmsSyncScheduler private constructor(
@@ -46,7 +44,7 @@ class AndroidSmsSyncScheduler private constructor(
         if (periodMs == null) {
             cancel()
         } else {
-            jobs.schedulePersistedPeriodic(JOB_ID, periodMs)
+            if (!jobs.schedulePersistedPeriodic(JOB_ID, periodMs)) throw SmsJobSchedulingException()
         }
     }
 
@@ -65,14 +63,13 @@ private class AndroidSmsJobSchedulerAdapter(context: Context) : AndroidSmsJobSch
     }
     private val service = ComponentName(context, SmsSyncJobService::class.java)
 
-    override fun schedulePersistedPeriodic(jobId: Int, periodMs: Long) {
+    override fun schedulePersistedPeriodic(jobId: Int, periodMs: Long): Boolean =
         scheduler.schedule(
             JobInfo.Builder(jobId, service)
                 .setPeriodic(periodMs)
                 .setPersisted(true)
                 .build(),
-        )
-    }
+        ) == JobScheduler.RESULT_SUCCESS
 
     override fun cancel(jobId: Int) {
         scheduler.cancel(jobId)
@@ -95,7 +92,7 @@ data class SmsScheduledRunResult(
 class SmsRuntime(
     private val settingsAuthority: PersistentSmsSettingsAuthority,
     private val autoSyncRunner: SmsAutoSyncRunner?,
-    private val authorizer: AgentRequestAuthorizer = DefaultAgentRequestAuthorizer(),
+    private val localAutoSendAuthorizer: LocalSmsAutoSendAuthorizer = LocalSmsAutoSendAuthorizer(),
 ) {
     suspend fun runScheduled(readSmsPermissionGranted: Boolean): SmsScheduledRunResult {
         val snapshot = settingsAuthority.snapshot()
@@ -105,7 +102,7 @@ class SmsRuntime(
             return SmsScheduledRunResult(ran = false, retryPending = false)
         }
 
-        val subscription = authorizedAutoSendSubscription(snapshot.policyRevision) ?: return SmsScheduledRunResult(
+        val subscription = authorizedAutoSendSubscription(snapshot) ?: return SmsScheduledRunResult(
             ran = false,
             retryPending = false,
         )
@@ -119,20 +116,19 @@ class SmsRuntime(
         }
     }
 
-    private fun authorizedAutoSendSubscription(policyRevision: ULong): AuthorizedAutoSendSubscription? {
-        val authorization = authorizer.authorize(
-            request = AgentDataRequest(
-                requestId = "local-sms-auto-sync",
-                capability = MobileDataCapability.SMS,
-                mode = DataSyncMode.AUTO_SEND,
-                filter = CapabilityFilter.Sms,
-                policyRevision = policyRevision,
+    private fun authorizedAutoSendSubscription(snapshot: SmsSettingsSnapshot): AuthorizedAutoSendSubscription? {
+        val current = settingsAuthority.snapshot()
+        return localAutoSendAuthorizer.authorize(
+            request = LocalSmsAutoSendRequest(
+                policyRevision = snapshot.policyRevision,
+                authorizationRevision = snapshot.authorizationRevision,
             ),
-            grant = settingsAuthority.capabilityGrant(),
+            localState = LocalSmsAutoSendState(
+                grant = settingsAuthority.capabilityGrant(current),
+                authorizationRevision = current.authorizationRevision,
+            ),
             availability = CapabilityAvailability.READY,
         )
-        return (authorization as? AgentRequestAuthorization.Allowed)
-            ?.access as? AuthorizedAutoSendSubscription
     }
 
     companion object {

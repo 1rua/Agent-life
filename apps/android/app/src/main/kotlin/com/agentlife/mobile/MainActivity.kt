@@ -138,7 +138,12 @@ class MainActivity : Activity() {
                         autoSendEnabled = autoSend.isChecked,
                         agentMayRequest = agentRequest.isChecked,
                     )
-                    app.smsJobScheduler().schedule(selectedInterval)
+                    try {
+                        app.smsJobScheduler().schedule(selectedInterval)
+                    } catch (_: Throwable) {
+                        status.text = "SMS settings were saved, but automatic scheduling failed."
+                        return@setOnClickListener
+                    }
                     renderSmsSettings()
                 } catch (_: Throwable) {
                     status.text = "SMS settings could not be saved."

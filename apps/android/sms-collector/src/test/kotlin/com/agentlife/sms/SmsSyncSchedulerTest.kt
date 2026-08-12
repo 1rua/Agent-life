@@ -2,6 +2,7 @@ package com.agentlife.sms
 
 import com.agentlife.capability.SmsSyncInterval
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -35,12 +36,24 @@ class SmsSyncSchedulerTest {
         )
     }
 
-    private class RecordingAndroidSmsJobScheduler : AndroidSmsJobScheduler {
+    @Test
+    fun `periodic schedule failure is surfaced to the local settings caller`() {
+        val jobs = RecordingAndroidSmsJobScheduler(scheduleSucceeds = false)
+
+        assertThrows(SmsJobSchedulingException::class.java) {
+            AndroidSmsSyncScheduler(jobs).schedule(SmsSyncInterval.MINUTES_15)
+        }
+    }
+
+    private class RecordingAndroidSmsJobScheduler(
+        private val scheduleSucceeds: Boolean = true,
+    ) : AndroidSmsJobScheduler {
         val periodicJobs = mutableListOf<ScheduledPeriodicSmsJob>()
         val cancelledJobIds = mutableListOf<Int>()
 
-        override fun schedulePersistedPeriodic(jobId: Int, periodMs: Long) {
+        override fun schedulePersistedPeriodic(jobId: Int, periodMs: Long): Boolean {
             periodicJobs += ScheduledPeriodicSmsJob(jobId, periodMs, persisted = true)
+            return scheduleSucceeds
         }
 
         override fun cancel(jobId: Int) {
