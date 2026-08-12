@@ -54,6 +54,13 @@ class NotificationAgentQueryGateway(
     private val completedOperations = mutableMapOf<String, CachedOperation>()
 
     suspend fun query(request: NotificationAgentQueryRequest): NotificationCaptureResult = operationLock.withLock {
+        val snapshot = authority.snapshot()
+        authorizationFailure(request, snapshot)?.let { reason ->
+            return@withLock failed(reason, snapshot.policy.policyRevision).also { result ->
+                completedOperations[request.operationId] = CachedOperation(request, result)
+            }
+        }
+
         completedOperations[request.operationId]?.let { cached ->
             if (cached.request != request) {
                 throw NotificationQueryRejected("OPERATION_IDENTITY_MISMATCH")
@@ -61,30 +68,39 @@ class NotificationAgentQueryGateway(
             return@withLock cached.result
         }
 
-        val snapshot = authority.snapshot()
-        val result = when {
-            request.policyRevision != snapshot.policy.policyRevision -> failed(
-                "AUTHORIZATION_REVISION_STALE",
-                snapshot.policy.policyRevision,
-            )
-            snapshot.corrupted -> failed("LOCAL_POLICY_CORRUPTED", snapshot.policy.policyRevision)
-            !snapshot.granted -> failed("LOCAL_GRANT_REQUIRED", snapshot.policy.policyRevision)
-            request.filter.fieldAccess == NotificationFieldAccess.CONTENT &&
-                snapshot.policy.fieldAccess != NotificationFieldAccess.CONTENT -> failed(
-                    "FIELD_ACCESS_NOT_GRANTED",
-                    snapshot.policy.policyRevision,
-                )
-            else -> captureAndFilter(request)
-        }
+        val captured = collector.captureOnDemand(
+            OnDemandNotificationRead(request.operationId, request.policyRevision, request.limit),
+        )
+        val current = authority.snapshot()
+        val result = authorizationFailure(request, current)?.let { reason ->
+            failed(reason, current.policy.policyRevision)
+        } ?: filterCaptured(request, captured)
 
         completedOperations[request.operationId] = CachedOperation(request, result)
         result
     }
 
-    private suspend fun captureAndFilter(request: NotificationAgentQueryRequest): NotificationCaptureResult {
-        val captured = collector.captureOnDemand(
-            OnDemandNotificationRead(request.operationId, request.policyRevision, request.limit),
-        )
+    private fun authorizationFailure(
+        request: NotificationAgentQueryRequest,
+        snapshot: com.agentlife.policy.NotificationAuthoritySnapshot,
+    ): String? {
+        return when {
+            request.policyRevision != snapshot.policy.policyRevision -> "AUTHORIZATION_REVISION_STALE"
+            snapshot.corrupted -> "LOCAL_POLICY_CORRUPTED"
+            !snapshot.granted -> "LOCAL_GRANT_REQUIRED"
+            request.filter.fieldAccess == NotificationFieldAccess.CONTENT &&
+                snapshot.policy.fieldAccess != NotificationFieldAccess.CONTENT -> "FIELD_ACCESS_NOT_GRANTED"
+            request.filter.packageIds.isNotEmpty() &&
+                request.filter.packageIds.any { !matches(snapshot.policy.mode, snapshot.policy.packageIds, it) } ->
+                "PACKAGE_NOT_ALLOWED"
+            else -> null
+        }
+    }
+
+    private fun filterCaptured(
+        request: NotificationAgentQueryRequest,
+        captured: NotificationCaptureResult,
+    ): NotificationCaptureResult {
         return captured.copy(records = captured.records.mapNotNull { record ->
             when (record) {
                 is NotificationRecordV1.Upsert -> {
@@ -104,6 +120,15 @@ class NotificationAgentQueryGateway(
                 }
             }
         })
+    }
+
+    private fun matches(
+        mode: com.agentlife.core.model.NotificationRuleMode,
+        packageIds: List<String>,
+        packageName: String,
+    ): Boolean = when (mode) {
+        com.agentlife.core.model.NotificationRuleMode.ALLOWLIST -> packageName in packageIds
+        com.agentlife.core.model.NotificationRuleMode.DENYLIST -> packageName !in packageIds
     }
 
     private fun failed(reason: String, revision: ULong): NotificationCaptureResult = NotificationCaptureResult(

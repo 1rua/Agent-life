@@ -63,6 +63,42 @@ class NotificationAgentQueryGatewayTest {
     }
 
     @Test
+    fun cached_result_is_rechecked_against_current_grant_before_returning() = runSuspend {
+        val authority = authorityWithContentPolicy()
+        val countingCollector = CountingNotificationCollector(realCollectorWithOneRecord())
+        val gateway = NotificationAgentQueryGateway(countingCollector, authority)
+        val request = NotificationAgentQueryRequest("cached-revoked", 1u, 10)
+
+        gateway.query(request)
+        authority.localController().revoke(2u)
+
+        val result = gateway.query(request)
+
+        assertFailed(result, "LOCAL_GRANT_REQUIRED", 1u)
+        assertEquals(1, countingCollector.captureCount)
+    }
+
+    @Test
+    fun cached_result_is_rechecked_against_current_revision_before_returning() = runSuspend {
+        val authority = authorityWithContentPolicy()
+        val countingCollector = CountingNotificationCollector(realCollectorWithOneRecord())
+        val gateway = NotificationAgentQueryGateway(countingCollector, authority)
+        val request = NotificationAgentQueryRequest("cached-stale", 1u, 10)
+
+        gateway.query(request)
+        authority.localController().apply(
+            authority.snapshot().policy.copy(policyRevision = 2u),
+            authorizationRevision = 2u,
+            granted = true,
+        )
+
+        val result = gateway.query(request)
+
+        assertFailed(result, "AUTHORIZATION_REVISION_STALE", 2u)
+        assertEquals(1, countingCollector.captureCount)
+    }
+
+    @Test
     fun stale_policy_revision_returns_failed_capture() = runSuspend {
         val result = gatewayWithContentPolicyAndOneRecord().query(
             NotificationAgentQueryRequest("stale", 0u, 10),
@@ -169,6 +205,51 @@ class NotificationAgentQueryGatewayTest {
     }
 
     @Test
+    fun non_empty_package_filters_are_pre_gated_for_allowlist_and_denylist() = runSuspend {
+        val allowlistAuthority = authorityWithContentPolicy()
+        val allowlistCollector = countingCollectorWithOneRecord(allowlistAuthority)
+        val allowlistResult = NotificationAgentQueryGateway(allowlistCollector, allowlistAuthority).query(
+            NotificationAgentQueryRequest(
+                operationId = "pre-gate-allowlist-package",
+                policyRevision = 1u,
+                limit = 10,
+                filter = NotificationQueryFilter(listOf("com.blocked")),
+            ),
+        )
+        assertFailed(allowlistResult, "PACKAGE_NOT_ALLOWED", 1u)
+        assertEquals(0, allowlistCollector.captureCount)
+
+        val denylistAuthority = authorityWithDenylistContentPolicy()
+        val denylistCollector = countingCollectorWithOneRecord(denylistAuthority)
+        val denylistResult = NotificationAgentQueryGateway(denylistCollector, denylistAuthority).query(
+            NotificationAgentQueryRequest(
+                operationId = "pre-gate-denylist-package",
+                policyRevision = 1u,
+                limit = 10,
+                filter = NotificationQueryFilter(listOf("com.chat")),
+            ),
+        )
+        assertFailed(denylistResult, "PACKAGE_NOT_ALLOWED", 1u)
+        assertEquals(0, denylistCollector.captureCount)
+    }
+
+    @Test
+    fun authority_is_rechecked_after_real_capture_before_returning_records() = runSuspend {
+        val authority = authorityWithContentPolicy()
+        val countingCollector = CountingNotificationCollector(
+            realCollectorWithOneRecord(),
+            afterCapture = { authority.localController().revoke(2u) },
+        )
+
+        val result = NotificationAgentQueryGateway(countingCollector, authority).query(
+            NotificationAgentQueryRequest("capture-revoked", 1u, 10),
+        )
+
+        assertFailed(result, "LOCAL_GRANT_REQUIRED", 1u)
+        assertEquals(1, countingCollector.captureCount)
+    }
+
+    @Test
     fun invalid_operation_id_and_query_limits_are_rejected() {
         assertRejectedCode("OPERATION_ID_INVALID") {
             NotificationAgentQueryRequest("   ", 1u, 10)
@@ -250,6 +331,21 @@ private fun authorityWithMetadataPolicy(): PersistentNotificationPolicyAuthority
     return authority
 }
 
+private fun authorityWithDenylistContentPolicy(): PersistentNotificationPolicyAuthority {
+    val authority = PersistentNotificationPolicyAuthority(InMemoryNotificationPolicyPersistence())
+    authority.localController().apply(
+        NotificationCollectionPolicyV1(
+            NotificationRuleMode.DENYLIST,
+            listOf("com.chat"),
+            NotificationFieldAccess.CONTENT,
+            1u,
+        ),
+        authorizationRevision = 1u,
+        granted = true,
+    )
+    return authority
+}
+
 private fun realCollectorWithOneRecord(): AndroidNotificationCollector {
     val authority = authorityWithContentPolicy()
     return AndroidNotificationCollector(authorization = authority).also { collector ->
@@ -274,11 +370,21 @@ private fun countingCollector(authority: PersistentNotificationPolicyAuthority):
         },
     )
 
+private fun countingCollectorWithOneRecord(
+    authority: PersistentNotificationPolicyAuthority,
+): CountingNotificationCollector = CountingNotificationCollector(
+    AndroidNotificationCollector(authorization = authority).also {
+        it.applyPolicyBlocking(authority.snapshot().policy)
+        it.onPosted(raw("com.mail", "mail", "subject", "body"))
+    },
+)
+
 private fun raw(packageName: String, key: String, title: String, body: String): RawNotification =
     RawNotification(packageName, key, packageName, title, body, null, 1)
 
 private class CountingNotificationCollector(
     private val delegate: NotificationCollector,
+    private val afterCapture: (() -> Unit)? = null,
 ) : NotificationCollector {
     var captureCount: Int = 0
         private set
@@ -289,7 +395,7 @@ private class CountingNotificationCollector(
         request: com.agentlife.core.model.OnDemandNotificationRead,
     ): com.agentlife.core.model.NotificationCaptureResult {
         captureCount += 1
-        return delegate.captureOnDemand(request)
+        return delegate.captureOnDemand(request).also { afterCapture?.invoke() }
     }
 
     override fun observeAutoSend() = delegate.observeAutoSend()
