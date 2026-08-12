@@ -26,10 +26,7 @@ data class NotificationCollectionPolicyV1(
 
     init {
         require(packageIds.none { it.isBlank() }) { "package IDs must not be blank" }
-        require(packageIds.size == packageIds.toSet().size) { "package IDs must be unique" }
-        require(packageIds == packageIds.sortedWith(Comparator { left, right ->
-            compareUnicodeCodePoints(left, right)
-        })) {
+        require(packageIds == sortNotificationPackageIds(packageIds)) {
             "package IDs must be sorted by Unicode code point"
         }
     }
@@ -43,16 +40,6 @@ data class NotificationCollectionPolicyV1(
             policyRevision = 0u,
         )
     }
-}
-
-private fun compareUnicodeCodePoints(left: String, right: String): Int {
-    val a = left.codePoints().toArray()
-    val b = right.codePoints().toArray()
-    val common = minOf(a.size, b.size)
-    for (index in 0 until common) {
-        if (a[index] != b[index]) return a[index].compareTo(b[index])
-    }
-    return a.size.compareTo(b.size)
 }
 
 /** Task-6 authorization result consumed by the deterministic Android policy. */
