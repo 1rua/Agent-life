@@ -358,6 +358,56 @@ describe("in-memory assistant operation service", () => {
     expect(received).toEqual([audioAttachment()]);
   });
 
+  it("accepts only normalized closed attachment metadata at the Bridge ingress", async () => {
+    const current = session();
+    let resolved: unknown;
+    let received: unknown;
+    const service = new AssistantChatService({
+      boundSession: current, boundConnectionGeneration: 1n,
+      authorize: ({ policyRevision }) => ({ allowed: true, policyRevision }),
+      resolveArtifact: async ({ attachment }) => {
+        resolved = attachment;
+        return committedAudio(current);
+      },
+      respond: async (_text, attachments) => { received = attachments; return "audio reply"; },
+    });
+    const uppercaseDigestAttachment = { ...audioAttachment(), sha256: "C".repeat(64) };
+
+    await expect(service.send({
+      operationId: "normalized-audio", messageId: "normalized-message", session: current, text: "listen",
+      zeroRetention: zeroRetention(), attachments: [uppercaseDigestAttachment],
+    })).resolves.toMatchObject({ reply: "audio reply" });
+    expect(resolved).toEqual(audioAttachment());
+    expect(received).toEqual([audioAttachment()]);
+    expect(service.metadata()).toEqual({
+      operationId: "normalized-audio", messageId: "normalized-message",
+      attachments: [{ kind: "audio", filename: "voice.m4a", mimeType: "audio/mp4", sizeBytes: 512, sha256: "c".repeat(64), durationMs: 5000 }],
+    });
+  });
+
+  it.each([
+    ["an unknown transport field", { ...audioAttachment(), uri: "file:///private/voice.m4a" }],
+    ["an artifact ID outside the opaque ID alphabet", { ...audioAttachment(), artifactId: "artifact/audio" }],
+    ["a non-string artifact ID", { ...audioAttachment(), artifactId: 42 }],
+    ["a non-string filename", { ...audioAttachment(), filename: 42 }],
+  ])("rejects %s before resolving or responding", async (_description, attachment) => {
+    const current = session();
+    let resolverCalls = 0;
+    let responderCalls = 0;
+    const service = new AssistantChatService({
+      boundSession: current, boundConnectionGeneration: 1n,
+      authorize: ({ policyRevision }) => ({ allowed: true, policyRevision }),
+      resolveArtifact: async () => { resolverCalls += 1; return committedAudio(current); },
+      respond: async () => { responderCalls += 1; return "unexpected"; },
+    });
+
+    await expect(service.send({
+      operationId: `invalid-attachment-${_description}`, messageId: "invalid-attachment-message", session: current, text: "listen",
+      zeroRetention: zeroRetention(), attachments: [attachment] as never,
+    })).rejects.toMatchObject({ code: "ATTACHMENT_INVALID" });
+    expect({ resolverCalls, responderCalls }).toEqual({ resolverCalls: 0, responderCalls: 0 });
+  });
+
   it("rejects an unresolved artifact before calling the responder", async () => {
     const current = session();
     let responses = 0;
@@ -400,7 +450,7 @@ describe("in-memory assistant operation service", () => {
     })).rejects.toMatchObject({ code: "ARTIFACT_FENCE_MISMATCH" });
   });
 
-  it("streams ordered reply events and replays them after sequence zero", async () => {
+  it("streams ordered reply events, then reuses a completed operation without replaying it", async () => {
     const current = session();
     const events = new InMemoryAssistantReplyEventStore();
     const delivered: unknown[] = [];
@@ -419,6 +469,13 @@ describe("in-memory assistant operation service", () => {
       { kind: "complete", operationId: "stream-op", messageId: "stream-message", sequence: 2n, text: "reply delta" },
     ]);
     expect(events.replay("stream-op", 0n)).toEqual(delivered);
+    let retryDeliveries = 0;
+    await expect(service.stream(request, () => { retryDeliveries += 1; })).resolves.toEqual({
+      operationId: "stream-op", messageId: "stream-message", status: "accepted", reply: "reply delta",
+    });
+    expect(retryDeliveries).toBe(0);
+    await expect(service.stream({ ...request, text: "changed" }, () => {}))
+      .rejects.toMatchObject({ code: "OPERATION_PARAMETERS_MISMATCH" });
   });
 
   it("keeps a persisted completion as the only terminal event when its sink throws", async () => {
@@ -470,25 +527,27 @@ describe("in-memory assistant operation service", () => {
     expect(JSON.stringify(delivered, (_key, value) => typeof value === "bigint" ? value.toString() : value)).not.toContain("provider message must not escape");
   });
 
-  it("continues ordered events when a failed stream operation is retried", async () => {
+  it("rejects a retry after a failed stream without changing its replay", async () => {
     const current = session();
     const events = new InMemoryAssistantReplyEventStore();
-    let fail = true;
+    let responderCalls = 0;
     const service = new AssistantChatService({
       boundSession: current, eventStore: events,
       authorize: ({ policyRevision }) => ({ allowed: true, policyRevision }),
       respondStream: async function* () {
-        if (fail) throw new Error("transient provider failure");
-        yield "retry reply";
+        responderCalls += 1;
+        throw new Error("transient provider failure");
       },
     });
     const request = { operationId: "retry-stream", messageId: "retry-message", session: current, text: "hello", zeroRetention: zeroRetention() };
 
     await expect(service.stream(request, () => {})).rejects.toMatchObject({ code: "ASSISTANT_REPLY_FAILED" });
-    fail = false;
-    await expect(service.stream(request, () => {})).resolves.toMatchObject({ reply: "retry reply" });
+    const replay = events.replay("retry-stream", 0n);
+    await expect(service.stream(request, () => {})).rejects.toMatchObject({ code: "ASSISTANT_EVENT_TERMINAL" });
     expect(events.replay("retry-stream", 0n).map((event) => [event.kind, event.sequence]))
-      .toEqual([["failed", 1n], ["delta", 2n], ["complete", 3n]]);
+      .toEqual([["failed", 1n]]);
+    expect(events.replay("retry-stream", 0n)).toEqual(replay);
+    expect(responderCalls).toBe(1);
   });
 
   it("returns a completed retry before invoking a resolver that later changes", async () => {
@@ -522,5 +581,15 @@ describe("in-memory assistant operation service", () => {
       .toThrowError(/ASSISTANT_EVENT_SEQUENCE_INVALID/);
     expect(() => events.append({ kind: "failed", operationId: "event-op", messageId: "event-message", sequence: 1n, text: "", error: "" }))
       .toThrowError(/ASSISTANT_EVENT_INVALID/);
+  });
+
+  it("binds each reply-event operation to one message and one terminal event", () => {
+    const events = new InMemoryAssistantReplyEventStore();
+    events.append({ kind: "delta", operationId: "event-op", messageId: "event-message", sequence: 1n, text: "first" });
+    expect(() => events.append({ kind: "delta", operationId: "event-op", messageId: "other-message", sequence: 2n, text: "other" }))
+      .toThrowError(/ASSISTANT_EVENT_MESSAGE_MISMATCH/);
+    events.append({ kind: "complete", operationId: "event-op", messageId: "event-message", sequence: 2n, text: "reply" });
+    expect(() => events.append({ kind: "failed", operationId: "event-op", messageId: "event-message", sequence: 3n, text: "", error: "ASSISTANT_REPLY_FAILED" }))
+      .toThrowError(/ASSISTANT_EVENT_TERMINAL/);
   });
 });

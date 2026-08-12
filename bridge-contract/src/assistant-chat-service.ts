@@ -100,6 +100,13 @@ const MAX_FILE_BYTES = 25 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 50 * 1024 * 1024;
 const MAX_AUDIO_BYTES = 10_485_760;
 const MAX_AUDIO_DURATION_MS = 120_000;
+const ARTIFACT_ID = /^[A-Za-z0-9._~-]{1,128}$/;
+const IMAGE_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const FILE_MIME_TYPES = new Set(["application/pdf", "text/plain"]);
+const AUDIO_MIME_TYPE = "audio/mp4";
+
+const hasOnlyKeys = (value: Record<string, unknown>, allowed: readonly string[]): boolean =>
+  Object.keys(value).every((key) => allowed.includes(key));
 
 export const isCurrentZeroRetention = (evidence: ZeroRetentionEvidence | undefined, now = new Date()): evidence is ZeroRetentionEvidence => {
   if (!evidence || !evidence.provider || !evidence.profileId || !evidence.revision) return false;
@@ -155,8 +162,10 @@ export class AssistantChatService {
     const attachments = await this.#prepare(request);
     if (typeof sink !== "function") throw new BridgeServiceError("ASSISTANT_EVENT_INVALID");
     return this.#operations.execute(this.#operation(request, attachments), async () => {
-      await this.#resolveArtifactsForClaim(attachments, request.session);
       const previous = await this.#eventStore.replay(request.operationId, 0n);
+      if (previous.some((event) => event.messageId !== request.messageId)) throw new BridgeServiceError("ASSISTANT_EVENT_MESSAGE_MISMATCH");
+      if (previous.some((event) => event.kind === "complete" || event.kind === "failed")) throw new BridgeServiceError("ASSISTANT_EVENT_TERMINAL");
+      await this.#resolveArtifactsForClaim(attachments, request.session);
       let sequence = (previous.at(-1)?.sequence ?? 0n) + 1n;
       let terminal: "complete" | "failed" | null = null;
       let reply = "";
@@ -209,14 +218,13 @@ export class AssistantChatService {
   }
 
   async #prepare(request: AssistantMessageRequest): Promise<readonly AssistantAttachment[]> {
-    this.#validateRequest(request);
+    const attachments = this.#validateRequest(request);
     this.#assertSession(request.session);
     if (!isCurrentZeroRetention(request.zeroRetention, new Date(this.#clock()))) throw new BridgeServiceError(ZERO_RETENTION_UNAVAILABLE);
     const decision = await this.#authorize({ capability: "assistant.chat", session: request.session, policyRevision: request.session.policyAttestationRevision });
     this.#assertSession(request.session);
     if (decision.policyRevision !== request.session.policyAttestationRevision) throw new BridgeServiceError("AUTHORIZATION_REVISION_STALE");
     if (!decision.allowed) throw new BridgeServiceError(decision.reason ?? "NOT_AUTHORIZED");
-    const attachments = Object.freeze([...(request.attachments ?? [])].map((attachment) => freezeRecord({ ...attachment }) as AssistantAttachment));
     return attachments;
   }
 
@@ -242,7 +250,8 @@ export class AssistantChatService {
         && commitment.kind === attachment.kind
         && commitment.mimeType === attachment.mimeType
         && commitment.sizeBytes === attachment.sizeBytes
-        && commitment.sha256 === attachment.sha256
+        && typeof commitment.sha256 === "string"
+        && commitment.sha256.toLowerCase() === attachment.sha256
         && (attachment.kind !== "audio" || commitment.durationMs === attachment.durationMs);
       if (!matching) throw new BridgeServiceError("ARTIFACT_FENCE_MISMATCH");
     }
@@ -277,27 +286,56 @@ export class AssistantChatService {
     }
   }
 
-  #validateRequest(request: AssistantMessageRequest): void {
+  #validateRequest(request: AssistantMessageRequest): readonly AssistantAttachment[] {
     if (!request.operationId || !request.messageId || typeof request.text !== "string" || request.text.length === 0 || request.text.length > 50_000) throw new BridgeServiceError("ASSISTANT_REQUEST_INVALID");
     if (!Array.isArray(request.attachments) && request.attachments !== undefined) throw new BridgeServiceError("ATTACHMENT_INVALID");
     const attachments = request.attachments ?? [];
     if (attachments.length > MAX_FILES) throw new BridgeServiceError("ATTACHMENT_LIMIT");
     let total = 0;
+    const normalized: AssistantAttachment[] = [];
     for (const attachment of attachments) {
-      if (!attachment || typeof attachment !== "object" || !attachment.artifactId || !attachment.filename || attachment.filename.length > 255 || attachment.filename.includes("/") || attachment.filename.includes("\\")) throw new BridgeServiceError("ATTACHMENT_INVALID");
-      if (attachment.kind !== "image" && attachment.kind !== "file" && attachment.kind !== "audio") throw new BridgeServiceError("ATTACHMENT_INVALID");
-      if (!["image/jpeg", "image/png", "image/webp", "application/pdf", "text/plain", "audio/mp4"].includes(attachment.mimeType)) throw new BridgeServiceError("ATTACHMENT_UNSUPPORTED");
-      const maxBytes = attachment.kind === "audio" ? MAX_AUDIO_BYTES : MAX_FILE_BYTES;
-      if (!Number.isSafeInteger(attachment.sizeBytes) || attachment.sizeBytes < 0 || attachment.sizeBytes > maxBytes) throw new BridgeServiceError("ATTACHMENT_INVALID");
-      if (!/^[a-fA-F0-9]{64}$/.test(attachment.sha256)) throw new BridgeServiceError("ATTACHMENT_INVALID");
-      if (attachment.kind === "image" && !attachment.mimeType.startsWith("image/")) throw new BridgeServiceError("ATTACHMENT_INVALID");
-      if (attachment.kind === "file" && attachment.mimeType.startsWith("image/")) throw new BridgeServiceError("ATTACHMENT_INVALID");
-      if (attachment.kind === "file" && attachment.mimeType === "audio/mp4") throw new BridgeServiceError("ATTACHMENT_INVALID");
-      if (attachment.kind === "audio" && attachment.mimeType !== "audio/mp4") throw new BridgeServiceError("ATTACHMENT_INVALID");
-      if (attachment.kind === "audio" && (!Number.isSafeInteger(attachment.durationMs) || attachment.durationMs < 1 || attachment.durationMs > MAX_AUDIO_DURATION_MS)) throw new BridgeServiceError("ATTACHMENT_INVALID");
-      total += attachment.sizeBytes;
+      if (!attachment || typeof attachment !== "object" || Array.isArray(attachment)) throw new BridgeServiceError("ATTACHMENT_INVALID");
+      const input = attachment as Record<string, unknown>;
+      if (input.kind !== "image" && input.kind !== "file" && input.kind !== "audio") throw new BridgeServiceError("ATTACHMENT_INVALID");
+      const allowedKeys = input.kind === "audio"
+        ? ["kind", "artifactId", "filename", "mimeType", "sizeBytes", "sha256", "durationMs"]
+        : ["kind", "artifactId", "filename", "mimeType", "sizeBytes", "sha256"];
+      if (!hasOnlyKeys(input, allowedKeys)
+        || typeof input.artifactId !== "string" || !ARTIFACT_ID.test(input.artifactId)
+        || typeof input.filename !== "string" || input.filename.length === 0 || input.filename.length > 255 || input.filename.includes("/") || input.filename.includes("\\")
+        || typeof input.mimeType !== "string"
+        || typeof input.sizeBytes !== "number"
+        || typeof input.sha256 !== "string" || !/^[a-fA-F0-9]{64}$/.test(input.sha256)) {
+        throw new BridgeServiceError("ATTACHMENT_INVALID");
+      }
+      const maxBytes = input.kind === "audio" ? MAX_AUDIO_BYTES : MAX_FILE_BYTES;
+      if (!Number.isSafeInteger(input.sizeBytes) || input.sizeBytes < 0 || input.sizeBytes > maxBytes) throw new BridgeServiceError("ATTACHMENT_INVALID");
+      if (input.kind === "image" && !IMAGE_MIME_TYPES.has(input.mimeType)) throw new BridgeServiceError("ATTACHMENT_UNSUPPORTED");
+      if (input.kind === "file" && !FILE_MIME_TYPES.has(input.mimeType)) throw new BridgeServiceError("ATTACHMENT_UNSUPPORTED");
+      if (input.kind === "audio") {
+        const durationMs = input.durationMs;
+        if (input.mimeType !== AUDIO_MIME_TYPE || typeof durationMs !== "number" || !Number.isSafeInteger(durationMs) || durationMs < 1 || durationMs > MAX_AUDIO_DURATION_MS) {
+          throw new BridgeServiceError("ATTACHMENT_INVALID");
+        }
+        normalized.push(freezeRecord({
+          kind: "audio", artifactId: input.artifactId, filename: input.filename, mimeType: AUDIO_MIME_TYPE,
+          sizeBytes: input.sizeBytes, sha256: input.sha256.toLowerCase(), durationMs,
+        }));
+      } else if (input.kind === "image") {
+        normalized.push(freezeRecord({
+          kind: "image", artifactId: input.artifactId, filename: input.filename, mimeType: input.mimeType,
+          sizeBytes: input.sizeBytes, sha256: input.sha256.toLowerCase(),
+        }) as AssistantAttachment);
+      } else {
+        normalized.push(freezeRecord({
+          kind: "file", artifactId: input.artifactId, filename: input.filename, mimeType: input.mimeType,
+          sizeBytes: input.sizeBytes, sha256: input.sha256.toLowerCase(),
+        }) as AssistantAttachment);
+      }
+      total += input.sizeBytes;
     }
     if (total > MAX_TOTAL_BYTES) throw new BridgeServiceError("ATTACHMENT_LIMIT");
+    return Object.freeze(normalized);
   }
 }
 

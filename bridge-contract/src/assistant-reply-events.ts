@@ -18,6 +18,7 @@ const assertValidEvent = (event: AssistantReplyEvent): void => {
   if (!event || typeof event !== "object" || !["delta", "complete", "failed"].includes(event.kind)
     || typeof event.operationId !== "string" || event.operationId.length === 0
     || typeof event.messageId !== "string" || event.messageId.length === 0
+    || typeof event.sequence !== "bigint"
     || typeof event.text !== "string" || event.text.length > 50_000) {
     throw new BridgeServiceError("ASSISTANT_EVENT_INVALID");
   }
@@ -34,6 +35,12 @@ export class InMemoryAssistantReplyEventStore implements AssistantReplyEventStor
   append(event: AssistantReplyEvent): void {
     assertValidEvent(event);
     const previous = this.#events.get(event.operationId) ?? [];
+    if (previous.some((stored) => stored.messageId !== event.messageId)) {
+      throw new BridgeServiceError("ASSISTANT_EVENT_MESSAGE_MISMATCH");
+    }
+    if (previous.some((stored) => stored.kind === "complete" || stored.kind === "failed")) {
+      throw new BridgeServiceError("ASSISTANT_EVENT_TERMINAL");
+    }
     const expected = BigInt(previous.length + 1);
     if (event.sequence <= 0n || event.sequence !== expected) throw new BridgeServiceError("ASSISTANT_EVENT_SEQUENCE_INVALID");
     previous.push(Object.freeze({ ...event }));
