@@ -89,6 +89,50 @@ class PersistentNotificationPolicyAuthorityTest {
     }
 
     @Test
+    fun v1_invalid_boolean_restores_as_deny_first_corrupted_state() {
+        val persistence = InMemoryNotificationPolicyPersistence()
+        persistence.write(legacyV1Bytes(grantedByte = 2))
+
+        val snapshot = PersistentNotificationPolicyAuthority(persistence).snapshot()
+
+        assertFalse(snapshot.granted)
+        assertTrue(snapshot.corrupted)
+    }
+
+    @Test
+    fun v2_invalid_boolean_restores_as_deny_first_corrupted_state() {
+        val persistence = InMemoryNotificationPolicyPersistence()
+        persistence.write(v2Bytes(grantedByte = 2))
+
+        val snapshot = PersistentNotificationPolicyAuthority(persistence).snapshot()
+
+        assertFalse(snapshot.granted)
+        assertTrue(snapshot.corrupted)
+    }
+
+    @Test
+    fun v1_malformed_utf8_package_restores_as_deny_first_corrupted_state() {
+        val persistence = InMemoryNotificationPolicyPersistence()
+        persistence.write(legacyV1Bytes(packageBytes = byteArrayOf(0xC3.toByte(), 0x28)))
+
+        val snapshot = PersistentNotificationPolicyAuthority(persistence).snapshot()
+
+        assertFalse(snapshot.granted)
+        assertTrue(snapshot.corrupted)
+    }
+
+    @Test
+    fun v2_malformed_utf8_package_restores_as_deny_first_corrupted_state() {
+        val persistence = InMemoryNotificationPolicyPersistence()
+        persistence.write(v2Bytes(packageBytes = byteArrayOf(0xC3.toByte(), 0x28)))
+
+        val snapshot = PersistentNotificationPolicyAuthority(persistence).snapshot()
+
+        assertFalse(snapshot.granted)
+        assertTrue(snapshot.corrupted)
+    }
+
+    @Test
     fun legacy_v1_bytes_restore_with_on_demand_delivery() {
         val persistence = InMemoryNotificationPolicyPersistence()
         persistence.write(legacyV1Bytes())
@@ -118,41 +162,49 @@ class PersistentNotificationPolicyAuthorityTest {
         assertFalse(authority.snapshot().granted)
     }
 
-    private fun legacyV1Bytes(): ByteArray = ByteArrayOutputStream().use { bytes ->
+    private fun legacyV1Bytes(
+        grantedByte: Int = 1,
+        packageBytes: ByteArray = "mail".toByteArray(Charsets.UTF_8),
+    ): ByteArray = ByteArrayOutputStream().use { bytes ->
         DataOutputStream(bytes).use { output ->
             writeLegacyString(output, "AGENT_LIFE_NOTIFICATION_AUTHORITY_V1")
             output.writeLong(7L)
-            output.writeBoolean(true)
+            output.writeByte(grantedByte)
             output.writeByte(NotificationRuleMode.ALLOWLIST.ordinal)
             output.writeByte(NotificationFieldAccess.METADATA.ordinal)
             output.writeLong(3L)
             output.writeInt(1)
-            writeLegacyString(output, "mail")
+            writeLegacyString(output, packageBytes)
         }
         bytes.toByteArray()
     }
 
     private fun v2Bytes(
         deliveryModeOrdinal: Int = NotificationDeliveryMode.ON_DEMAND.ordinal,
+        grantedByte: Int = 1,
+        packageBytes: ByteArray = "mail".toByteArray(Charsets.UTF_8),
         trailingBytes: ByteArray = byteArrayOf(),
     ): ByteArray = ByteArrayOutputStream().use { bytes ->
         DataOutputStream(bytes).use { output ->
             writeLegacyString(output, "AGENT_LIFE_NOTIFICATION_AUTHORITY_V2")
             output.writeLong(7L)
-            output.writeBoolean(true)
+            output.writeByte(grantedByte)
             output.writeByte(deliveryModeOrdinal)
             output.writeByte(NotificationRuleMode.ALLOWLIST.ordinal)
             output.writeByte(NotificationFieldAccess.METADATA.ordinal)
             output.writeLong(3L)
             output.writeInt(1)
-            writeLegacyString(output, "mail")
+            writeLegacyString(output, packageBytes)
             output.write(trailingBytes)
         }
         bytes.toByteArray()
     }
 
     private fun writeLegacyString(output: DataOutputStream, value: String) {
-        val bytes = value.toByteArray(Charsets.UTF_8)
+        writeLegacyString(output, value.toByteArray(Charsets.UTF_8))
+    }
+
+    private fun writeLegacyString(output: DataOutputStream, bytes: ByteArray) {
         output.writeInt(bytes.size)
         output.write(bytes)
     }

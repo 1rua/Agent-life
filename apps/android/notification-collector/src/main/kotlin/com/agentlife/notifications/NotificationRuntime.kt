@@ -65,16 +65,19 @@ class NotificationRuntime(
     /** Shared deterministic boundary used by the flow and revoke-race tests. */
     internal suspend fun persistAndDispatch(capture: NotificationCaptureResult) {
         val sink = outbox ?: return
-        if (policyAuthority == null || policyAuthority.snapshot().deliveryMode == NotificationDeliveryMode.AUTO_SEND) {
-            capture.records.forEach { record ->
-                if (!egressGate.allows(record)) return@forEach
-                try {
+        capture.records.forEach { record ->
+            if (!egressGate.allows(record)) return@forEach
+            val permit = policyAuthority?.acquireDeliveryAdmissionPermit()
+            try {
+                if (policyAuthority == null || policyAuthority.snapshot().deliveryMode == NotificationDeliveryMode.AUTO_SEND) {
                     sink.enqueueAccepted(record)
-                } catch (failure: Throwable) {
-                    if (failure is CancellationException) throw failure
-                    failureReporter.report(NotificationRuntimeFailure.OUTBOX_WRITE_FAILED)
-                    return@forEach
                 }
+            } catch (failure: Throwable) {
+                if (failure is CancellationException) throw failure
+                failureReporter.report(NotificationRuntimeFailure.OUTBOX_WRITE_FAILED)
+                return@forEach
+            } finally {
+                permit?.close()
             }
         }
         try {

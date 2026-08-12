@@ -21,6 +21,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlin.coroutines.startCoroutine
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -77,6 +78,58 @@ class NotificationRuntimeTest {
         runSuspendRuntime { runtime.persistAndDispatch(capture) }
         assertEquals(1, outbox.events.size)
         scope.cancel()
+    }
+
+    @Test
+    fun on_demand_mutation_waits_for_auto_send_enqueue_and_then_stops_future_writes() {
+        val authority = authorityWithContentPolicy(NotificationDeliveryMode.AUTO_SEND)
+        val outbox = BlockingOutbox()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        val runtime = NotificationRuntime(
+            initialCollector = AndroidNotificationCollector(authorization = authority),
+            outbox = outbox,
+            scope = scope,
+            policyAuthority = authority,
+        )
+        val capture = NotificationCaptureResult(listOf(record()))
+        val enqueueThread = Thread {
+            runSuspendRuntime { runtime.persistAndDispatch(capture) }
+        }
+        val mutationFinished = CountDownLatch(1)
+        val mutationThread = Thread {
+            authority.localController().apply(
+                authority.snapshot().policy,
+                authorizationRevision = 2u,
+                granted = true,
+                deliveryMode = NotificationDeliveryMode.ON_DEMAND,
+            )
+            mutationFinished.countDown()
+        }
+
+        enqueueThread.start()
+        try {
+            assertTrue(outbox.enqueueEntered.await(5, TimeUnit.SECONDS))
+            mutationThread.start()
+            assertFalse(mutationFinished.await(200, TimeUnit.MILLISECONDS))
+
+            outbox.releaseEnqueue.countDown()
+            enqueueThread.join(5_000)
+            mutationThread.join(5_000)
+        } finally {
+            outbox.releaseEnqueue.countDown()
+            enqueueThread.join(5_000)
+            mutationThread.join(5_000)
+            scope.cancel()
+        }
+
+        assertFalse(enqueueThread.isAlive)
+        assertFalse(mutationThread.isAlive)
+        assertEquals(NotificationDeliveryMode.ON_DEMAND, authority.snapshot().deliveryMode)
+        assertEquals(1, outbox.events.size)
+
+        runSuspendRuntime { runtime.persistAndDispatch(capture) }
+
+        assertEquals(1, outbox.events.size)
     }
 
     @Test
@@ -330,6 +383,23 @@ private class RecordingOutbox : NotificationOutbox {
     val events = mutableListOf<NotificationRecordV1>()
 
     override suspend fun enqueueAccepted(record: NotificationRecordV1): DurableEvent {
+        events += record
+        return DurableEvent("event-${events.size}", record, byteArrayOf(events.size.toByte()))
+    }
+
+    override suspend fun acknowledge(eventId: String, eventAckWire: ByteArray) = Unit
+
+    override suspend fun recoverUnacknowledged(): List<DurableEvent> = emptyList()
+}
+
+private class BlockingOutbox : NotificationOutbox {
+    val events = CopyOnWriteArrayList<NotificationRecordV1>()
+    val enqueueEntered = CountDownLatch(1)
+    val releaseEnqueue = CountDownLatch(1)
+
+    override suspend fun enqueueAccepted(record: NotificationRecordV1): DurableEvent {
+        enqueueEntered.countDown()
+        check(releaseEnqueue.await(5, TimeUnit.SECONDS)) { "blocking enqueue was not released" }
         events += record
         return DurableEvent("event-${events.size}", record, byteArrayOf(events.size.toByte()))
     }

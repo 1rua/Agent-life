@@ -13,7 +13,11 @@ import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.File
+import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
+import java.nio.charset.CodingErrorAction
+import java.util.concurrent.Semaphore
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.CopyOnWriteArrayList
 
 /** Persistence supplied by app-private no-backup storage. */
@@ -47,6 +51,16 @@ class FileNotificationPolicyPersistence(private val file: File) : NotificationPo
 
 class PolicyStateCorrupted(message: String, cause: Throwable? = null) : IllegalStateException(message, cause)
 
+class NotificationDeliveryAdmissionPermit internal constructor(
+    private val semaphore: Semaphore,
+) : AutoCloseable {
+    private val released = AtomicBoolean(false)
+
+    override fun close() {
+        if (released.compareAndSet(false, true)) semaphore.release()
+    }
+}
+
 data class NotificationAuthoritySnapshot(
     val policy: NotificationCollectionPolicyV1,
     val authorizationRevision: ULong,
@@ -64,6 +78,7 @@ class PersistentNotificationPolicyAuthority(
     private val persistence: NotificationPolicyPersistence,
 ) : NotificationAuthorization {
     private val lock = Any()
+    private val deliveryAdmission = Semaphore(1, true)
     private val listeners = CopyOnWriteArrayList<(NotificationAuthoritySnapshot) -> Unit>()
     private var current: NotificationAuthoritySnapshot = restore()
 
@@ -76,6 +91,20 @@ class PersistentNotificationPolicyAuthority(
     fun addListener(listener: (NotificationAuthoritySnapshot) -> Unit): AutoCloseable {
         listeners += listener
         return AutoCloseable { listeners -= listener }
+    }
+
+    /**
+     * Serializes local policy commits with auto-send enqueue admission. The
+     * permit may be held across a suspension and must be closed exactly once.
+     */
+    fun acquireDeliveryAdmissionPermit(): NotificationDeliveryAdmissionPermit {
+        try {
+            deliveryAdmission.acquire()
+        } catch (interrupted: InterruptedException) {
+            Thread.currentThread().interrupt()
+            throw IllegalStateException("interrupted while acquiring notification delivery admission", interrupted)
+        }
+        return NotificationDeliveryAdmissionPermit(deliveryAdmission)
     }
 
     override fun decide(
@@ -112,38 +141,44 @@ class PersistentNotificationPolicyAuthority(
         granted: Boolean,
         deliveryMode: NotificationDeliveryMode?,
     ) {
-        val next = synchronized(lock) {
-            val previous = current
-            val nextDeliveryMode = deliveryMode ?: previous.deliveryMode
-            if (previous.corrupted) throw PolicyStateCorrupted("notification policy evidence is corrupted")
-            if (policy.policyRevision < previous.policy.policyRevision) {
-                throw PolicyRevisionRace("policy revision rollback")
+        val permit = acquireDeliveryAdmissionPermit()
+        val next = try {
+            synchronized(lock) {
+                val previous = current
+                val nextDeliveryMode = deliveryMode ?: previous.deliveryMode
+                if (previous.corrupted) throw PolicyStateCorrupted("notification policy evidence is corrupted")
+                if (policy.policyRevision < previous.policy.policyRevision) {
+                    throw PolicyRevisionRace("policy revision rollback")
+                }
+                if (authorizationRevision < previous.authorizationRevision) {
+                    throw PolicyRevisionRace("authorization revision rollback")
+                }
+                if (policy.policyRevision == previous.policy.policyRevision && policy != previous.policy) {
+                    throw PolicyRevisionRace("policy contents changed without a revision")
+                }
+                if (authorizationRevision == previous.authorizationRevision && granted != previous.granted) {
+                    throw PolicyRevisionRace("authorization changed without a revision")
+                }
+                if (policy != previous.policy && authorizationRevision == previous.authorizationRevision) {
+                    throw PolicyRevisionRace("policy changed without an authorization revision")
+                }
+                if (nextDeliveryMode != previous.deliveryMode && authorizationRevision == previous.authorizationRevision) {
+                    throw PolicyRevisionRace("delivery mode changed without an authorization revision")
+                }
+                NotificationAuthoritySnapshot(
+                    policy = policy.copy(packageIds = policy.packageIds.toList()),
+                    authorizationRevision = authorizationRevision,
+                    granted = granted,
+                    deliveryMode = nextDeliveryMode,
+                ).also { candidate ->
+                    // Commit durable state before exposing a grant in memory.
+                    persistence.write(encode(candidate))
+                    current = candidate
+                }
             }
-            if (authorizationRevision < previous.authorizationRevision) {
-                throw PolicyRevisionRace("authorization revision rollback")
-            }
-            if (policy.policyRevision == previous.policy.policyRevision && policy != previous.policy) {
-                throw PolicyRevisionRace("policy contents changed without a revision")
-            }
-            if (authorizationRevision == previous.authorizationRevision && granted != previous.granted) {
-                throw PolicyRevisionRace("authorization changed without a revision")
-            }
-            if (policy != previous.policy && authorizationRevision == previous.authorizationRevision) {
-                throw PolicyRevisionRace("policy changed without an authorization revision")
-            }
-            if (nextDeliveryMode != previous.deliveryMode && authorizationRevision == previous.authorizationRevision) {
-                throw PolicyRevisionRace("delivery mode changed without an authorization revision")
-            }
-            NotificationAuthoritySnapshot(
-                policy = policy.copy(packageIds = policy.packageIds.toList()),
-                authorizationRevision = authorizationRevision,
-                granted = granted,
-                deliveryMode = nextDeliveryMode,
-            ).also { candidate ->
-                // Commit durable state before exposing a grant in memory.
-                persistence.write(encode(candidate))
-                current = candidate
-            }
+        } finally {
+            // Listener callbacks may synchronously call back into the authority.
+            permit.close()
         }
         listeners.forEach { it(next) }
     }
@@ -186,7 +221,7 @@ class PersistentNotificationPolicyAuthority(
     ).use { input ->
         val magic = readString(input)
         val authorizationRevision = input.readLong().toULong()
-        val granted = input.readBoolean()
+        val granted = readBoolean(input)
         val deliveryMode = when (magic) {
             MAGIC_V1 -> NotificationDeliveryMode.ON_DEMAND
             MAGIC_V2 -> NotificationDeliveryMode.entries.getOrNull(input.readUnsignedByte())
@@ -218,7 +253,18 @@ class PersistentNotificationPolicyAuthority(
     private fun readString(input: DataInputStream): String {
         val size = input.readInt()
         require(size in 0..MAX_STRING_BYTES) { "invalid policy string size" }
-        return String(ByteArray(size).also(input::readFully), UTF8)
+        val bytes = ByteArray(size).also(input::readFully)
+        return UTF8.newDecoder()
+            .onMalformedInput(CodingErrorAction.REPORT)
+            .onUnmappableCharacter(CodingErrorAction.REPORT)
+            .decode(ByteBuffer.wrap(bytes))
+            .toString()
+    }
+
+    private fun readBoolean(input: DataInputStream): Boolean = when (input.readUnsignedByte()) {
+        0 -> false
+        1 -> true
+        else -> error("invalid policy boolean")
     }
 
     companion object {
