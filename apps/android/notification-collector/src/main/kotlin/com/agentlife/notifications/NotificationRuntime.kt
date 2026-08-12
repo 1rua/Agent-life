@@ -107,11 +107,8 @@ class NotificationRuntime(
      * listener callback cannot apply an older policy between these reads.
      */
     private fun reconcileStartupPolicy(authority: PersistentNotificationPolicyAuthority) {
-        var latestAppliedRevision: ULong? = null
         repeat(MAX_STARTUP_POLICY_RECONCILIATION_ATTEMPTS) {
-            val snapshot = authority.snapshot()
-            val policy = snapshot.policy
-            if (latestAppliedRevision != null && policy.policyRevision < latestAppliedRevision) return
+            val policy = authority.snapshot().policy
 
             try {
                 collector.applyPolicyBlocking(policy)
@@ -121,11 +118,9 @@ class NotificationRuntime(
                 if (authority.snapshot().policy.policyRevision > policy.policyRevision) return@repeat
                 throw race
             }
-            latestAppliedRevision = policy.policyRevision
 
             val latest = authority.snapshot().policy
             if (latest.policyRevision == policy.policyRevision && latest == policy) return
-            if (latest.policyRevision < policy.policyRevision) return
         }
     }
 

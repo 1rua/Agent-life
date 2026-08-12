@@ -172,6 +172,10 @@ class NotificationRuntimeTest {
         assertFalse(startThread.isAlive)
         assertFalse(updateThread.isAlive)
         assertTrue(collector.onPosted(RawNotification("chat", "chat-key", "Chat", "title", "body", null, 2)))
+        assertEquals(
+            2uL,
+            collector.captureOnDemandBlocking(OnDemandNotificationRead("latest-policy", 2u, 10)).policyRevision,
+        )
     }
 
     @Test
@@ -223,6 +227,10 @@ class NotificationRuntimeTest {
 
             assertFalse(startThread.isAlive)
             assertTrue(collector.onPosted(RawNotification("chat", "chat-key", "Chat", "title", "body", null, 2)))
+            assertEquals(
+                2uL,
+                collector.captureOnDemandBlocking(OnDemandNotificationRead("latest-policy", 2u, 10)).policyRevision,
+            )
         } finally {
             blockingAuthorization.release()
             allowListenerToReturn.countDown()
