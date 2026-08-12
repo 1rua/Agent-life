@@ -66,9 +66,16 @@ class ArtifactSelectionPortsTest {
         }
 
         assertEquals(
-            "artifact-audio",
-            ticket(ArtifactTicketStatus.MESSAGE_COMMITTED, artifactId = "artifact-audio").artifactId,
+            "ticket-audio",
+            ticket(ArtifactTicketStatus.MESSAGE_COMMITTED, artifactId = "ticket-audio").artifactId,
         )
+    }
+
+    @Test
+    fun committed_ticket_rejects_an_artifact_id_that_does_not_match_its_ticket_id() {
+        assertThrows(IllegalArgumentException::class.java) {
+            ticket(ArtifactTicketStatus.MESSAGE_COMMITTED, artifactId = "other-ticket")
+        }
     }
 
     private fun selection() = GrantedArtifactSelection(

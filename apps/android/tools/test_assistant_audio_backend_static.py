@@ -14,8 +14,10 @@ SOURCES = (
 )
 FORBIDDEN_BACKEND_SURFACE = re.compile(
     r"^\s*import\s+(?i:android|androidx)\.|"
+    r"^\s*import\s+java\.nio\.(?:channels\.DatagramChannel|file\.Files)\b|"
     r"(?<![A-Za-z0-9])(?i:uri|path|url|socket|raw_?byte(?:s|_?buffer)?)(?=[A-Z_]|\b)|"
     r"(?<=[A-Za-z0-9])(?=[A-Z])(?i:uri|path|url|socket|rawbyte(?:s|buffer)?)(?=[A-Z_]|\b)|"
+    r"\bByteArray\s*\(|\bFiles\.readAllBytes\s*\(|https://|\bDatagramChannel\.open\s*\(|"
     r"\b(?i:ProcessBuilder)\b|Runtime\.getRuntime|"
     r"\b(?i:VpnService|Recorder|MediaRecorder|AudioRecord)\b",
 )
@@ -70,6 +72,12 @@ class AssistantAudioBackendStaticTest(unittest.TestCase):
             "val payload_raw_bytes = \"forbidden\"",
             "val payload_raw_byte_buffer = \"forbidden\"",
             "val FiLePaTh = \"forbidden\"",
+            "val bytes = ByteArray(8)",
+            "import java.nio.file.Files",
+            "val bytes = Files.readAllBytes(source)",
+            "val endpoint = \"https://example.invalid\"",
+            "import java.nio.channels.DatagramChannel",
+            "val channel = DatagramChannel.open()",
         )
         for snippet in snippets:
             with self.subTest(snippet=snippet):

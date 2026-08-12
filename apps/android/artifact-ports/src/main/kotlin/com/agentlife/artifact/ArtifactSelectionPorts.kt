@@ -123,6 +123,9 @@ data class ArtifactTicket internal constructor(
             require(artifactId.matches(Regex("^[A-Za-z0-9._~-]{1,128}$"))) {
                 "artifact ID must be an opaque identifier"
             }
+            require(artifactId == ticketId) {
+                "committed artifact ID must match ticket ID"
+            }
         }
     }
 }

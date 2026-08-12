@@ -93,6 +93,10 @@ const stripArtifactId = (ticket: ArtifactTicket): Omit<ArtifactTicket, "artifact
   return withoutArtifactId;
 };
 
+const hasGenuineProofBrand = (ticket: ArtifactTicket): ticket is BrandedProofTicket =>
+  Object.prototype.hasOwnProperty.call(ticket, PROOF_BRAND)
+  && (ticket as ArtifactTicket & { readonly [PROOF_BRAND]?: unknown })[PROOF_BRAND] === true;
+
 const assertClock = (value: number): void => {
   if (!Number.isSafeInteger(value) || value < 0) fail("TIMESTAMP_INVALID");
 };
@@ -208,7 +212,10 @@ export const reclaimOrphanTicket = (ticket: ArtifactTicket, nowMs: number): Arti
   assertClock(nowMs);
   if (ticket.status === "message_committed") return ticket;
   if (ticket.status === "orphan_reclaimed") return Object.freeze(stripArtifactId(ticket));
-  if (nowMs - ticket.issuedAt < ARTIFACT_LIMITS.orphanReclaimAfterMs && ticket.status === "proof_verified") return ticket;
+  if (nowMs - ticket.issuedAt < ARTIFACT_LIMITS.orphanReclaimAfterMs
+    && ticket.status === "proof_verified"
+    && !Object.prototype.hasOwnProperty.call(ticket, "artifactId")
+    && hasGenuineProofBrand(ticket)) return ticket;
   const sanitizedTicket = stripArtifactId(ticket);
   if (nowMs - ticket.issuedAt < ARTIFACT_LIMITS.orphanReclaimAfterMs) return Object.freeze(sanitizedTicket);
   return Object.freeze({ ...sanitizedTicket, status: "orphan_reclaimed", localCopyDeletionAllowed: true });

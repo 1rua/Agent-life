@@ -195,4 +195,17 @@ describe("M1.1 source-only artifact ticket contract", () => {
     expect(retained.status).toBe("proof_verified");
     expect(() => commitArtifactMessage("message-a", [retained], 1_500)).not.toThrow();
   });
+
+  it("strips a forged artifact ID from an unexpired proof-verified ticket", async () => {
+    const issued = issueArtifactTicket(ticketInput(), 1_000, ticketIds("ticket-a"));
+    const verified = await verifyArtifactProof(issued, {
+      ticketId: "ticket-a", sha256: digest, proof: "p".repeat(32),
+    }, { verify: async () => "verified" });
+    const forged = { ...verified, artifactId: "forged-before-commit" };
+
+    const reclaimed = reclaimOrphanTicket(forged, 1_000 + ARTIFACT_LIMITS.orphanReclaimAfterMs - 1);
+
+    expect(reclaimed).toMatchObject({ ticketId: "ticket-a", status: "proof_verified" });
+    expect(reclaimed.artifactId).toBeUndefined();
+  });
 });
