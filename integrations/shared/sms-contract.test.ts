@@ -3,6 +3,7 @@ import { createHermesAdapter, HERMES_PLUGIN_MANIFEST } from "../hermes/adapter.j
 import { createOpenClawAdapter, OPENCLAW_PLUGIN_MANIFEST } from "../openclaw/adapter.js";
 import {
   FROZEN_SMS_TOOLS,
+  FROZEN_PROVIDER_TOOLS,
   createFakeAdapter,
   fixtureBinding,
   fixtureContext,
@@ -30,15 +31,27 @@ const bytes = (value: unknown): string => JSON.stringify(value, (_key, current) 
   typeof current === "bigint" ? current.toString() : current);
 
 describe("shared Hermes/OpenClaw SMS contract", () => {
-  it("exposes exactly the three frozen SMS tools in both provider manifests", () => {
+  it("preserves notification discovery while adding exactly three frozen SMS tools", () => {
+    const expectedProviderTools = [
+      "mobile.notifications.query",
+      "mobile.notifications.subscribe",
+      "mobile.notifications.unsubscribe",
+      "mobile.sms.query",
+      "mobile.sms.subscribe",
+      "mobile.sms.unsubscribe",
+    ];
     expect(FROZEN_SMS_TOOLS).toEqual([
       "mobile.sms.query",
       "mobile.sms.subscribe",
       "mobile.sms.unsubscribe",
     ]);
     expect(Object.isFrozen(FROZEN_SMS_TOOLS)).toBe(true);
-    expect(HERMES_PLUGIN_MANIFEST.tools).toEqual(FROZEN_SMS_TOOLS);
-    expect(OPENCLAW_PLUGIN_MANIFEST.tools).toEqual(FROZEN_SMS_TOOLS);
+    expect(FROZEN_PROVIDER_TOOLS).toEqual(expectedProviderTools);
+    expect(Object.isFrozen(FROZEN_PROVIDER_TOOLS)).toBe(true);
+    expect(HERMES_PLUGIN_MANIFEST.tools).toEqual(expectedProviderTools);
+    expect(OPENCLAW_PLUGIN_MANIFEST.tools).toEqual(expectedProviderTools);
+    expect(HERMES_PLUGIN_MANIFEST.tools.filter((name) => name.startsWith("mobile.sms."))).toEqual(FROZEN_SMS_TOOLS);
+    expect(OPENCLAW_PLUGIN_MANIFEST.tools.filter((name) => name.startsWith("mobile.sms."))).toEqual(FROZEN_SMS_TOOLS);
   });
 
   it("returns byte-equivalent complete SMS query records for Hermes and OpenClaw", async () => {

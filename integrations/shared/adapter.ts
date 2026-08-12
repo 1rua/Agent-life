@@ -20,7 +20,7 @@ export type NotificationToolName = typeof FROZEN_NOTIFICATION_TOOLS[number];
 export type SmsToolName = typeof FROZEN_SMS_TOOLS[number];
 export type AdapterToolName = NotificationToolName | SmsToolName;
 
-const FROZEN_ADAPTER_TOOLS: readonly AdapterToolName[] = Object.freeze([
+export const FROZEN_PROVIDER_TOOLS: readonly AdapterToolName[] = Object.freeze([
   ...FROZEN_NOTIFICATION_TOOLS,
   ...FROZEN_SMS_TOOLS,
 ]);
@@ -671,7 +671,7 @@ export const createFakeAdapter = (options: AdapterOptions): FakeAdapter => {
       }
       throw new AdapterError("UNKNOWN_TOOL");
     },
-    tools: () => FROZEN_ADAPTER_TOOLS,
+    tools: () => FROZEN_PROVIDER_TOOLS,
     operationClaims: () => bridge.operationClaims(),
     acknowledgedEvents: () => Object.freeze([...acknowledged]),
     assistantMetadata: () => lastMetadata,
