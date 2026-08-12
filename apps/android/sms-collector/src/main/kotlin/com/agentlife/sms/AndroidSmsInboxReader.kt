@@ -2,21 +2,25 @@ package com.agentlife.sms
 
 import android.content.ContentResolver
 import android.database.Cursor
-import android.net.Uri
 import android.provider.Telephony
+
+internal enum class SmsProviderTarget { INBOX }
 
 /** Thin Android query adapter; all provider logic works through [SmsInboxReader]. */
 class AndroidSmsInboxReader private constructor(
     private val queryExecutor: QueryExecutor,
 ) : SmsInboxReader {
     constructor(resolver: ContentResolver) : this(
-        queryExecutor = QueryExecutor { uri, projection, selection, selectionArgs, sortOrder ->
+        queryExecutor = QueryExecutor { target, projection, selection, selectionArgs, sortOrder ->
+            val uri = when (target) {
+                SmsProviderTarget.INBOX -> Telephony.Sms.Inbox.CONTENT_URI
+            }
             resolver.query(uri, projection, selection, selectionArgs, sortOrder)
         },
     )
 
     internal constructor(
-        queryExecutor: (Uri, Array<String>, String?, Array<String>?, String) -> Cursor?,
+        queryExecutor: (SmsProviderTarget, Array<String>, String?, Array<String>?, String) -> Cursor?,
     ) : this(QueryExecutor(queryExecutor))
 
     override fun query(request: SmsInboxQuery): List<SmsInboxRow> {
@@ -33,7 +37,7 @@ class AndroidSmsInboxReader private constructor(
             arguments += it.providerId.toString()
         }
         return queryExecutor.query(
-            Telephony.Sms.Inbox.CONTENT_URI,
+            SmsProviderTarget.INBOX,
             PROJECTION,
             clauses.joinToString(" AND ").ifEmpty { null },
             arguments.toTypedArray().takeIf { it.isNotEmpty() },
@@ -72,7 +76,7 @@ class AndroidSmsInboxReader private constructor(
 
     private fun interface QueryExecutor {
         fun query(
-            uri: Uri,
+            target: SmsProviderTarget,
             projection: Array<String>,
             selection: String?,
             selectionArgs: Array<String>?,

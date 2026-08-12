@@ -103,6 +103,28 @@ describe("shared Hermes/OpenClaw SMS contract", () => {
       .rejects.toMatchObject({ code: "LIMIT_INVALID" });
   });
 
+  it("rejects non-SMS IDs and cursor fields that disagree with adapter records", async () => {
+    let supplied = smsRecord();
+    const adapter = createFakeAdapter({
+      context: fixtureContext(),
+      zeroRetention: fixtureZeroRetentionEvidence(),
+      onDemandSms: async () => [supplied],
+    });
+    await adapter.pair(fixtureBinding());
+    const malformed = [
+      smsRecord({ recordId: "mms:42" }),
+      smsRecord({ recordId: "42" }),
+      smsRecord({ recordId: "sms:0", cursorProviderId: 0n }),
+      smsRecord({ recordId: "sms:01", cursorProviderId: 1n }),
+      smsRecord({ cursorProviderId: 43n }),
+    ];
+    for (const [index, candidate] of malformed.entries()) {
+      supplied = candidate;
+      await expect(adapter.querySms({ toolCallId: `sms-malformed-${index}`, deviceId: "device-a", limit: 1 }))
+        .rejects.toMatchObject({ code: "SMS_RECORD_INVALID" });
+    }
+  });
+
   it("keeps SMS query idempotent and binds auto-send delivery to its paired session", async () => {
     let reads = 0;
     const adapter = createFakeAdapter({

@@ -64,11 +64,9 @@ export class SmsSubscriptionStore {
   publish(subscriptionId: string, session: BridgeSessionIdentity, record: SmsRecordV1): SmsEventV1 {
     const subscription = this.get(subscriptionId, session);
     validateSmsRecord(record);
-    const staleEpoch = record.sourceEpoch < subscription.lastSourceEpoch;
-    const staleCursor = record.sourceEpoch === subscription.lastSourceEpoch
-      && (record.messageAtEpochMs < subscription.lastMessageAtEpochMs
-        || (record.messageAtEpochMs === subscription.lastMessageAtEpochMs && record.cursorProviderId <= subscription.lastCursorProviderId));
-    if (staleEpoch || staleCursor) throw new BridgeServiceError(staleEpoch ? "EVENT_SOURCE_EPOCH_STALE" : "EVENT_CURSOR_REPLAY");
+    const staleCursor = record.messageAtEpochMs < subscription.lastMessageAtEpochMs
+      || (record.messageAtEpochMs === subscription.lastMessageAtEpochMs && record.cursorProviderId <= subscription.lastCursorProviderId);
+    if (staleCursor) throw new BridgeServiceError("EVENT_CURSOR_REPLAY");
 
     const event = freezeRecord({
       eventId: `sms-event-${++this.#eventSequence}`,

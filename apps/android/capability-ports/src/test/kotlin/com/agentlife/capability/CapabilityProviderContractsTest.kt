@@ -6,6 +6,23 @@ import org.junit.Test
 
 class CapabilityProviderContractsTest {
     @Test
+    fun sms_metadata_rejects_non_sms_non_positive_and_out_of_range_record_ids() {
+        listOf("42", "mms:42", "sms:0", "sms:01", "sms:18446744073709551616").forEach { recordId ->
+            assertThrows(IllegalArgumentException::class.java) {
+                SmsMetadata(
+                    recordId = recordId,
+                    senderAddress = null,
+                    threadId = null,
+                    messageAtEpochMs = 1,
+                    observedAtEpochMs = 1,
+                    read = false,
+                    subscriptionId = null,
+                )
+            }
+        }
+    }
+
+    @Test
     fun sms_metadata_rejects_negative_subscription_ids() {
         assertThrows(IllegalArgumentException::class.java) {
             SmsMetadata(

@@ -35,7 +35,8 @@ class SmsWireCodec : SmsEventEncoder {
         val body = (record.content as? NormalizedContent.Released<String>)?.value
             ?: throw IllegalArgumentException("SMS wire content is withheld")
         val metadata = record.metadata
-        require(metadata.subscriptionId == null || metadata.subscriptionId >= 0) {
+        val subscriptionId = metadata.subscriptionId
+        require(subscriptionId == null || subscriptionId >= 0) {
             "SMS subscription ID must not be negative"
         }
 
@@ -68,7 +69,7 @@ class SmsWireCodec : SmsEventEncoder {
             appendField("observed_at_epoch_ms", metadata.observedAtEpochMs.toString())
             append(",\"read\":${metadata.read}")
             append(",\"subscription_id\":")
-            if (metadata.subscriptionId == null) append("null") else append(metadata.subscriptionId)
+            if (subscriptionId == null) append("null") else append(subscriptionId)
             append("},\"content\":{")
             appendField("body", body)
             append("}}")
@@ -77,7 +78,7 @@ class SmsWireCodec : SmsEventEncoder {
 
     private fun numericProviderId(eventId: String): Long {
         val numeric = eventId.removePrefix("sms:")
-        require(eventId != numeric && numeric.matches(Regex("0|[1-9][0-9]*"))) {
+        require(eventId != numeric && numeric.matches(Regex("[1-9][0-9]*"))) {
             "SMS event ID must be sms:<numericProviderId>"
         }
         return numeric.toLongOrNull() ?: throw IllegalArgumentException("SMS provider ID is out of range")

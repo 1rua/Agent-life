@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import Ajv2020 from "ajv/dist/2020.js";
 import {
   encodeSmsQuery,
   encodeSmsRecord,
@@ -71,6 +74,35 @@ describe("closed SMS wire contract", () => {
       expect(validateWireSmsRecord({ ...wire, [forbidden]: "forged" })).toBe(false);
     }
     expect(validateWireSmsRecord({ ...wire, metadata: { ...wire.metadata, endpoint: "forged" } })).toBe(false);
+  });
+
+  it("rejects non-SMS IDs and cursor fields that disagree with the record", () => {
+    const wire = encodeSmsRecord(recordInput);
+    for (const recordId of ["mms:42", "42", "sms:0", "sms:01"]) {
+      expect(validateWireSmsRecord({ ...wire, record_id: recordId })).toBe(false);
+      expect(() => encodeSmsRecord({ ...recordInput, recordId })).toThrow("WIRE_RECORD_UNREPRESENTABLE");
+    }
+    expect(validateWireSmsRecord({ ...wire, cursor_provider_id: "43" })).toBe(false);
+    expect(validateWireSmsRecord({ ...wire, cursor_message_at_epoch_ms: "1700000000001" })).toBe(false);
+    expect(() => encodeSmsRecord({ ...recordInput, cursorProviderId: 43n })).toThrow("WIRE_RECORD_UNREPRESENTABLE");
+    expect(() => encodeSmsRecord({ ...recordInput, cursorMessageAtEpochMs: 1_700_000_000_001n }))
+      .toThrow("WIRE_RECORD_UNREPRESENTABLE");
+  });
+
+  it("applies the positive SMS record ID rule in the JSON Schema", () => {
+    const schema = JSON.parse(readFileSync(resolve(process.cwd(), "mvp-contract/schemas/v1/sms-record.schema.json"), "utf8"));
+    const validateSchema = new Ajv2020({ strict: false }).compile(schema);
+    const wire = encodeSmsRecord(recordInput);
+    expect(validateSchema(wire)).toBe(true);
+    for (const recordId of ["mms:42", "42", "sms:0", "sms:01"]) {
+      expect(validateSchema({ ...wire, record_id: recordId })).toBe(false);
+    }
+    expect(validateSchema({
+      ...wire,
+      record_id: "sms:18446744073709551615",
+      cursor_provider_id: "18446744073709551615",
+    })).toBe(true);
+    expect(validateSchema({ ...wire, record_id: "sms:18446744073709551616" })).toBe(false);
   });
 
   it("binds SMS query and subscription lifecycle operations to the policy revision", () => {

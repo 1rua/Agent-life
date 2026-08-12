@@ -30,6 +30,7 @@ export const validateSmsRecord = (record: SmsRecordV1): void => {
   if (![record.messageAtEpochMs, record.observedAtEpochMs, record.sourceEpoch, record.cursorProviderId, record.captureRevision, record.policyRevision].every(isU64)) {
     throw new BridgeServiceError("SMS_RECORD_INVALID");
   }
+  if (record.recordId !== `sms:${record.cursorProviderId}`) throw new BridgeServiceError("SMS_RECORD_INVALID");
   if (typeof record.read !== "boolean" || typeof record.body !== "string") throw new BridgeServiceError("SMS_RECORD_INVALID");
   if (record.subscriptionId !== null
     && (!Number.isSafeInteger(record.subscriptionId) || record.subscriptionId < 0 || record.subscriptionId > MAX_SUBSCRIPTION_ID)) {
@@ -41,11 +42,6 @@ const compareCursor = (left: SmsRecordV1, right: SmsRecordV1): number => {
   if (left.messageAtEpochMs !== right.messageAtEpochMs) return left.messageAtEpochMs < right.messageAtEpochMs ? -1 : 1;
   if (left.cursorProviderId !== right.cursorProviderId) return left.cursorProviderId < right.cursorProviderId ? -1 : 1;
   return 0;
-};
-
-const comparePosition = (left: SmsRecordV1, right: SmsRecordV1): number => {
-  if (left.sourceEpoch !== right.sourceEpoch) return left.sourceEpoch < right.sourceEpoch ? -1 : 1;
-  return compareCursor(left, right);
 };
 
 const recordDigest = (record: SmsRecordV1): string => JSON.stringify({
@@ -68,33 +64,33 @@ export class SmsStore {
   readonly #records = new Map<string, Map<string, SmsRecordV1>>();
   readonly #positions = new Map<string, SmsRecordV1>();
 
-  append(deviceId: string, record: SmsRecordV1): boolean {
+  append(ownerKey: string, record: SmsRecordV1): boolean {
     validateSmsRecord(record);
-    const records = this.#records.get(deviceId) ?? new Map<string, SmsRecordV1>();
+    const records = this.#records.get(ownerKey) ?? new Map<string, SmsRecordV1>();
     const existing = records.get(record.recordId);
     if (existing) {
       if (recordDigest(existing) !== recordDigest(record)) throw new BridgeServiceError("SMS_RECORD_CONFLICT");
       return false;
     }
-    const previous = this.#positions.get(deviceId);
-    if (previous && comparePosition(record, previous) <= 0) throw new BridgeServiceError("SMS_CURSOR_REPLAY");
+    const previous = this.#positions.get(ownerKey);
+    if (previous && compareCursor(record, previous) <= 0) throw new BridgeServiceError("SMS_CURSOR_REPLAY");
     const retained = clone(record);
     records.set(record.recordId, retained);
-    this.#records.set(deviceId, records);
-    this.#positions.set(deviceId, retained);
+    this.#records.set(ownerKey, records);
+    this.#positions.set(ownerKey, retained);
     return true;
   }
 
-  read(deviceId: string, limit: number): readonly SmsRecordV1[] {
+  read(ownerKey: string, limit: number): readonly SmsRecordV1[] {
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 10_000) throw new BridgeServiceError("LIMIT_INVALID");
-    return Object.freeze([...(this.#records.get(deviceId)?.values() ?? [])]
+    return Object.freeze([...(this.#records.get(ownerKey)?.values() ?? [])]
       .sort(compareCursor)
       .slice(0, limit)
       .map(clone));
   }
 
-  latest(deviceId: string): SmsRecordV1 | null {
-    const record = this.#positions.get(deviceId);
+  latest(ownerKey: string): SmsRecordV1 | null {
+    const record = this.#positions.get(ownerKey);
     return record ? clone(record) : null;
   }
 }

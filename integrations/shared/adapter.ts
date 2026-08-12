@@ -195,6 +195,7 @@ const validateSmsRecord = (record: SmsRecord): void => {
   if (![record.messageAtEpochMs, record.observedAtEpochMs, record.sourceEpoch, record.cursorProviderId, record.captureRevision, record.policyRevision].every(isU64)) {
     throw new AdapterError("SMS_RECORD_INVALID");
   }
+  if (record.recordId !== `sms:${record.cursorProviderId}`) throw new AdapterError("SMS_RECORD_INVALID");
   if (typeof record.read !== "boolean" || typeof record.body !== "string") throw new AdapterError("SMS_RECORD_INVALID");
   if (record.subscriptionId !== null
     && (!Number.isSafeInteger(record.subscriptionId) || record.subscriptionId < 0 || record.subscriptionId > 2_147_483_647)) {

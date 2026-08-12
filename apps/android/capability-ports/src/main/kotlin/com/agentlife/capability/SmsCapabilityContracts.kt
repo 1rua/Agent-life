@@ -2,6 +2,8 @@ package com.agentlife.capability
 
 const val MAX_SMS_BATCH_RECORDS: Int = 10_000
 
+private val SMS_RECORD_ID = Regex("sms:[1-9][0-9]*")
+
 data class SmsMetadata(
     override val recordId: String,
     val senderAddress: String?,
@@ -13,6 +15,9 @@ data class SmsMetadata(
 ) : CapabilityMetadata {
     init {
         requireMetadata(recordId, observedAtEpochMs)
+        require(SMS_RECORD_ID.matches(recordId) && recordId.removePrefix("sms:").toULongOrNull() != null) {
+            "SMS record ID must be sms:<positiveDecimalU64>"
+        }
         require(messageAtEpochMs >= 0) { "message time must not be negative" }
         require(subscriptionId == null || subscriptionId >= 0) { "subscription ID must not be negative" }
     }

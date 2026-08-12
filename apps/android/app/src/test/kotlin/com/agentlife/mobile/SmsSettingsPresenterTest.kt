@@ -12,6 +12,28 @@ import org.junit.Test
 
 class SmsSettingsPresenterTest {
     @Test
+    fun `fresh settings initialize and save the first-enable defaults`() {
+        val authority = PersistentSmsSettingsAuthority(InMemorySmsSettingsPersistence())
+        val presenter = SmsSettingsPresenter(
+            snapshotSource = authority::snapshot,
+            permissionAvailability = { CapabilityAvailability.PERMISSION_REQUIRED },
+            nowEpochMs = { 1_800_000_000_000L },
+        )
+
+        val initial = presenter.state()
+        val firstSave = presenter.savePayload(initial.copy(granted = true))
+
+        assertTrue(initial.firstEnable)
+        assertEquals(SmsHistoryStartMode.FROM_EPOCH, initial.historyStartMode)
+        assertEquals(1_792_224_000_000L, initial.historyStartEpochMs)
+        assertEquals(500, initial.maxRecords)
+        assertEquals(SmsSyncInterval.MINUTES_30, initial.syncInterval)
+        assertEquals(SmsHistoryPolicy(fromEpochMs = 1_792_224_000_000L, maxRecords = 500), firstSave.historyPolicy)
+        assertEquals(SmsSyncInterval.MINUTES_30, firstSave.syncInterval)
+        assertTrue(firstSave.granted)
+    }
+
+    @Test
     fun `view state exposes every local SMS consent control without message content`() {
         val authority = PersistentSmsSettingsAuthority(InMemorySmsSettingsPersistence()).also { settings ->
             settings.localController().update(

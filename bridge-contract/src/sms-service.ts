@@ -2,6 +2,7 @@ import {
   BridgeServiceError,
   equalIdentity,
   freezeRecord,
+  identityKey,
   type AuthorizationDecision,
   type Authorize,
   type BridgeSessionIdentity,
@@ -72,28 +73,33 @@ export class SmsService {
   async query(request: SmsQueryRequest): Promise<readonly SmsRecordV1[]> {
     this.#assertSession(request.session);
     await this.#assertAuthorized("mobile.sms.query", request.session, request.policyRevision);
-    return this.#operations.execute({
+    this.#assertSession(request.session);
+    const result = await this.#operations.execute({
       operationId: request.operationId,
       session: request.session,
       parameters: { limit: request.limit, policyRevision: request.policyRevision },
-    }, () => this.#store.read(request.session.deviceId, request.limit));
+    }, () => this.#store.read(identityKey(request.session), request.limit));
+    this.#assertSession(request.session);
+    return result;
   }
 
   async subscribe(request: SmsSubscribeRequest): Promise<Readonly<{ subscriptionId: string }>> {
     this.#assertSession(request.session);
     await this.#assertAuthorized("mobile.sms.subscribe", request.session, request.policyRevision);
+    this.#assertSession(request.session);
     return this.#subscriptions.subscribe({ subscriptionId: request.subscriptionId, session: request.session });
   }
 
   async unsubscribe(subscriptionId: string, session: BridgeSessionIdentity, policyRevision: bigint): Promise<Readonly<{ subscriptionId: string; removed: boolean }>> {
     this.#assertSession(session);
     await this.#assertAuthorized("mobile.sms.unsubscribe", session, policyRevision);
+    this.#assertSession(session);
     return freezeRecord({ subscriptionId, removed: this.#subscriptions.unsubscribe(subscriptionId, session) });
   }
 
   ingest(session: BridgeSessionIdentity, record: SmsRecordV1): boolean {
     this.#assertSession(session);
-    return this.#store.append(session.deviceId, record);
+    return this.#store.append(identityKey(session), record);
   }
 
   async publish(subscriptionId: string, session: BridgeSessionIdentity, record: SmsRecordV1, policyRevision?: bigint): Promise<SmsEventV1> {

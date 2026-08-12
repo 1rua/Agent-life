@@ -11,7 +11,6 @@ import com.agentlife.capability.CapabilityReadResult
 import com.agentlife.capability.DataSyncMode
 import com.agentlife.capability.DefaultAgentRequestAuthorizer
 import com.agentlife.capability.MobileDataCapability
-import com.agentlife.capability.NormalizedContent
 import com.agentlife.capability.SmsCapabilityProvider
 import com.agentlife.capability.SmsMetadata
 import com.agentlife.capability.SmsPayload
@@ -285,7 +284,7 @@ class SmsAutoSyncCoordinatorTest {
                 read = true,
                 subscriptionId = null,
             ),
-            content = NormalizedContent.Released("not asserted or diagnosed"),
+            content = releasedSmsContent("not asserted or diagnosed"),
         ),
         policyRevision = 7u,
     )

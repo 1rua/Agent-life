@@ -287,6 +287,9 @@ export type WireSmsRecord = Readonly<{
 const validSmsSubscriptionId = (value: unknown): value is number =>
   typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && value <= 2_147_483_647;
 
+const validSmsRecordId = (value: unknown): value is string =>
+  typeof value === "string" && value.startsWith("sms:") && isPositiveU64(value.slice(4));
+
 const validSmsMetadata = (value: unknown): boolean => recordObject(value)
   && exactKeys(value, ["sender_address", "thread_id", "message_at_epoch_ms", "observed_at_epoch_ms", "read", "subscription_id"])
   && (value.sender_address === null || stringValue(value.sender_address))
@@ -306,7 +309,7 @@ export const validateWireSmsRecord = (value: unknown): value is WireSmsRecord =>
     "captured_at_epoch_ms", "capture_revision", "policy_revision", "metadata", "content",
   ])
   && value.kind === "upsert"
-  && stringValue(value.record_id) && value.record_id.length > 0
+  && validSmsRecordId(value.record_id)
   && isDecimalU64(value.source_epoch)
   && isPositiveU64(value.record_revision)
   && isDecimalU64(value.cursor_message_at_epoch_ms)
@@ -315,6 +318,9 @@ export const validateWireSmsRecord = (value: unknown): value is WireSmsRecord =>
   && isDecimalU64(value.capture_revision)
   && isDecimalU64(value.policy_revision)
   && validSmsMetadata(value.metadata)
+  && recordObject(value.metadata)
+  && value.record_id === `sms:${value.cursor_provider_id}`
+  && value.cursor_message_at_epoch_ms === value.metadata.message_at_epoch_ms
   && validSmsContent(value.content);
 
 export const encodeSmsRecord = (record: RuntimeSmsRecord): WireSmsRecord => {

@@ -157,7 +157,7 @@ class SmsAutoSyncCoordinator(
 
     private fun numericProviderId(recordId: String): Long {
         val numeric = recordId.removePrefix("sms:")
-        require(recordId != numeric && numeric.matches(Regex("0|[1-9][0-9]*"))) {
+        require(recordId != numeric && numeric.matches(Regex("[1-9][0-9]*"))) {
             "SMS record ID must be sms:<numericProviderId>"
         }
         return numeric.toLongOrNull() ?: throw IllegalArgumentException("SMS provider ID is out of range")

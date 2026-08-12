@@ -1,13 +1,33 @@
 package com.agentlife.sms
 
-import com.agentlife.capability.NormalizedContent
 import com.agentlife.capability.SmsMetadata
 import com.agentlife.capability.SmsPayload
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class SmsWireCodecTest {
+    @Test
+    fun rejects_an_event_id_that_does_not_match_the_sms_metadata_record_id() {
+        val payload = SmsPayload(
+            metadata = SmsMetadata(
+                recordId = "sms:42",
+                senderAddress = null,
+                threadId = null,
+                messageAtEpochMs = 1L,
+                observedAtEpochMs = 2L,
+                read = false,
+                subscriptionId = null,
+            ),
+            content = releasedSmsContent("complete body"),
+        )
+
+        assertThrows(IllegalArgumentException::class.java) {
+            SmsWireCodec().encode("sms:43", payload, 7u)
+        }
+    }
+
     @Test
     fun encodes_the_closed_sms_upsert_as_exact_utf8_in_fixed_key_order() {
         val encoder: SmsEventEncoder = SmsWireCodec()
@@ -21,7 +41,7 @@ class SmsWireCodecTest {
                 read = false,
                 subscriptionId = null,
             ),
-            content = NormalizedContent.Released(""),
+            content = releasedSmsContent(""),
         )
         val actual = encoder.encode("sms:42", payload, 7u)
 

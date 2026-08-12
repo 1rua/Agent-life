@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { PairingService, type PairingTicketInput } from "../src/pairing-service.js";
-import { OperationDispatcher } from "../src/operation-dispatch.js";
+import { OperationDispatcher, type OperationDispatcherPort, type OperationRequest } from "../src/operation-dispatch.js";
 import {
   SmsStore,
   validateSmsRecord,
@@ -67,6 +67,7 @@ describe("closed Bridge SMS record and store", () => {
       { ...empty, recordId: "sms:0" },
       { ...empty, recordId: "sms:01" },
       { ...empty, recordId: "mms:42" },
+      { ...empty, cursorProviderId: 43n },
       { ...empty, cursorProviderId: -1n },
       { ...empty, messageAtEpochMs: "1700000000000" },
       { ...empty, subscriptionId: -1 },
@@ -95,8 +96,14 @@ describe("closed Bridge SMS record and store", () => {
       ["sms:42", "complete body"],
     ]);
     expect(store.append("device-a", record({ recordId: "sms:42", cursorProviderId: 42n }))).toBe(false);
-    expect(() => store.append("device-a", record({ recordId: "sms:42", cursorProviderId: 43n })))
+    expect(() => store.append("device-a", record({ recordId: "sms:42", body: "conflicting body" })))
       .toThrowError(/SMS_RECORD_CONFLICT/);
+    expect(() => store.append("device-a", record({
+      recordId: "sms:40",
+      cursorProviderId: 40n,
+      messageAtEpochMs: 1_699_999_999_999n,
+      sourceEpoch: 2n,
+    }))).toThrowError(/SMS_CURSOR_REPLAY/);
     expect(() => store.append("device-a", record({ recordId: "sms:40", cursorProviderId: 40n })))
       .toThrowError(/SMS_CURSOR_REPLAY/);
     for (const limit of [0, 10_001, 1.5]) expect(() => store.read("device-a", limit)).toThrowError(/LIMIT_INVALID/);
@@ -106,10 +113,10 @@ describe("closed Bridge SMS record and store", () => {
 describe("paired Bridge SMS service", () => {
   it("reuses a query result by operation ID and fences revisions and operation/session changes", async () => {
     const { service, store, paired } = createService();
-    store.append(paired.deviceId, record({ body: "" }));
+    service.ingest(paired, record({ body: "" }));
     const request = { operationId: "sms-op-1", session: paired, limit: 10_000, policyRevision: 7n };
     const first = await service.query(request);
-    store.append(paired.deviceId, record({
+    service.ingest(paired, record({
       recordId: "sms:43", cursorProviderId: 43n, messageAtEpochMs: 1_700_000_000_001n,
     }));
     const retry = await service.query(request);
@@ -120,6 +127,42 @@ describe("paired Bridge SMS service", () => {
     await expect(service.query({ ...request, policyRevision: 6n })).rejects.toMatchObject({ code: "AUTHORIZATION_REVISION_STALE" });
     await expect(service.query({ ...request, session: { ...paired, policyAttestationRevision: 8n }, policyRevision: 8n }))
       .rejects.toMatchObject({ code: "CONNECTION_FENCED" });
+  });
+
+  it("isolates records for the same device ID across tenants", async () => {
+    const { pairing, service, paired: tenantA } = createService();
+    const tenantB = service.pair(pairing.issueTicket(ticketInput({ tenantId: "tenant-b" })));
+    service.ingest(tenantA, record({ recordId: "sms:41", cursorProviderId: 41n }));
+    service.ingest(tenantB, record({
+      recordId: "sms:42",
+      cursorProviderId: 42n,
+      messageAtEpochMs: 1_700_000_000_001n,
+      body: "tenant-b body",
+    }));
+
+    await expect(service.query({ operationId: "tenant-a-query", session: tenantA, limit: 10, policyRevision: 7n }))
+      .resolves.toEqual([expect.objectContaining({ recordId: "sms:41", body: "complete body" })]);
+    await expect(service.query({ operationId: "tenant-b-query", session: tenantB, limit: 10, policyRevision: 7n }))
+      .resolves.toEqual([expect.objectContaining({ recordId: "sms:42", body: "tenant-b body" })]);
+  });
+
+  it("isolates monotonic cursor state for the same device ID across humans", async () => {
+    const { pairing, service, paired: humanA } = createService();
+    const humanB = service.pair(pairing.issueTicket(ticketInput({ humanPrincipalId: "human-b" })));
+    service.ingest(humanA, record({
+      recordId: "sms:99",
+      cursorProviderId: 99n,
+      messageAtEpochMs: 1_700_000_000_999n,
+    }));
+
+    expect(service.ingest(humanB, record({
+      recordId: "sms:1",
+      cursorProviderId: 1n,
+      messageAtEpochMs: 1_700_000_000_001n,
+      body: "human-b body",
+    }))).toBe(true);
+    await expect(service.query({ operationId: "human-b-query", session: humanB, limit: 10, policyRevision: 7n }))
+      .resolves.toEqual([expect.objectContaining({ recordId: "sms:1", body: "human-b body" })]);
   });
 
   it("binds subscriptions and events to one paired session and validates publish and ACK cursors", async () => {
@@ -133,6 +176,12 @@ describe("paired Bridge SMS service", () => {
       .rejects.toMatchObject({ code: "SMS_RECORD_INVALID" });
 
     const event = await service.publishAuthorized(subscriptionId, paired, record(), 7n);
+    await expect(service.publishAuthorized(subscriptionId, paired, record({
+      recordId: "sms:43",
+      cursorProviderId: 43n,
+      messageAtEpochMs: 1_699_999_999_999n,
+      sourceEpoch: 2n,
+    }), 7n)).rejects.toMatchObject({ code: "EVENT_CURSOR_REPLAY" });
     expect(event).toMatchObject({
       eventId: "sms-event-1",
       subscriptionId,
@@ -172,5 +221,91 @@ describe("paired Bridge SMS service", () => {
     pairing.acceptTicket(pairing.issueTicket(ticketInput({ pairingGeneration: 2n })));
     release({ allowed: true, policyRevision: 7n });
     await expect(publish).rejects.toMatchObject({ code: "CONNECTION_FENCED" });
+  });
+
+  it("fences a query when pairing generation changes during authorization", async () => {
+    const pairing = new PairingService({ clock: () => 1_000 });
+    const store = new SmsStore();
+    let release!: (decision: { allowed: boolean; policyRevision: bigint }) => void;
+    const pending = new Promise<{ allowed: boolean; policyRevision: bigint }>((resolve) => { release = resolve; });
+    const service = new SmsService({ pairing, store, authorize: async () => pending });
+    const paired = service.pair(pairing.issueTicket(ticketInput()));
+    store.append(paired.deviceId, record({ body: "must not leave the stale session" }));
+
+    const query = service.query({ operationId: "sms-query-race", session: paired, limit: 10, policyRevision: 7n });
+    pairing.acceptTicket(pairing.issueTicket(ticketInput({ pairingGeneration: 2n })));
+    release({ allowed: true, policyRevision: 7n });
+
+    await expect(query).rejects.toMatchObject({ code: "CONNECTION_FENCED" });
+  });
+
+  it("fences a query immediately before asynchronous operation-result egress", async () => {
+    const pairing = new PairingService({ clock: () => 1_000 });
+    let release!: () => void;
+    let markStarted!: () => void;
+    const pending = new Promise<void>((resolve) => { release = resolve; });
+    const started = new Promise<void>((resolve) => { markStarted = resolve; });
+    const operations: OperationDispatcherPort = {
+      async execute<T>(_request: OperationRequest, action: () => Promise<T> | T): Promise<T> {
+        const result = await action();
+        markStarted();
+        await pending;
+        return result;
+      },
+      claims: () => [],
+    };
+    const service = new SmsService({
+      pairing,
+      operations,
+      authorize: async () => ({ allowed: true, policyRevision: 7n }),
+    });
+    const paired = service.pair(pairing.issueTicket(ticketInput()));
+    service.ingest(paired, record({ body: "must be fenced before return" }));
+
+    const query = service.query({ operationId: "sms-query-egress-race", session: paired, limit: 10, policyRevision: 7n });
+    await started;
+    pairing.acceptTicket(pairing.issueTicket(ticketInput({ pairingGeneration: 2n })));
+    release();
+
+    await expect(query).rejects.toMatchObject({ code: "CONNECTION_FENCED" });
+  });
+
+  it("does not create a subscription when pairing generation changes during authorization", async () => {
+    const pairing = new PairingService({ clock: () => 1_000 });
+    const subscriptions = new SmsSubscriptionStore();
+    let release!: (decision: { allowed: boolean; policyRevision: bigint }) => void;
+    const pending = new Promise<{ allowed: boolean; policyRevision: bigint }>((resolve) => { release = resolve; });
+    const service = new SmsService({ pairing, subscriptions, authorize: async () => pending });
+    const paired = service.pair(pairing.issueTicket(ticketInput()));
+
+    const subscribe = service.subscribe({ subscriptionId: "sms-subscribe-race", session: paired, policyRevision: 7n });
+    pairing.acceptTicket(pairing.issueTicket(ticketInput({ pairingGeneration: 2n })));
+    release({ allowed: true, policyRevision: 7n });
+
+    await expect(subscribe).rejects.toMatchObject({ code: "CONNECTION_FENCED" });
+    expect(() => subscriptions.get("sms-subscribe-race", paired)).toThrowError(/SUBSCRIPTION_NOT_FOUND/);
+  });
+
+  it("does not remove a subscription when pairing generation changes during authorization", async () => {
+    const pairing = new PairingService({ clock: () => 1_000 });
+    const subscriptions = new SmsSubscriptionStore();
+    let release!: (decision: { allowed: boolean; policyRevision: bigint }) => void;
+    const pending = new Promise<{ allowed: boolean; policyRevision: bigint }>((resolve) => { release = resolve; });
+    let blockAuthorization = false;
+    const service = new SmsService({
+      pairing,
+      subscriptions,
+      authorize: async () => blockAuthorization ? pending : { allowed: true, policyRevision: 7n },
+    });
+    const paired = service.pair(pairing.issueTicket(ticketInput()));
+    await service.subscribe({ subscriptionId: "sms-unsubscribe-race", session: paired, policyRevision: 7n });
+    blockAuthorization = true;
+
+    const unsubscribe = service.unsubscribe("sms-unsubscribe-race", paired, 7n);
+    pairing.acceptTicket(pairing.issueTicket(ticketInput({ pairingGeneration: 2n })));
+    release({ allowed: true, policyRevision: 7n });
+
+    await expect(unsubscribe).rejects.toMatchObject({ code: "CONNECTION_FENCED" });
+    expect(subscriptions.get("sms-unsubscribe-race", paired).subscriptionId).toBe("sms-unsubscribe-race");
   });
 });

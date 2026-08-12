@@ -64,7 +64,6 @@ class MainActivity : Activity() {
             permissionAvailability = { app.smsPermissionAvailability(hasReadSmsPermission()) },
         )
         val state = presenter.state()
-        val defaults = SmsSettingsDefaults.firstEnable(System.currentTimeMillis())
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(32, 32, 32, 32)
@@ -90,7 +89,7 @@ class MainActivity : Activity() {
         val historyStart = EditText(this).apply {
             hint = "History start time (milliseconds)"
             inputType = InputType.TYPE_CLASS_NUMBER
-            setText((state.historyStartEpochMs ?: defaults.historyPolicy.fromEpochMs).toString())
+            setText(state.historyStartEpochMs?.toString().orEmpty())
         }
         val maxRecords = EditText(this).apply {
             hint = "Maximum records"
@@ -118,11 +117,7 @@ class MainActivity : Activity() {
                 val selectedStartMode = startMode.selectedItem as SmsHistoryStartMode
                 val selectedInterval = interval.selectedItem as SmsSyncInterval
                 val selectedMaxRecords = maxRecords.text.toString().toIntOrNull()
-                val selectedHistoryStart = if (selectedStartMode == SmsHistoryStartMode.FROM_EPOCH) {
-                    historyStart.text.toString().toLongOrNull()
-                } else {
-                    null
-                }
+                val selectedHistoryStart = historyStart.text.toString().toLongOrNull()
                 if (selectedMaxRecords == null ||
                     (selectedStartMode == SmsHistoryStartMode.FROM_EPOCH && selectedHistoryStart == null)
                 ) {
@@ -130,13 +125,25 @@ class MainActivity : Activity() {
                     return@setOnClickListener
                 }
                 try {
+                    val payload = presenter.savePayload(
+                        state.copy(
+                            granted = grant.isChecked,
+                            historyStartMode = selectedStartMode,
+                            historyStartEpochMs = selectedHistoryStart,
+                            maxRecords = selectedMaxRecords,
+                            syncInterval = selectedInterval,
+                            onDemandEnabled = onDemand.isChecked,
+                            autoSendEnabled = autoSend.isChecked,
+                            agentMayRequest = agentRequest.isChecked,
+                        ),
+                    )
                     app.localSmsSettingsController().update(
-                        historyPolicy = SmsHistoryPolicy(selectedHistoryStart, selectedMaxRecords),
-                        syncInterval = selectedInterval,
-                        granted = grant.isChecked,
-                        onDemandEnabled = onDemand.isChecked,
-                        autoSendEnabled = autoSend.isChecked,
-                        agentMayRequest = agentRequest.isChecked,
+                        historyPolicy = payload.historyPolicy,
+                        syncInterval = payload.syncInterval,
+                        granted = payload.granted,
+                        onDemandEnabled = payload.onDemandEnabled,
+                        autoSendEnabled = payload.autoSendEnabled,
+                        agentMayRequest = payload.agentMayRequest,
                     )
                     try {
                         app.smsJobScheduler().schedule(selectedInterval)
@@ -192,6 +199,7 @@ class MainActivity : Activity() {
 enum class SmsHistoryStartMode { ALL_HISTORY, FROM_EPOCH }
 
 data class SmsSettingsViewState(
+    val firstEnable: Boolean,
     val granted: Boolean,
     val permissionStatus: CapabilityAvailability,
     val historyStartMode: SmsHistoryStartMode,
@@ -204,28 +212,58 @@ data class SmsSettingsViewState(
     val corrupted: Boolean,
 )
 
+data class SmsSettingsSavePayload(
+    val historyPolicy: SmsHistoryPolicy,
+    val syncInterval: SmsSyncInterval,
+    val granted: Boolean,
+    val onDemandEnabled: Boolean,
+    val autoSendEnabled: Boolean,
+    val agentMayRequest: Boolean,
+)
+
 /** Read-only presenter: remote callers never receive a local mutation controller. */
 class SmsSettingsPresenter(
     private val snapshotSource: () -> SmsSettingsSnapshot,
+    private val nowEpochMs: () -> Long = System::currentTimeMillis,
     private val permissionAvailability: () -> CapabilityAvailability,
 ) {
     fun state(): SmsSettingsViewState {
         val snapshot = snapshotSource()
+        val firstEnable = !snapshot.corrupted && snapshot.policyRevision == 0uL && snapshot.authorizationRevision == 0uL
+        val defaults = if (firstEnable) SmsSettingsDefaults.firstEnable(nowEpochMs()) else null
+        val historyPolicy = defaults?.historyPolicy ?: snapshot.historyPolicy
         return SmsSettingsViewState(
+            firstEnable = firstEnable,
             granted = snapshot.granted,
             permissionStatus = permissionAvailability(),
-            historyStartMode = if (snapshot.historyPolicy.fromEpochMs == null) {
+            historyStartMode = if (historyPolicy.fromEpochMs == null) {
                 SmsHistoryStartMode.ALL_HISTORY
             } else {
                 SmsHistoryStartMode.FROM_EPOCH
             },
-            historyStartEpochMs = snapshot.historyPolicy.fromEpochMs,
-            maxRecords = snapshot.historyPolicy.maxRecords,
-            syncInterval = snapshot.syncInterval,
+            historyStartEpochMs = historyPolicy.fromEpochMs,
+            maxRecords = historyPolicy.maxRecords,
+            syncInterval = defaults?.syncInterval ?: snapshot.syncInterval,
             onDemandEnabled = snapshot.onDemandEnabled,
             autoSendEnabled = snapshot.autoSendEnabled,
             agentMayRequest = snapshot.agentMayRequest,
             corrupted = snapshot.corrupted,
         )
     }
+
+    fun savePayload(state: SmsSettingsViewState): SmsSettingsSavePayload = SmsSettingsSavePayload(
+        historyPolicy = SmsHistoryPolicy(
+            fromEpochMs = if (state.historyStartMode == SmsHistoryStartMode.FROM_EPOCH) {
+                requireNotNull(state.historyStartEpochMs) { "history start time is required" }
+            } else {
+                null
+            },
+            maxRecords = state.maxRecords,
+        ),
+        syncInterval = state.syncInterval,
+        granted = state.granted,
+        onDemandEnabled = state.onDemandEnabled,
+        autoSendEnabled = state.autoSendEnabled,
+        agentMayRequest = state.agentMayRequest,
+    )
 }
