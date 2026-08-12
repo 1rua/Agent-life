@@ -6,7 +6,9 @@ import com.agentlife.core.model.NotificationCollector
 import com.agentlife.core.model.NotificationFieldAccess
 import com.agentlife.core.model.NotificationRecordV1
 import com.agentlife.core.model.OnDemandNotificationRead
+import com.agentlife.core.model.NotificationRuleMode
 import com.agentlife.core.model.compareNotificationPackageIds
+import com.agentlife.policy.NotificationAuthoritySnapshot
 import com.agentlife.policy.PersistentNotificationPolicyAuthority
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -54,16 +56,36 @@ class NotificationAgentQueryGateway(
     private val completedOperations = mutableMapOf<String, CachedOperation>()
 
     suspend fun query(request: NotificationAgentQueryRequest): NotificationCaptureResult = operationLock.withLock {
+        // Fixed order: snapshot, operation identity, revision/corruption/grant/content/package
+        // pre-gates, cache compatibility, capture, then the same gates after capture.
         val snapshot = authority.snapshot()
+        val cached = completedOperations[request.operationId]
+        if (cached != null && cached.request != request) {
+            throw NotificationQueryRejected("OPERATION_IDENTITY_MISMATCH")
+        }
+
         authorizationFailure(request, snapshot)?.let { reason ->
             return@withLock failed(reason, snapshot.policy.policyRevision).also { result ->
-                completedOperations[request.operationId] = CachedOperation(request, result)
+                completedOperations[request.operationId] = CachedOperation(
+                    request,
+                    result,
+                    snapshot.authorizationRevision,
+                )
             }
         }
 
-        completedOperations[request.operationId]?.let { cached ->
-            if (cached.request != request) {
-                throw NotificationQueryRejected("OPERATION_IDENTITY_MISMATCH")
+        cached?.let {
+            if (cached.authorizationRevision != snapshot.authorizationRevision) {
+                return@withLock failed(
+                    "AUTHORIZATION_REVISION_STALE",
+                    snapshot.policy.policyRevision,
+                ).also { result ->
+                    completedOperations[request.operationId] = CachedOperation(
+                        request,
+                        result,
+                        snapshot.authorizationRevision,
+                    )
+                }
             }
             return@withLock cached.result
         }
@@ -72,17 +94,27 @@ class NotificationAgentQueryGateway(
             OnDemandNotificationRead(request.operationId, request.policyRevision, request.limit),
         )
         val current = authority.snapshot()
-        val result = authorizationFailure(request, current)?.let { reason ->
-            failed(reason, current.policy.policyRevision)
-        } ?: filterCaptured(request, captured)
+        val currentFailure = authorizationFailure(request, current)
+        val result = when {
+            currentFailure != null -> failed(currentFailure, current.policy.policyRevision)
+            current.authorizationRevision != snapshot.authorizationRevision -> failed(
+                "AUTHORIZATION_REVISION_STALE",
+                current.policy.policyRevision,
+            )
+            else -> filterCaptured(request, captured)
+        }
 
-        completedOperations[request.operationId] = CachedOperation(request, result)
+        completedOperations[request.operationId] = CachedOperation(
+            request,
+            result,
+            current.authorizationRevision,
+        )
         result
     }
 
     private fun authorizationFailure(
         request: NotificationAgentQueryRequest,
-        snapshot: com.agentlife.policy.NotificationAuthoritySnapshot,
+        snapshot: NotificationAuthoritySnapshot,
     ): String? {
         return when {
             request.policyRevision != snapshot.policy.policyRevision -> "AUTHORIZATION_REVISION_STALE"
@@ -91,10 +123,17 @@ class NotificationAgentQueryGateway(
             request.filter.fieldAccess == NotificationFieldAccess.CONTENT &&
                 snapshot.policy.fieldAccess != NotificationFieldAccess.CONTENT -> "FIELD_ACCESS_NOT_GRANTED"
             request.filter.packageIds.isNotEmpty() &&
-                request.filter.packageIds.any { !matches(snapshot.policy.mode, snapshot.policy.packageIds, it) } ->
+                request.filter.packageIds.any { !matches(snapshot, it) } ->
                 "PACKAGE_NOT_ALLOWED"
             else -> null
         }
+    }
+
+    private fun matches(snapshot: NotificationAuthoritySnapshot, packageName: String): Boolean = when (
+        snapshot.policy.mode
+    ) {
+        NotificationRuleMode.ALLOWLIST -> packageName in snapshot.policy.packageIds
+        NotificationRuleMode.DENYLIST -> packageName !in snapshot.policy.packageIds
     }
 
     private fun filterCaptured(
@@ -122,15 +161,6 @@ class NotificationAgentQueryGateway(
         })
     }
 
-    private fun matches(
-        mode: com.agentlife.core.model.NotificationRuleMode,
-        packageIds: List<String>,
-        packageName: String,
-    ): Boolean = when (mode) {
-        com.agentlife.core.model.NotificationRuleMode.ALLOWLIST -> packageName in packageIds
-        com.agentlife.core.model.NotificationRuleMode.DENYLIST -> packageName !in packageIds
-    }
-
     private fun failed(reason: String, revision: ULong): NotificationCaptureResult = NotificationCaptureResult(
         records = emptyList(),
         status = NotificationCaptureStatus.FAILED,
@@ -141,5 +171,6 @@ class NotificationAgentQueryGateway(
     private data class CachedOperation(
         val request: NotificationAgentQueryRequest,
         val result: NotificationCaptureResult,
+        val authorizationRevision: ULong,
     )
 }

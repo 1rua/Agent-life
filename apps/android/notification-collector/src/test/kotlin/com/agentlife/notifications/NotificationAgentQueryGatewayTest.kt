@@ -65,7 +65,7 @@ class NotificationAgentQueryGatewayTest {
     @Test
     fun cached_result_is_rechecked_against_current_grant_before_returning() = runSuspend {
         val authority = authorityWithContentPolicy()
-        val countingCollector = CountingNotificationCollector(realCollectorWithOneRecord())
+        val countingCollector = CountingNotificationCollector(realCollectorWithOneRecord(authority))
         val gateway = NotificationAgentQueryGateway(countingCollector, authority)
         val request = NotificationAgentQueryRequest("cached-revoked", 1u, 10)
 
@@ -81,7 +81,7 @@ class NotificationAgentQueryGatewayTest {
     @Test
     fun cached_result_is_rechecked_against_current_revision_before_returning() = runSuspend {
         val authority = authorityWithContentPolicy()
-        val countingCollector = CountingNotificationCollector(realCollectorWithOneRecord())
+        val countingCollector = CountingNotificationCollector(realCollectorWithOneRecord(authority))
         val gateway = NotificationAgentQueryGateway(countingCollector, authority)
         val request = NotificationAgentQueryRequest("cached-stale", 1u, 10)
 
@@ -96,6 +96,25 @@ class NotificationAgentQueryGatewayTest {
 
         assertFailed(result, "AUTHORIZATION_REVISION_STALE", 2u)
         assertEquals(1, countingCollector.captureCount)
+    }
+
+    @Test
+    fun conflicting_operation_retry_remains_rejected_after_authority_changes() = runSuspend {
+        val authority = authorityWithContentPolicy()
+        val gateway = NotificationAgentQueryGateway(
+            CountingNotificationCollector(realCollectorWithOneRecord(authority)),
+            authority,
+        )
+        val request = NotificationAgentQueryRequest("conflicting-after-revoke", 1u, 10)
+
+        gateway.query(request)
+        authority.localController().revoke(2u)
+
+        val rejected = assertThrows(NotificationQueryRejected::class.java) {
+            runSuspend { gateway.query(request.copy(limit = 9)) }
+        }
+
+        assertEquals("OPERATION_IDENTITY_MISMATCH", rejected.code)
     }
 
     @Test
@@ -237,7 +256,7 @@ class NotificationAgentQueryGatewayTest {
     fun authority_is_rechecked_after_real_capture_before_returning_records() = runSuspend {
         val authority = authorityWithContentPolicy()
         val countingCollector = CountingNotificationCollector(
-            realCollectorWithOneRecord(),
+            realCollectorWithOneRecord(authority),
             afterCapture = { authority.localController().revoke(2u) },
         )
 
@@ -346,8 +365,9 @@ private fun authorityWithDenylistContentPolicy(): PersistentNotificationPolicyAu
     return authority
 }
 
-private fun realCollectorWithOneRecord(): AndroidNotificationCollector {
-    val authority = authorityWithContentPolicy()
+private fun realCollectorWithOneRecord(
+    authority: PersistentNotificationPolicyAuthority = authorityWithContentPolicy(),
+): AndroidNotificationCollector {
     return AndroidNotificationCollector(authorization = authority).also { collector ->
         collector.applyPolicyBlocking(authority.snapshot().policy)
         collector.onPosted(RawNotification("com.mail", "mail", "com.mail", "subject", "body", null, 1))
