@@ -9,11 +9,50 @@ import com.agentlife.policy.NotificationAuthoritySnapshot
 
 /** Pure draft representation used by the local Android settings view. */
 data class NotificationSettingsDraft(
-    val packageIdsText: String = "",
-    val fieldAccess: NotificationFieldAccess = NotificationFieldAccess.METADATA,
-    val deliveryMode: NotificationDeliveryMode = NotificationDeliveryMode.ON_DEMAND,
     val granted: Boolean = false,
-)
+    val deliveryMode: NotificationDeliveryMode = NotificationDeliveryMode.ON_DEMAND,
+    val fieldAccess: NotificationFieldAccess = NotificationFieldAccess.METADATA,
+    val ruleMode: NotificationRuleMode = NotificationRuleMode.ALLOWLIST,
+    val packageIds: List<String> = emptyList(),
+) {
+    fun commitAgainst(baseline: NotificationAuthoritySnapshot): NotificationSettingsCommit {
+        require(!baseline.corrupted) { "notification policy evidence is corrupted" }
+
+        val normalizedPackageIds = normalizeNotificationPackageIds(packageIds)
+        val candidatePolicy = NotificationCollectionPolicyV1(
+            mode = ruleMode,
+            packageIds = normalizedPackageIds,
+            fieldAccess = fieldAccess,
+            policyRevision = baseline.policy.policyRevision,
+        )
+        val policyChanged = candidatePolicy != baseline.policy
+        val authorizationChanged = policyChanged || granted != baseline.granted ||
+            deliveryMode != baseline.deliveryMode
+        val authorizationRevision = if (authorizationChanged) {
+            nextRevision(baseline.authorizationRevision, baseline.policy.policyRevision)
+        } else {
+            baseline.authorizationRevision
+        }
+        val policyRevision = when {
+            policyChanged -> nextRevision(
+                baseline.policy.policyRevision,
+                baseline.authorizationRevision,
+            )
+            authorizationChanged -> maxOf(
+                baseline.policy.policyRevision,
+                baseline.authorizationRevision,
+            )
+            else -> baseline.policy.policyRevision
+        }
+
+        return NotificationSettingsCommit(
+            policy = candidatePolicy.copy(policyRevision = policyRevision),
+            authorizationRevision = authorizationRevision,
+            granted = granted,
+            deliveryMode = deliveryMode,
+        )
+    }
+}
 
 /** The complete, single mutation submitted by the local settings view. */
 data class NotificationSettingsCommit(
@@ -23,64 +62,31 @@ data class NotificationSettingsCommit(
     val deliveryMode: NotificationDeliveryMode,
 )
 
-/**
- * Canonicalize the newline-separated local package allowlist.
- *
- * Package IDs follow the same closed syntax as the query boundary.  The
- * resulting list is unique and sorted by Unicode code point through the
- * shared core-model comparator.
- */
-fun normalizeNotificationPackageIds(packageIdsText: String): List<String> {
-    val packageIds = packageIdsText
-        .lineSequence()
+/** Canonicalize package IDs selected in the local settings UI. */
+fun normalizeNotificationPackageIds(packageIds: Iterable<String>): List<String> {
+    val normalized = packageIds
         .map(String::trim)
         .filter(String::isNotEmpty)
         .toList()
 
-    require(packageIds.all(PACKAGE_ID::matches)) { "package ID is invalid" }
+    require(normalized.all(PACKAGE_ID::matches)) { "package ID is invalid" }
     return try {
-        sortNotificationPackageIds(packageIds)
+        sortNotificationPackageIds(normalized)
     } catch (failure: IllegalArgumentException) {
         throw IllegalArgumentException("package IDs must be unique", failure)
     }
 }
 
-/**
- * Convert a local draft into a monotonic commit.  Any policy, grant, or
- * delivery-mode change advances authorization and policy revisions together,
- * while an unchanged draft preserves the current snapshot revisions.
- */
+/** Compatibility seam for callers that already hold a local settings draft. */
 fun commitNotificationSettings(
     baseline: NotificationAuthoritySnapshot,
     draft: NotificationSettingsDraft,
-): NotificationSettingsCommit {
-    require(!baseline.corrupted) { "notification policy evidence is corrupted" }
+): NotificationSettingsCommit = draft.commitAgainst(baseline)
 
-    val packageIds = normalizeNotificationPackageIds(draft.packageIdsText)
-    val candidatePolicy = NotificationCollectionPolicyV1(
-        mode = NotificationRuleMode.ALLOWLIST,
-        packageIds = packageIds,
-        fieldAccess = draft.fieldAccess,
-        policyRevision = baseline.policy.policyRevision,
-    )
-    val policyChanged = candidatePolicy.copy(policyRevision = baseline.policy.policyRevision) != baseline.policy
-    val changed = policyChanged || draft.granted != baseline.granted ||
-        draft.deliveryMode != baseline.deliveryMode
-    val authorizationRevision = if (changed) nextRevision(baseline) else baseline.authorizationRevision
-    val policyRevision = if (changed) authorizationRevision else baseline.policy.policyRevision
-
-    return NotificationSettingsCommit(
-        policy = candidatePolicy.copy(policyRevision = policyRevision),
-        authorizationRevision = authorizationRevision,
-        granted = draft.granted,
-        deliveryMode = draft.deliveryMode,
-    )
-}
-
-private fun nextRevision(baseline: NotificationAuthoritySnapshot): ULong {
-    val current = maxOf(baseline.authorizationRevision, baseline.policy.policyRevision)
-    require(current != ULong.MAX_VALUE) { "notification revision exhausted" }
-    return current + 1uL
+private fun nextRevision(current: ULong, other: ULong = 0uL): ULong {
+    val highest = maxOf(current, other)
+    require(highest != ULong.MAX_VALUE) { "notification revision exhausted" }
+    return highest + 1uL
 }
 
 private val PACKAGE_ID = Regex("[A-Za-z][A-Za-z0-9_]*(?:\\.[A-Za-z][A-Za-z0-9_]*)+")

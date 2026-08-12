@@ -16,16 +16,17 @@ class NotificationSettingsStateTest {
     fun draft_defaults_to_deny_first_notification_settings() {
         val draft = NotificationSettingsDraft()
 
-        assertEquals("", draft.packageIdsText)
+        assertEquals(emptyList<String>(), draft.packageIds)
         assertEquals(NotificationFieldAccess.METADATA, draft.fieldAccess)
         assertEquals(NotificationDeliveryMode.ON_DEMAND, draft.deliveryMode)
+        assertEquals(NotificationRuleMode.ALLOWLIST, draft.ruleMode)
         assertFalse(draft.granted)
     }
 
     @Test
-    fun package_text_is_trimmed_blanks_removed_and_code_point_sorted() {
+    fun package_ids_are_trimmed_blanks_removed_and_code_point_sorted() {
         val normalized = normalizeNotificationPackageIds(
-            "  z.app  \n\na.a\n a.app \n",
+            listOf("  z.app  ", "", "a.a", " a.app "),
         )
 
         assertEquals(listOf("a.a", "a.app", "z.app"), normalized)
@@ -34,19 +35,19 @@ class NotificationSettingsStateTest {
     @Test
     fun duplicate_package_ids_after_trimming_are_rejected() {
         assertThrows(IllegalArgumentException::class.java) {
-            normalizeNotificationPackageIds("com.example.mail\n com.example.mail ")
+            normalizeNotificationPackageIds(listOf("com.example.mail", " com.example.mail "))
         }
     }
 
     @Test
     fun invalid_package_ids_are_rejected() {
         assertThrows(IllegalArgumentException::class.java) {
-            normalizeNotificationPackageIds("com.example.mail\nnot-a-package")
+            normalizeNotificationPackageIds(listOf("com.example.mail", "not-a-package"))
         }
     }
 
     @Test
-    fun changed_grant_and_delivery_mode_commit_with_a_monotonic_revision() {
+    fun changed_grant_delivery_mode_policy_and_rule_mode_commit_together() {
         val base = NotificationAuthoritySnapshot(
             policy = NotificationCollectionPolicyV1.default(),
             authorizationRevision = 9u,
@@ -57,9 +58,10 @@ class NotificationSettingsStateTest {
         val commit = commitNotificationSettings(
             base,
             NotificationSettingsDraft(
-                packageIdsText = "com.example.mail",
+                packageIds = listOf("com.example.mail"),
                 fieldAccess = NotificationFieldAccess.CONTENT,
                 deliveryMode = NotificationDeliveryMode.AUTO_SEND,
+                ruleMode = NotificationRuleMode.DENYLIST,
                 granted = true,
             ),
         )
@@ -70,6 +72,59 @@ class NotificationSettingsStateTest {
         assertEquals(NotificationDeliveryMode.AUTO_SEND, commit.deliveryMode)
         assertEquals(listOf("com.example.mail"), commit.policy.packageIds)
         assertEquals(NotificationFieldAccess.CONTENT, commit.policy.fieldAccess)
+        assertEquals(NotificationRuleMode.DENYLIST, commit.policy.mode)
+    }
+
+    @Test
+    fun only_policy_content_change_increments_both_revisions() {
+        val base = NotificationAuthoritySnapshot(
+            policy = NotificationCollectionPolicyV1(
+                mode = NotificationRuleMode.ALLOWLIST,
+                packageIds = listOf("com.example.mail"),
+                fieldAccess = NotificationFieldAccess.METADATA,
+                policyRevision = 12u,
+            ),
+            authorizationRevision = 12u,
+            granted = true,
+            deliveryMode = NotificationDeliveryMode.ON_DEMAND,
+        )
+
+        val commit = NotificationSettingsDraft(
+            packageIds = listOf("com.example.calendar"),
+            fieldAccess = NotificationFieldAccess.METADATA,
+            deliveryMode = NotificationDeliveryMode.ON_DEMAND,
+            ruleMode = NotificationRuleMode.ALLOWLIST,
+            granted = true,
+        ).commitAgainst(base)
+
+        assertEquals(13uL, commit.authorizationRevision)
+        assertEquals(13uL, commit.policy.policyRevision)
+    }
+
+    @Test
+    fun only_delivery_mode_change_increments_authorization_without_rolling_policy_revision() {
+        val base = NotificationAuthoritySnapshot(
+            policy = NotificationCollectionPolicyV1(
+                mode = NotificationRuleMode.ALLOWLIST,
+                packageIds = listOf("com.example.mail"),
+                fieldAccess = NotificationFieldAccess.METADATA,
+                policyRevision = 12u,
+            ),
+            authorizationRevision = 12u,
+            granted = true,
+            deliveryMode = NotificationDeliveryMode.ON_DEMAND,
+        )
+
+        val commit = NotificationSettingsDraft(
+            packageIds = listOf("com.example.mail"),
+            fieldAccess = NotificationFieldAccess.METADATA,
+            deliveryMode = NotificationDeliveryMode.AUTO_SEND,
+            ruleMode = NotificationRuleMode.ALLOWLIST,
+            granted = true,
+        ).commitAgainst(base)
+
+        assertEquals(13uL, commit.authorizationRevision)
+        assertEquals(12uL, commit.policy.policyRevision)
     }
 
     @Test
@@ -89,9 +144,10 @@ class NotificationSettingsStateTest {
         val commit = commitNotificationSettings(
             base,
             NotificationSettingsDraft(
-                packageIdsText = " com.example.mail ",
+                packageIds = listOf(" com.example.mail "),
                 fieldAccess = NotificationFieldAccess.METADATA,
                 deliveryMode = NotificationDeliveryMode.AUTO_SEND,
+                ruleMode = NotificationRuleMode.ALLOWLIST,
                 granted = true,
             ),
         )
@@ -113,6 +169,6 @@ class NotificationSettingsStateTest {
         val commit = commitNotificationSettings(base, NotificationSettingsDraft(granted = true))
 
         assertEquals(21uL, commit.authorizationRevision)
-        assertEquals(21uL, commit.policy.policyRevision)
+        assertEquals(20uL, commit.policy.policyRevision)
     }
 }

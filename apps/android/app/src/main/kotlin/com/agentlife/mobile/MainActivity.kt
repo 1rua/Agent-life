@@ -1,15 +1,14 @@
 package com.agentlife.mobile
 
 import android.app.Activity
+import android.content.ComponentName
 import android.content.Intent
 import android.os.Bundle
 import android.provider.Settings
-import android.text.InputType
-import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
-import android.widget.EditText
+import android.widget.CheckBox
 import android.widget.LinearLayout
 import android.widget.RadioButton
 import android.widget.RadioGroup
@@ -23,12 +22,12 @@ import com.agentlife.core.model.AssistantHandoffRequest
 import com.agentlife.core.model.DefaultAssistantHandoffGate
 import com.agentlife.core.model.NotificationDeliveryMode
 import com.agentlife.core.model.NotificationFieldAccess
+import com.agentlife.core.model.NotificationRuleMode
+import com.agentlife.core.model.PolicyRevisionRace
+import com.agentlife.notifications.AgentLifeNotificationListenerService
+import com.agentlife.policy.PolicyStateCorrupted
 
-/**
- * Main-app UI shell. Assistant input reaches the app only as a typed request;
- * the default local gate denies it until the user explicitly enables the
- * handoff setting. No implicit IPC, network, or provider access is performed.
- */
+/** Local-only notification settings UI and the reviewed assistant handoff seam. */
 class MainActivity : Activity() {
     private val handoffGate: AssistantHandoffGate = DefaultAssistantHandoffGate()
     private var lastHandoffDecision: AssistantHandoffDecision =
@@ -37,9 +36,11 @@ class MainActivity : Activity() {
         )
 
     private lateinit var grantSwitch: Switch
-    private lateinit var packageIdsInput: EditText
     private lateinit var fieldAccessGroup: RadioGroup
     private lateinit var deliveryModeGroup: RadioGroup
+    private lateinit var ruleModeGroup: RadioGroup
+    private lateinit var packageSelections: LinearLayout
+    private lateinit var listenerStatusText: TextView
     private lateinit var statusText: TextView
     private lateinit var application: AgentLifeApplication
 
@@ -47,6 +48,9 @@ class MainActivity : Activity() {
     private val contentId = View.generateViewId()
     private val onDemandId = View.generateViewId()
     private val autoSendId = View.generateViewId()
+    private val allowlistId = View.generateViewId()
+    private val denylistId = View.generateViewId()
+    private val packageCheckBoxes = linkedMapOf<String, CheckBox>()
 
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
@@ -81,19 +85,24 @@ class MainActivity : Activity() {
             setPadding(0, dp(8), 0, dp(16))
         }, matchParentWrap())
 
+        listenerStatusText = TextView(this).apply { setPadding(0, 0, 0, dp(8)) }
+        content.addView(listenerStatusText, matchParentWrap())
+
+        content.addView(Button(this).apply {
+            text = "Open Android notification access settings"
+            setOnClickListener {
+                startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+            }
+        }, matchParentWrap())
+
         grantSwitch = Switch(this).apply { text = "Allow local notification access" }
         content.addView(grantSwitch, matchParentWrap())
 
-        content.addView(label("Allowed package IDs (one per line)"), matchParentWrap())
-        packageIdsInput = EditText(this).apply {
-            hint = "com.example.mail"
-            minLines = 4
-            gravity = Gravity.TOP or Gravity.START
-            inputType = InputType.TYPE_CLASS_TEXT or
-                InputType.TYPE_TEXT_VARIATION_URI or
-                InputType.TYPE_TEXT_FLAG_MULTI_LINE
-        }
-        content.addView(packageIdsInput, matchParentWrap(height = dp(120)))
+        content.addView(label("Delivery mode"), matchParentWrap())
+        deliveryModeGroup = RadioGroup(this).apply { orientation = RadioGroup.VERTICAL }
+        deliveryModeGroup.addView(radio(onDemandId, "ON_DEMAND — the paired Agent asks when needed"))
+        deliveryModeGroup.addView(radio(autoSendId, "AUTO_SEND — automatically sends to a paired Agent"))
+        content.addView(deliveryModeGroup, matchParentWrap())
 
         content.addView(label("Field permission"), matchParentWrap())
         fieldAccessGroup = RadioGroup(this).apply { orientation = RadioGroup.VERTICAL }
@@ -101,23 +110,21 @@ class MainActivity : Activity() {
         fieldAccessGroup.addView(radio(contentId, "CONTENT — metadata plus title and body"))
         content.addView(fieldAccessGroup, matchParentWrap())
 
-        content.addView(label("Delivery mode"), matchParentWrap())
-        deliveryModeGroup = RadioGroup(this).apply { orientation = RadioGroup.VERTICAL }
-        deliveryModeGroup.addView(radio(onDemandId, "ON_DEMAND — the paired Agent asks when needed"))
-        deliveryModeGroup.addView(radio(autoSendId, "AUTO_SEND — automatically sends to a paired Agent"))
-        content.addView(deliveryModeGroup, matchParentWrap())
+        content.addView(label("Package rule"), matchParentWrap())
+        ruleModeGroup = RadioGroup(this).apply { orientation = RadioGroup.VERTICAL }
+        ruleModeGroup.addView(radio(allowlistId, "ALLOWLIST — only selected applications"))
+        ruleModeGroup.addView(radio(denylistId, "DENYLIST — all installed applications except selected ones"))
+        content.addView(ruleModeGroup, matchParentWrap())
+
+        content.addView(label("Applications"), matchParentWrap())
+        packageSelections = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        addInstalledApplications(packageSelections)
+        content.addView(packageSelections, matchParentWrap())
+
         content.addView(TextView(this).apply {
             text = "AUTO_SEND automatically sends authorized notifications to the paired Agent. This settings page never performs that network delivery itself."
-            setPadding(0, dp(4), 0, dp(16))
+            setPadding(0, dp(12), 0, dp(16))
         }, matchParentWrap())
-
-        val openSystemSettings = Button(this).apply {
-            text = "Open Android notification access settings"
-            setOnClickListener {
-                startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
-            }
-        }
-        content.addView(openSystemSettings, matchParentWrap())
 
         val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         actions.addView(Button(this).apply {
@@ -136,12 +143,32 @@ class MainActivity : Activity() {
         return ScrollView(this).apply { addView(content) }
     }
 
+    private fun addInstalledApplications(container: LinearLayout) {
+        packageManager.getInstalledApplications(0)
+            .sortedWith(Comparator { left, right ->
+                com.agentlife.core.model.compareNotificationPackageIds(left.packageName, right.packageName)
+            })
+            .forEach { info ->
+                val label = info.loadLabel(packageManager).toString()
+                val checkBox = CheckBox(this).apply {
+                    text = "${info.packageName} — $label"
+                }
+                packageCheckBoxes[info.packageName] = checkBox
+                container.addView(checkBox, matchParentWrap())
+            }
+    }
+
     private fun refreshFromAuthority() {
         val snapshot = application.localNotificationAuthoritySnapshot()
+        val selectedPackages = snapshot.policy.packageIds.toSet()
         grantSwitch.isChecked = snapshot.granted
-        packageIdsInput.setText(snapshot.policy.packageIds.joinToString("\n"))
         fieldAccessGroup.check(if (snapshot.policy.fieldAccess == NotificationFieldAccess.CONTENT) contentId else metadataId)
         deliveryModeGroup.check(if (snapshot.deliveryMode == NotificationDeliveryMode.AUTO_SEND) autoSendId else onDemandId)
+        ruleModeGroup.check(if (snapshot.policy.mode == NotificationRuleMode.DENYLIST) denylistId else allowlistId)
+        packageCheckBoxes.forEach { (packageName, checkBox) ->
+            checkBox.isChecked = packageName in selectedPackages
+        }
+        listenerStatusText.text = systemListenerStatus()
         statusText.text = if (snapshot.corrupted) {
             "Local policy evidence is corrupted; access remains denied."
         } else {
@@ -152,7 +179,7 @@ class MainActivity : Activity() {
     private fun saveSettings() {
         try {
             val snapshot = application.localNotificationAuthoritySnapshot()
-            val commit = commitNotificationSettings(snapshot, currentDraft())
+            val commit = currentDraft().commitAgainst(snapshot)
             application.localNotificationPolicyController().apply(
                 commit.policy,
                 commit.authorizationRevision,
@@ -161,42 +188,80 @@ class MainActivity : Activity() {
             )
             statusText.text = "Saved at authorization revision ${commit.authorizationRevision}."
         } catch (failure: IllegalArgumentException) {
-            Toast.makeText(this, failure.message ?: "Invalid notification settings", Toast.LENGTH_LONG).show()
+            showMutationError("Invalid local notification settings.")
+        } catch (failure: PolicyRevisionRace) {
+            showMutationError("Settings changed before they could be saved.")
+        } catch (failure: PolicyStateCorrupted) {
+            showMutationError("Local notification settings are corrupted and remain denied.")
+        } catch (failure: IllegalStateException) {
+            showMutationError("Local notification settings are unavailable.")
         }
     }
 
     private fun revokeSettings() {
         try {
             val snapshot = application.localNotificationAuthoritySnapshot()
-            val draft = NotificationSettingsDraft(
-                packageIdsText = snapshot.policy.packageIds.joinToString("\n"),
-                fieldAccess = snapshot.policy.fieldAccess,
-                deliveryMode = snapshot.deliveryMode,
+            val commit = NotificationSettingsDraft(
                 granted = false,
-            )
-            val commit = commitNotificationSettings(snapshot, draft)
+                deliveryMode = snapshot.deliveryMode,
+                fieldAccess = snapshot.policy.fieldAccess,
+                ruleMode = snapshot.policy.mode,
+                packageIds = snapshot.policy.packageIds,
+            ).commitAgainst(snapshot)
             application.localNotificationPolicyController().revoke(commit.authorizationRevision)
             statusText.text = "Local notification access revoked."
             grantSwitch.isChecked = false
         } catch (failure: IllegalArgumentException) {
-            Toast.makeText(this, failure.message ?: "Unable to revoke notification settings", Toast.LENGTH_LONG).show()
+            showMutationError("Invalid local notification settings.")
+        } catch (failure: PolicyRevisionRace) {
+            showMutationError("Settings changed before they could be revoked.")
+        } catch (failure: PolicyStateCorrupted) {
+            showMutationError("Local notification settings are corrupted and remain denied.")
+        } catch (failure: IllegalStateException) {
+            showMutationError("Local notification settings are unavailable.")
         }
     }
 
     private fun currentDraft(): NotificationSettingsDraft = NotificationSettingsDraft(
-        packageIdsText = packageIdsInput.text.toString(),
-        fieldAccess = if (fieldAccessGroup.checkedRadioButtonId == contentId) {
-            NotificationFieldAccess.CONTENT
-        } else {
-            NotificationFieldAccess.METADATA
-        },
+        granted = grantSwitch.isChecked,
         deliveryMode = if (deliveryModeGroup.checkedRadioButtonId == autoSendId) {
             NotificationDeliveryMode.AUTO_SEND
         } else {
             NotificationDeliveryMode.ON_DEMAND
         },
-        granted = grantSwitch.isChecked,
+        fieldAccess = if (fieldAccessGroup.checkedRadioButtonId == contentId) {
+            NotificationFieldAccess.CONTENT
+        } else {
+            NotificationFieldAccess.METADATA
+        },
+        ruleMode = if (ruleModeGroup.checkedRadioButtonId == denylistId) {
+            NotificationRuleMode.DENYLIST
+        } else {
+            NotificationRuleMode.ALLOWLIST
+        },
+        packageIds = packageCheckBoxes.filterValues { it.isChecked }.keys.toList(),
     )
+
+    private fun systemListenerStatus(): String {
+        val listenerComponent = ComponentName(
+            this,
+            AgentLifeNotificationListenerService::class.java,
+        ).flattenToString()
+        val enabledListeners = Settings.Secure.getString(
+            contentResolver,
+            "enabled_notification_listeners",
+        )
+        return if (enabledListeners?.split(':')?.contains(listenerComponent) == true) {
+            "System notification listener: enabled."
+        } else {
+            "System notification listener: disabled."
+        }
+    }
+
+    private fun showMutationError(message: String) {
+        statusText.text = message
+        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+    }
 
     private fun label(text: String): TextView = TextView(this).apply {
         this.text = text
