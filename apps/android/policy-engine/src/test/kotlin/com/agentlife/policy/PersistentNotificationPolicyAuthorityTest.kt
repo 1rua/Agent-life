@@ -69,6 +69,26 @@ class PersistentNotificationPolicyAuthorityTest {
     }
 
     @Test
+    fun v2_invalid_delivery_mode_ordinal_restores_as_deny_first_corrupted_state() {
+        val persistence = InMemoryNotificationPolicyPersistence()
+        persistence.write(v2Bytes(deliveryModeOrdinal = NotificationDeliveryMode.entries.size))
+
+        val snapshot = PersistentNotificationPolicyAuthority(persistence).snapshot()
+        assertFalse(snapshot.granted)
+        assertTrue(snapshot.corrupted)
+    }
+
+    @Test
+    fun v2_trailing_bytes_restore_as_deny_first_corrupted_state() {
+        val persistence = InMemoryNotificationPolicyPersistence()
+        persistence.write(v2Bytes(trailingBytes = byteArrayOf(0x7F)))
+
+        val snapshot = PersistentNotificationPolicyAuthority(persistence).snapshot()
+        assertFalse(snapshot.granted)
+        assertTrue(snapshot.corrupted)
+    }
+
+    @Test
     fun legacy_v1_bytes_restore_with_on_demand_delivery() {
         val persistence = InMemoryNotificationPolicyPersistence()
         persistence.write(legacyV1Bytes())
@@ -108,6 +128,25 @@ class PersistentNotificationPolicyAuthorityTest {
             output.writeLong(3L)
             output.writeInt(1)
             writeLegacyString(output, "mail")
+        }
+        bytes.toByteArray()
+    }
+
+    private fun v2Bytes(
+        deliveryModeOrdinal: Int = NotificationDeliveryMode.ON_DEMAND.ordinal,
+        trailingBytes: ByteArray = byteArrayOf(),
+    ): ByteArray = ByteArrayOutputStream().use { bytes ->
+        DataOutputStream(bytes).use { output ->
+            writeLegacyString(output, "AGENT_LIFE_NOTIFICATION_AUTHORITY_V2")
+            output.writeLong(7L)
+            output.writeBoolean(true)
+            output.writeByte(deliveryModeOrdinal)
+            output.writeByte(NotificationRuleMode.ALLOWLIST.ordinal)
+            output.writeByte(NotificationFieldAccess.METADATA.ordinal)
+            output.writeLong(3L)
+            output.writeInt(1)
+            writeLegacyString(output, "mail")
+            output.write(trailingBytes)
         }
         bytes.toByteArray()
     }
