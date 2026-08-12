@@ -20,6 +20,53 @@ executor. The assistant-holder and main APK share a bounded text/opaque-grant
 handoff contract whose default gate denies until a local user setting enables
 it; no implicit IPC is implemented in this source-only slice.
 
+## Notification vertical slice
+
+Fresh install is deny-first: the persisted notification policy starts with an
+empty package allowlist, `METADATA` field access, `ON_DEMAND` delivery, and no
+local grant. The local settings page can configure package IDs, metadata versus
+content access, and `ON_DEMAND` versus `AUTO_SEND`. It also opens Android's
+notification-listener settings, where the user completes the system listener
+authorization. The Agent has a read-only query path; it cannot change the
+local policy or system authorization.
+
+Agent reads use the typed `NotificationAgentQueryGateway`. Each request carries
+an operation ID and policy revision: identical operation retries are
+idempotent, while reuse with different request data is rejected. The gateway
+enforces the current local grant and revision, package filtering, content
+eligibility, and metadata redaction before returning records.
+
+`AUTO_SEND` records are written to the encrypted local outbox only when local
+mode and the egress policy gate both allow them. `ON_DEMAND` reads do not create
+new automatic events. Dispatcher recovery and authenticated ACK handling remain
+in place for pending outbox events. The local notification authority persists
+as format V2; malformed, truncated, unknown, or otherwise corrupt state fails
+closed to deny-first behavior.
+
+Focused verification for this slice:
+
+```sh
+cd apps/android
+./gradlew --no-daemon --console=plain \
+  :notification-collector:testDebugUnitTest \
+  :policy-engine:testDebugUnitTest \
+  :core-model:testDebugUnitTest \
+  :encrypted-store:testDebugUnitTest \
+  :app:testDebugUnitTest
+```
+
+The focused tests cover the notification gateway/runtime, policy authority and
+evaluator, core contracts, encrypted outbox/dispatcher behavior, and local app
+settings. The SDK-free boundary check is:
+
+```sh
+python3 apps/android/tools/test_notification_runtime_static.py
+python3 apps/android/tools/test_transport_boundary.py
+```
+
+These commands are scoped verification; they do not by themselves claim that
+the full Android build is green.
+
 Run the SDK-free source gate from the repository root:
 
 ```sh
