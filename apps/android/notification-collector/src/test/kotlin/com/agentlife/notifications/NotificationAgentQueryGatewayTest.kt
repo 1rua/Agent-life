@@ -6,10 +6,9 @@ import com.agentlife.core.model.NotificationCollector
 import com.agentlife.core.model.NotificationFieldAccess
 import com.agentlife.core.model.NotificationRuleMode
 import com.agentlife.core.model.NotificationRecordV1
+import com.agentlife.core.model.sortNotificationPackageIds
 import com.agentlife.policy.InMemoryNotificationPolicyPersistence
 import com.agentlife.policy.PersistentNotificationPolicyAuthority
-import java.io.ByteArrayOutputStream
-import java.io.DataOutputStream
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.coroutines.startCoroutine
@@ -56,9 +55,10 @@ class NotificationAgentQueryGatewayTest {
 
         assertEquals(gateway.query(request), gateway.query(request))
         assertEquals(1, countingCollector.captureCount)
-        assertThrows(NotificationQueryRejected::class.java) {
+        val rejected = assertThrows(NotificationQueryRejected::class.java) {
             runSuspend { gateway.query(request.copy(limit = 9)) }
         }
+        assertEquals("OPERATION_IDENTITY_MISMATCH", rejected.code)
         Unit
     }
 
@@ -106,29 +106,106 @@ class NotificationAgentQueryGatewayTest {
     }
 
     @Test
+    fun corrupt_persisted_policy_returns_failed_capture_with_current_revision() = runSuspend {
+        val persistence = InMemoryNotificationPolicyPersistence().also {
+            it.write(byteArrayOf(0x41, 0x42, 0x43))
+        }
+        val authority = PersistentNotificationPolicyAuthority(persistence)
+        val collector = AndroidNotificationCollector(authorization = authority).also {
+            it.applyPolicyBlocking(authority.snapshot().policy)
+        }
+
+        val result = NotificationAgentQueryGateway(collector, authority).query(
+            NotificationAgentQueryRequest("corrupt-policy", 0u, 10),
+        )
+
+        assertFailed(result, "LOCAL_POLICY_CORRUPTED", 0u)
+    }
+
+    @Test
+    fun pre_gate_failures_do_not_access_the_collector() = runSuspend {
+        val staleAuthority = authorityWithContentPolicy()
+        val staleCollector = countingCollector(staleAuthority)
+        val staleResult = NotificationAgentQueryGateway(staleCollector, staleAuthority).query(
+            NotificationAgentQueryRequest("pre-gate-stale", 0u, 10),
+        )
+        assertFailed(staleResult, "AUTHORIZATION_REVISION_STALE", 1u)
+        assertEquals(0, staleCollector.captureCount)
+
+        val corruptPersistence = InMemoryNotificationPolicyPersistence().also {
+            it.write(byteArrayOf(0x41, 0x42, 0x43))
+        }
+        val corruptAuthority = PersistentNotificationPolicyAuthority(corruptPersistence)
+        val corruptCollector = countingCollector(corruptAuthority)
+        val corruptResult = NotificationAgentQueryGateway(corruptCollector, corruptAuthority).query(
+            NotificationAgentQueryRequest("pre-gate-corrupt", 0u, 10),
+        )
+        assertFailed(corruptResult, "LOCAL_POLICY_CORRUPTED", 0u)
+        assertEquals(0, corruptCollector.captureCount)
+
+        val ungrantedAuthority = PersistentNotificationPolicyAuthority(InMemoryNotificationPolicyPersistence())
+        val ungrantedCollector = countingCollector(ungrantedAuthority)
+        val ungrantedResult = NotificationAgentQueryGateway(ungrantedCollector, ungrantedAuthority).query(
+            NotificationAgentQueryRequest("pre-gate-ungranted", 0u, 10),
+        )
+        assertFailed(ungrantedResult, "LOCAL_GRANT_REQUIRED", 0u)
+        assertEquals(0, ungrantedCollector.captureCount)
+
+        val contentIneligibleAuthority = authorityWithMetadataPolicy()
+        val contentIneligibleCollector = countingCollector(contentIneligibleAuthority)
+        val contentIneligibleResult = NotificationAgentQueryGateway(
+            contentIneligibleCollector,
+            contentIneligibleAuthority,
+        ).query(
+            NotificationAgentQueryRequest(
+                operationId = "pre-gate-content-ineligible",
+                policyRevision = 1u,
+                limit = 10,
+                filter = NotificationQueryFilter(fieldAccess = NotificationFieldAccess.CONTENT),
+            ),
+        )
+        assertFailed(contentIneligibleResult, "FIELD_ACCESS_NOT_GRANTED", 1u)
+        assertEquals(0, contentIneligibleCollector.captureCount)
+    }
+
+    @Test
     fun invalid_operation_id_and_query_limits_are_rejected() {
-        assertThrows(NotificationQueryRejected::class.java) {
+        assertRejectedCode("OPERATION_ID_INVALID") {
             NotificationAgentQueryRequest("   ", 1u, 10)
+            Unit
         }
-        assertThrows(IllegalArgumentException::class.java) {
+        assertRejectedCode("LIMIT_INVALID") {
             NotificationAgentQueryRequest("zero", 1u, 0)
+            Unit
         }
-        assertThrows(IllegalArgumentException::class.java) {
+        assertRejectedCode("LIMIT_INVALID") {
             NotificationAgentQueryRequest("too-many", 1u, 101)
+            Unit
         }
     }
 
     @Test
     fun unsorted_duplicate_and_malformed_package_filters_are_rejected() {
-        assertThrows(IllegalArgumentException::class.java) {
+        assertRejectedCode("PACKAGE_IDS_UNSORTED") {
             NotificationQueryFilter(listOf("com.mail", "com.chat"))
+            Unit
         }
-        assertThrows(IllegalArgumentException::class.java) {
+        assertRejectedCode("PACKAGE_IDS_DUPLICATE") {
             NotificationQueryFilter(listOf("com.mail", "com.mail"))
+            Unit
         }
-        assertThrows(IllegalArgumentException::class.java) {
+        assertRejectedCode("PACKAGE_ID_INVALID") {
             NotificationQueryFilter(listOf("not a package"))
+            Unit
         }
+    }
+
+    @Test
+    fun package_ordering_uses_unicode_code_points_not_utf16_units() {
+        assertEquals(
+            listOf("com.a", "com.\uE000", "com.\uD800\uDC00"),
+            sortNotificationPackageIds(listOf("com.\uD800\uDC00", "com.a", "com.\uE000")),
+        )
     }
 
     private fun assertFailed(
@@ -190,6 +267,13 @@ private fun gatewayWithContentPolicyAndOneRecord(): NotificationAgentQueryGatewa
     return NotificationAgentQueryGateway(collector, authority)
 }
 
+private fun countingCollector(authority: PersistentNotificationPolicyAuthority): CountingNotificationCollector =
+    CountingNotificationCollector(
+        AndroidNotificationCollector(authorization = authority).also {
+            it.applyPolicyBlocking(authority.snapshot().policy)
+        },
+    )
+
 private fun raw(packageName: String, key: String, title: String, body: String): RawNotification =
     RawNotification(packageName, key, packageName, title, body, null, 1)
 
@@ -209,6 +293,11 @@ private class CountingNotificationCollector(
     }
 
     override fun observeAutoSend() = delegate.observeAutoSend()
+}
+
+private fun assertRejectedCode(expected: String, action: () -> Unit) {
+    val rejected = assertThrows(NotificationQueryRejected::class.java, action)
+    assertEquals(expected, rejected.code)
 }
 
 private fun <T> runSuspend(block: suspend () -> T): T {
