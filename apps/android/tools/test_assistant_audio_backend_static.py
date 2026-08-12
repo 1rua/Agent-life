@@ -13,11 +13,11 @@ SOURCES = (
     ROOT / "core-model/src/main/kotlin/com/agentlife/core/model/AssistantAudioContracts.kt",
 )
 FORBIDDEN_BACKEND_SURFACE = re.compile(
-    r"^\s*import\s+(?:android|androidx)\.|"
-    r"\b(?:[A-Za-z_][A-Za-z0-9_]*)?(?:uri|path|url|rawbyte(?:s|buffer)?|socket)"
-    r"(?:[A-Za-z0-9_]+)?\b|\bProcessBuilder\b|Runtime\.getRuntime|"
-    r"\b(VpnService|Recorder|MediaRecorder|AudioRecord)\b",
-    re.IGNORECASE,
+    r"^\s*import\s+(?i:android|androidx)\.|"
+    r"\b(?i:uri|path|url|socket|raw_?byte(?:s|_?buffer)?)(?=[A-Z_]|\b)|"
+    r"(?<=[A-Za-z0-9])(?=[A-Z])(?i:uri|path|url|socket|rawbyte(?:s|buffer)?)(?=[A-Z_]|\b)|"
+    r"\b(?i:ProcessBuilder)\b|Runtime\.getRuntime|"
+    r"\b(?i:VpnService|Recorder|MediaRecorder|AudioRecord)\b",
 )
 
 
@@ -61,12 +61,19 @@ class AssistantAudioBackendStaticTest(unittest.TestCase):
             "val filePath = \"forbidden\"",
             "val uploadUrl = \"forbidden\"",
             "val rawByteBuffer = \"forbidden\"",
+            "val raw_bytes = \"forbidden\"",
+            "val raw_byte_buffer = \"forbidden\"",
             "val datagramSocket = \"forbidden\"",
             "val FiLePaTh = \"forbidden\"",
         )
         for snippet in snippets:
             with self.subTest(snippet=snippet):
                 self.assertIsNotNone(FORBIDDEN_BACKEND_SURFACE.search(snippet))
+
+    def test_harmless_identifier_substrings_are_allowed(self):
+        for snippet in ("val sympathyScore = 1", "val curiosity = 1"):
+            with self.subTest(snippet=snippet):
+                self.assertIsNone(FORBIDDEN_BACKEND_SURFACE.search(snippet))
 
 
 if __name__ == "__main__":
