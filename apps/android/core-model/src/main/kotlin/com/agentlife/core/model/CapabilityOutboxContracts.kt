@@ -51,3 +51,4 @@ interface CapabilityOutbox {
 
 class CapabilityOutboxConflict(message: String) : IllegalArgumentException(message)
 class CapabilityOutboxFull(message: String) : IllegalStateException(message)
+class CapabilityOutboxAckRejected(message: String) : IllegalArgumentException(message)

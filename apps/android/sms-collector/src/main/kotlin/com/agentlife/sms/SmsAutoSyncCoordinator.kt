@@ -9,6 +9,7 @@ import com.agentlife.capability.requireAutoSendScope
 import com.agentlife.core.model.BridgeSession
 import com.agentlife.core.model.CapabilityDurableEvent
 import com.agentlife.core.model.CapabilityOutbox
+import com.agentlife.core.model.CapabilityOutboxAckRejected
 import com.agentlife.core.model.PairedBridgeTransport
 import com.agentlife.core.model.TransportCloseReason
 import com.agentlife.core.model.VerifiedPairingTransportBinding
@@ -33,9 +34,12 @@ fun interface SmsAutoSendEgressGate {
 enum class SmsSyncFailure {
     PAIRING_UNAVAILABLE,
     POLICY_REVOKED,
+    CURSOR_NOT_DURABLE,
+    UNSUPPORTED_CAPABILITY,
     ACK_REJECTED,
     TRANSPORT_FAILURE,
     OUTBOX_FAILURE,
+    CAPTURE_FAILURE,
     CANCELLED,
 }
 
@@ -69,33 +73,71 @@ class SmsAutoSyncCoordinator(
         var captured = 0
         var enqueued = 0
         var collectionFailure: SmsSyncFailure? = null
+        var collectionHalted = false
+        val acceptedEventIds = mutableSetOf<String>()
+        val blockedEventIds = mutableSetOf<String>()
         try {
             val scope = subscription.requireAutoSendScope(MobileDataCapability.SMS)
             provider.observeAutoSend(scope).take(MAX_SMS_BATCH_RECORDS).collect { providerEvent ->
+                if (collectionHalted) return@collect
                 captured += 1
-                val providerId = numericProviderId(providerEvent.record.metadata.recordId)
-                val eventId = "sms:$providerId"
-                require(providerEvent.capability == MobileDataCapability.SMS) { "SMS provider emitted another capability" }
-                require(providerEvent.eventId == eventId) { "SMS provider event ID is not deterministic" }
-                require(providerEvent.policyRevision == scope.policyRevision) { "SMS provider policy revision is stale" }
-                val event = CapabilityDurableEvent(
-                    eventId = eventId,
-                    capability = "sms",
-                    recordId = providerEvent.record.metadata.recordId,
-                    policyRevision = scope.policyRevision,
-                    eventWire = eventEncoder.encode(eventId, providerEvent.record, scope.policyRevision),
-                )
-                outbox.enqueueAccepted(event)
-                enqueued += 1
-                cursorStore.advance(SmsCursor(providerId, providerEvent.record.metadata.messageAtEpochMs))
+                val cursor = try {
+                    val providerId = numericProviderId(providerEvent.record.metadata.recordId)
+                    val eventId = "sms:$providerId"
+                    require(providerEvent.capability == MobileDataCapability.SMS) { "SMS provider emitted another capability" }
+                    require(providerEvent.eventId == eventId) { "SMS provider event ID is not deterministic" }
+                    require(providerEvent.policyRevision == scope.policyRevision) { "SMS provider policy revision is stale" }
+                    val event = CapabilityDurableEvent(
+                        eventId = eventId,
+                        capability = SMS_CAPABILITY,
+                        recordId = providerEvent.record.metadata.recordId,
+                        policyRevision = scope.policyRevision,
+                        eventWire = eventEncoder.encode(eventId, providerEvent.record, scope.policyRevision),
+                    )
+                    try {
+                        outbox.enqueueAccepted(event)
+                    } catch (failure: CancellationException) {
+                        throw failure
+                    } catch (_: Throwable) {
+                        collectionFailure = SmsSyncFailure.OUTBOX_FAILURE
+                        collectionHalted = true
+                        return@collect
+                    }
+                    acceptedEventIds += eventId
+                    enqueued += 1
+                    SmsCursor(providerId, providerEvent.record.metadata.messageAtEpochMs)
+                } catch (failure: CancellationException) {
+                    throw failure
+                } catch (_: Throwable) {
+                    collectionFailure = SmsSyncFailure.CAPTURE_FAILURE
+                    collectionHalted = true
+                    return@collect
+                }
+                try {
+                    if (!cursorStore.advance(cursor)) {
+                        blockedEventIds += "sms:${cursor.providerId}"
+                        collectionFailure = SmsSyncFailure.CURSOR_NOT_DURABLE
+                        collectionHalted = true
+                    }
+                } catch (failure: CancellationException) {
+                    throw failure
+                } catch (_: Throwable) {
+                    blockedEventIds += "sms:${cursor.providerId}"
+                    collectionFailure = SmsSyncFailure.CURSOR_NOT_DURABLE
+                    collectionHalted = true
+                }
             }
         } catch (_: CancellationException) {
-            return@withLock result(captured, enqueued, 0, 0, SmsSyncFailure.CANCELLED)
+            return@withLock result(captured, enqueued, 0, acceptedEventIds.size, SmsSyncFailure.CANCELLED)
         } catch (_: Throwable) {
-            collectionFailure = SmsSyncFailure.OUTBOX_FAILURE
+            collectionFailure = SmsSyncFailure.CAPTURE_FAILURE
         }
 
-        val dispatch = dispatcher.dispatchPending()
+        val dispatch = try {
+            dispatcher.dispatchPending(blockedEventIds)
+        } catch (_: CancellationException) {
+            return@withLock result(captured, enqueued, 0, acceptedEventIds.size, SmsSyncFailure.CANCELLED)
+        }
         result(
             captured = captured,
             enqueued = enqueued,
@@ -140,9 +182,11 @@ private class SmsCapabilityOutboxDispatcher(
         require(maxAttempts in 1..10) { "dispatch attempts must be between 1 and 10" }
     }
 
-    suspend fun dispatchPending(): SmsDispatchResult {
+    suspend fun dispatchPending(blockedEventIds: Set<String>): SmsDispatchResult {
         val pending = try {
             outbox.recoverUnacknowledged()
+        } catch (failure: CancellationException) {
+            throw failure
         } catch (_: Throwable) {
             return SmsDispatchResult(0, 0, SmsSyncFailure.OUTBOX_FAILURE)
         }
@@ -151,6 +195,15 @@ private class SmsCapabilityOutboxDispatcher(
         var failure: SmsSyncFailure? = null
 
         for (event in pending) {
+            if (event.capability != SMS_CAPABILITY) {
+                retained += 1
+                failure = failure ?: SmsSyncFailure.UNSUPPORTED_CAPABILITY
+                continue
+            }
+            if (event.eventId in blockedEventIds) {
+                retained += 1
+                continue
+            }
             if (!egressGate.allows(event)) {
                 retained += 1
                 failure = failure ?: SmsSyncFailure.POLICY_REVOKED
@@ -158,21 +211,44 @@ private class SmsCapabilityOutboxDispatcher(
             }
             var delivered = false
             for (attempt in 1..maxAttempts) {
-                // A policy may have changed while a prior send or retry was in flight.
-                if (!egressGate.allows(event)) {
-                    failure = failure ?: SmsSyncFailure.POLICY_REVOKED
-                    break
-                }
                 val binding = bindingSource.currentBinding()
                 if (binding == null) {
                     failure = failure ?: SmsSyncFailure.PAIRING_UNAVAILABLE
                     break
                 }
-                var session: BridgeSession? = null
-                try {
-                    session = transport.open(binding)
+                val session = try {
+                    transport.open(binding)
+                } catch (_: CancellationException) {
+                    return SmsDispatchResult(acknowledged, pending.size - acknowledged, SmsSyncFailure.CANCELLED)
+                } catch (_: Throwable) {
+                    failure = failure ?: SmsSyncFailure.TRANSPORT_FAILURE
+                    continue
+                }
+                // `open` suspends, so a revoke can race the first policy check.
+                if (!egressGate.allows(event)) {
+                    failure = failure ?: SmsSyncFailure.POLICY_REVOKED
+                    close(session, TransportCloseReason.POLICY_REVOKED)
+                    break
+                }
+                // Keep this separate from the post-open check: this is the final egress fence.
+                if (!egressGate.allows(event)) {
+                    failure = failure ?: SmsSyncFailure.POLICY_REVOKED
+                    close(session, TransportCloseReason.POLICY_REVOKED)
+                    break
+                }
+                val ackWire = try {
                     session.sendControl(event.eventWire)
-                    outbox.acknowledge(event.eventId, session.receiveControl())
+                    session.receiveControl()
+                } catch (_: CancellationException) {
+                    close(session, TransportCloseReason.PROCESS_STOPPED)
+                    return SmsDispatchResult(acknowledged, pending.size - acknowledged, SmsSyncFailure.CANCELLED)
+                } catch (_: Throwable) {
+                    failure = failure ?: SmsSyncFailure.TRANSPORT_FAILURE
+                    close(session, TransportCloseReason.FAILURE)
+                    continue
+                }
+                try {
+                    outbox.acknowledge(event.eventId, ackWire)
                     acknowledged += 1
                     close(session, TransportCloseReason.PROCESS_STOPPED)
                     delivered = true
@@ -180,11 +256,11 @@ private class SmsCapabilityOutboxDispatcher(
                 } catch (_: CancellationException) {
                     close(session, TransportCloseReason.PROCESS_STOPPED)
                     return SmsDispatchResult(acknowledged, pending.size - acknowledged, SmsSyncFailure.CANCELLED)
-                } catch (_: IllegalArgumentException) {
+                } catch (_: CapabilityOutboxAckRejected) {
                     failure = failure ?: SmsSyncFailure.ACK_REJECTED
                     close(session, TransportCloseReason.FAILURE)
                 } catch (_: Throwable) {
-                    failure = failure ?: SmsSyncFailure.TRANSPORT_FAILURE
+                    failure = failure ?: SmsSyncFailure.OUTBOX_FAILURE
                     close(session, TransportCloseReason.FAILURE)
                 }
             }
@@ -197,9 +273,13 @@ private class SmsCapabilityOutboxDispatcher(
         if (session != null) {
             try {
                 transport.close(reason)
+            } catch (failure: CancellationException) {
+                throw failure
             } catch (_: Throwable) {
                 // Close failure does not alter retention: no ACK removed the event.
             }
         }
     }
 }
+
+private const val SMS_CAPABILITY = "sms"

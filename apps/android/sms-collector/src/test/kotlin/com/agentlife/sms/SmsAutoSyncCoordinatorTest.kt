@@ -18,6 +18,7 @@ import com.agentlife.capability.SmsPayload
 import com.agentlife.core.model.BridgeSession
 import com.agentlife.core.model.CapabilityDurableEvent
 import com.agentlife.core.model.CapabilityOutbox
+import com.agentlife.core.model.CapabilityOutboxAckRejected
 import com.agentlife.core.model.PairedBridgeTransport
 import com.agentlife.core.model.TransportCloseReason
 import com.agentlife.core.model.VerifiedPairingTransportBinding
@@ -30,7 +31,6 @@ import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.coroutines.startCoroutine
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
-import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -72,7 +72,7 @@ class SmsAutoSyncCoordinatorTest {
             provider = provider(event(providerId = 2, timestamp = 100)),
             outbox = transportOutbox,
             cursor = InMemorySmsCursorStore(),
-            transport = RecordingTransport(failSend = true),
+            transport = RecordingTransport(sendFailure = IllegalArgumentException("transport validation failure")),
             egressGate = SmsAutoSendEgressGate { true },
         )
 
@@ -117,6 +117,129 @@ class SmsAutoSyncCoordinatorTest {
         assertEquals(1, runSuspend { outbox.recoverUnacknowledged() }.size)
     }
 
+    @Test
+    fun policy_revoke_while_opening_blocks_send_and_retains_the_event() {
+        var egressAllowed = true
+        val outbox = RecordingOutbox()
+        val transport = RecordingTransport(onOpen = { egressAllowed = false })
+        val coordinator = coordinator(
+            provider = provider(event(providerId = 2, timestamp = 100)),
+            outbox = outbox,
+            cursor = InMemorySmsCursorStore(),
+            transport = transport,
+            egressGate = SmsAutoSendEgressGate { egressAllowed },
+        )
+
+        val result = runSuspend { coordinator.runOnce(subscription()) }
+
+        assertEquals(SmsSyncFailure.POLICY_REVOKED, result.failure)
+        assertEquals(1, result.retained)
+        assertTrue(transport.sentEventIds.isEmpty())
+        assertEquals(listOf("sms:2"), runSuspend { outbox.recoverUnacknowledged() }.map { it.eventId })
+    }
+
+    @Test
+    fun failed_cursor_advance_keeps_newly_enqueued_event_out_of_egress() {
+        val outbox = RecordingOutbox().also {
+            runSuspend {
+                it.enqueueAccepted(
+                    CapabilityDurableEvent("sms:1", "sms", "sms:1", 7u, "sms:1".encodeToByteArray()),
+                )
+            }
+        }
+        val transport = RecordingTransport()
+        val coordinator = coordinator(
+            provider = provider(event(providerId = 2, timestamp = 100)),
+            outbox = outbox,
+            cursor = object : SmsCursorStore {
+                override fun current(): SmsCursor? = null
+                override fun advance(cursor: SmsCursor): Boolean = false
+            },
+            transport = transport,
+            egressGate = SmsAutoSendEgressGate { true },
+        )
+
+        val result = runSuspend { coordinator.runOnce(subscription()) }
+
+        assertEquals(SmsSyncFailure.CURSOR_NOT_DURABLE, result.failure)
+        assertEquals(1, result.retained)
+        assertEquals(listOf("sms:1"), transport.sentEventIds)
+        assertEquals(listOf("sms:2"), runSuspend { outbox.recoverUnacknowledged() }.map { it.eventId })
+    }
+
+    @Test
+    fun throwing_cursor_advance_keeps_newly_enqueued_event_out_of_egress() {
+        val outbox = RecordingOutbox()
+        val transport = RecordingTransport()
+        val coordinator = coordinator(
+            provider = provider(event(providerId = 2, timestamp = 100)),
+            outbox = outbox,
+            cursor = object : SmsCursorStore {
+                override fun current(): SmsCursor? = null
+                override fun advance(cursor: SmsCursor): Boolean = throw IllegalStateException("cursor storage unavailable")
+            },
+            transport = transport,
+            egressGate = SmsAutoSendEgressGate { true },
+        )
+
+        val result = runSuspend { coordinator.runOnce(subscription()) }
+
+        assertEquals(SmsSyncFailure.CURSOR_NOT_DURABLE, result.failure)
+        assertEquals(1, result.retained)
+        assertTrue(transport.sentEventIds.isEmpty())
+        assertEquals(listOf("sms:2"), runSuspend { outbox.recoverUnacknowledged() }.map { it.eventId })
+    }
+
+    @Test
+    fun cancellation_after_accepted_enqueue_reports_the_retained_durable_event() {
+        val outbox = RecordingOutbox()
+        val coordinator = coordinator(
+            provider = providerFlow(kotlinx.coroutines.flow.flow {
+                emit(event(providerId = 2, timestamp = 100))
+                throw kotlinx.coroutines.CancellationException()
+            }),
+            outbox = outbox,
+            cursor = InMemorySmsCursorStore(),
+            transport = RecordingTransport(),
+            egressGate = SmsAutoSendEgressGate { true },
+        )
+
+        val result = runSuspend { coordinator.runOnce(subscription()) }
+
+        assertEquals(SmsSyncFailure.CANCELLED, result.failure)
+        assertEquals(1, result.enqueued)
+        assertEquals(1, result.retained)
+        assertEquals(listOf("sms:2"), runSuspend { outbox.recoverUnacknowledged() }.map { it.eventId })
+    }
+
+    @Test
+    fun generic_non_sms_outbox_entry_is_retained_without_sms_egress() {
+        val outbox = RecordingOutbox().also {
+            runSuspend {
+                it.enqueueAccepted(
+                    CapabilityDurableEvent("calls:1", "calls", "calls:1", 7u, "calls-wire".encodeToByteArray()),
+                )
+            }
+        }
+        val transport = RecordingTransport()
+        val gateEvents = mutableListOf<String>()
+        val coordinator = coordinator(
+            provider = provider(event(providerId = 2, timestamp = 100)),
+            outbox = outbox,
+            cursor = InMemorySmsCursorStore(),
+            transport = transport,
+            egressGate = SmsAutoSendEgressGate { event -> gateEvents += event.eventId; true },
+        )
+
+        val result = runSuspend { coordinator.runOnce(subscription()) }
+
+        assertEquals(1, result.acknowledged)
+        assertEquals(1, result.retained)
+        assertEquals(listOf("sms:2"), transport.sentEventIds)
+        assertEquals(listOf("sms:2", "sms:2", "sms:2"), gateEvents)
+        assertEquals(listOf("calls:1"), runSuspend { outbox.recoverUnacknowledged() }.map { it.eventId })
+    }
+
     private fun coordinator(
         provider: SmsCapabilityProvider,
         outbox: CapabilityOutbox,
@@ -140,6 +263,13 @@ class SmsAutoSyncCoordinatorTest {
 
         override fun observeAutoSend(scope: com.agentlife.capability.AuthorizedAutoSendScope): Flow<CapabilityEvent<SmsPayload>> =
             flowOf(*events)
+    }
+
+    private fun providerFlow(events: Flow<CapabilityEvent<SmsPayload>>) = object : SmsCapabilityProvider {
+        override suspend fun read(scope: com.agentlife.capability.AuthorizedReadScope): CapabilityReadResult<SmsPayload> =
+            error("read is not used by auto-send")
+
+        override fun observeAutoSend(scope: com.agentlife.capability.AuthorizedAutoSendScope): Flow<CapabilityEvent<SmsPayload>> = events
     }
 
     private fun event(providerId: Long, timestamp: Long): CapabilityEvent<SmsPayload> = CapabilityEvent(
@@ -200,22 +330,28 @@ class SmsAutoSyncCoordinatorTest {
         }
 
         override suspend fun acknowledge(eventId: String, eventAckWire: ByteArray) {
-            if (rejectAcks || !eventAckWire.contentEquals(byteArrayOf(9))) throw IllegalArgumentException("invalid ACK")
+            if (rejectAcks || !eventAckWire.contentEquals(byteArrayOf(9))) throw CapabilityOutboxAckRejected("invalid ACK")
             entries.remove(eventId)
         }
 
         override suspend fun recoverUnacknowledged(): List<CapabilityDurableEvent> = entries.values.toList()
     }
 
-    private class RecordingTransport(private val failSend: Boolean = false) : PairedBridgeTransport {
+    private class RecordingTransport(
+        private val sendFailure: Throwable? = null,
+        private val onOpen: () -> Unit = {},
+    ) : PairedBridgeTransport {
         val sentEventIds = mutableListOf<String>()
-        override suspend fun open(binding: VerifiedPairingTransportBinding): BridgeSession = object : BridgeSession {
+        override suspend fun open(binding: VerifiedPairingTransportBinding): BridgeSession {
+            onOpen()
+            return object : BridgeSession {
             override val connectionGeneration: ULong = 1u
             override suspend fun sendControl(canonicalWire: ByteArray) {
-                if (failSend) throw IllegalStateException("transport unavailable")
+                sendFailure?.let { throw it }
                 sentEventIds += canonicalWire.decodeToString()
             }
             override suspend fun receiveControl(): ByteArray = byteArrayOf(9)
+        }
         }
         override suspend fun close(reason: TransportCloseReason) = Unit
     }

@@ -1,6 +1,7 @@
 package com.agentlife.encrypted.store
 
 import com.agentlife.core.model.CapabilityDurableEvent
+import com.agentlife.core.model.CapabilityOutboxAckRejected
 import com.agentlife.core.model.CapabilityOutboxConflict
 import com.agentlife.core.model.CapabilityOutboxFull
 import kotlin.coroutines.Continuation
@@ -44,7 +45,7 @@ class CapabilityOutboxStoreTest {
         )
         runSuspend { store.enqueueAccepted(event()) }
 
-        assertThrows(OutboxAckRejected::class.java) {
+        assertThrows(CapabilityOutboxAckRejected::class.java) {
             runSuspend { store.acknowledge("sms:42", byteArrayOf(8)) }
         }
         assertEquals(1, runSuspend { store.recoverUnacknowledged() }.size)

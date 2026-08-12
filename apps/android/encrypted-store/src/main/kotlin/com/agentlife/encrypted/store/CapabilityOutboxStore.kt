@@ -2,6 +2,7 @@ package com.agentlife.encrypted.store
 
 import com.agentlife.core.model.CapabilityDurableEvent
 import com.agentlife.core.model.CapabilityOutbox
+import com.agentlife.core.model.CapabilityOutboxAckRejected
 import com.agentlife.core.model.CapabilityOutboxConflict
 import com.agentlife.core.model.CapabilityOutboxFull
 import java.io.ByteArrayInputStream
@@ -75,9 +76,9 @@ class CapabilityOutboxStore(
         acknowledgeBlocking(eventId, eventAckWire)
 
     fun acknowledgeBlocking(eventId: String, eventAckWire: ByteArray) = synchronized(lock) {
-        val existing = events[eventId] ?: throw OutboxAckRejected("unknown capability event")
+        val existing = events[eventId] ?: throw CapabilityOutboxAckRejected("unknown capability event")
         if (eventAckWire.isEmpty() || !ackVerifier.verify(existing.eventId, eventAckWire.copyOf())) {
-            throw OutboxAckRejected("capability event ACK failed verification")
+            throw CapabilityOutboxAckRejected("capability event ACK failed verification")
         }
         val snapshot = LinkedHashMap(events)
         events.remove(eventId)
