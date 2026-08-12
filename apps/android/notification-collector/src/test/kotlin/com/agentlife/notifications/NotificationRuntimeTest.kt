@@ -175,6 +175,68 @@ class NotificationRuntimeTest {
     }
 
     @Test
+    fun start_applies_latest_snapshot_after_initial_apply_when_listener_is_delayed() {
+        val authority = authorityWithContentPolicy(NotificationDeliveryMode.AUTO_SEND)
+        val blockingAuthorization = BlockingNotificationAuthorization()
+        val collector = AndroidNotificationCollector(authorization = blockingAuthorization).also {
+            it.applyPolicyBlocking(authority.snapshot().policy)
+            assertTrue(it.onPosted(RawNotification("mail", "mail-key", "Mail", "title", "body", null, 1)))
+        }
+        blockingAuthorization.blockNextEvaluation()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        val runtime = NotificationRuntime(
+            initialCollector = collector,
+            outbox = RecordingOutbox(),
+            scope = scope,
+            policyAuthority = authority,
+        )
+        val listenerEntered = CountDownLatch(1)
+        val allowListenerToReturn = CountDownLatch(1)
+        val delayedListener = authority.addListener { state ->
+            if (state.policy.policyRevision == 2uL) {
+                listenerEntered.countDown()
+                check(allowListenerToReturn.await(5, TimeUnit.SECONDS)) { "delayed listener was not released" }
+            }
+        }
+        val startThread = Thread { runtime.start() }
+        val updateThread = Thread {
+            authority.localController().apply(
+                NotificationCollectionPolicyV1(
+                    NotificationRuleMode.ALLOWLIST,
+                    listOf("chat"),
+                    NotificationFieldAccess.CONTENT,
+                    2u,
+                ),
+                authorizationRevision = 2u,
+                granted = true,
+                deliveryMode = NotificationDeliveryMode.AUTO_SEND,
+            )
+        }
+
+        startThread.start()
+        try {
+            assertTrue(blockingAuthorization.entered.await(5, TimeUnit.SECONDS))
+            updateThread.start()
+            assertTrue(listenerEntered.await(5, TimeUnit.SECONDS))
+            blockingAuthorization.release()
+            startThread.join(5_000)
+
+            assertFalse(startThread.isAlive)
+            assertTrue(collector.onPosted(RawNotification("chat", "chat-key", "Chat", "title", "body", null, 2)))
+        } finally {
+            blockingAuthorization.release()
+            allowListenerToReturn.countDown()
+            startThread.join(5_000)
+            updateThread.join(5_000)
+            delayedListener.close()
+            runtime.stop()
+            scope.cancel()
+        }
+
+        assertFalse(updateThread.isAlive)
+    }
+
+    @Test
     fun revoke_race_is_rechecked_before_enqueue() {
         val outbox = RecordingOutbox()
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)

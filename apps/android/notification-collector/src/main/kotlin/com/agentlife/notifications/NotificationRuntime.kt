@@ -42,7 +42,7 @@ class NotificationRuntime(
             policyRegistration = authority.addListener { state ->
                 synchronized(lock) { collector.applyPolicyBlocking(state.policy) }
             }
-            collector.applyPolicyBlocking(authority.snapshot().policy)
+            reconcileStartupPolicy(authority)
         }
         if (outbox == null) return@synchronized
         subscription = scope.launch {
@@ -99,6 +99,38 @@ class NotificationRuntime(
                 }
             }
         }
+    }
+
+    /**
+     * The listener closes the registration gap, while this bounded loop closes
+     * the snapshot/apply gap during startup. The caller holds [lock], so a
+     * listener callback cannot apply an older policy between these reads.
+     */
+    private fun reconcileStartupPolicy(authority: PersistentNotificationPolicyAuthority) {
+        var latestAppliedRevision: ULong? = null
+        repeat(MAX_STARTUP_POLICY_RECONCILIATION_ATTEMPTS) {
+            val snapshot = authority.snapshot()
+            val policy = snapshot.policy
+            if (latestAppliedRevision != null && policy.policyRevision < latestAppliedRevision) return
+
+            try {
+                collector.applyPolicyBlocking(policy)
+            } catch (race: PolicyRevisionRace) {
+                // A newer authority snapshot can legitimately win a concurrent
+                // listener callback; retry only when its revision advanced.
+                if (authority.snapshot().policy.policyRevision > policy.policyRevision) return@repeat
+                throw race
+            }
+            latestAppliedRevision = policy.policyRevision
+
+            val latest = authority.snapshot().policy
+            if (latest.policyRevision == policy.policyRevision && latest == policy) return
+            if (latest.policyRevision < policy.policyRevision) return
+        }
+    }
+
+    private companion object {
+        const val MAX_STARTUP_POLICY_RECONCILIATION_ATTEMPTS = 4
     }
 }
 
