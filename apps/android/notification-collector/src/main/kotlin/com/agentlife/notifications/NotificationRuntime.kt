@@ -3,6 +3,7 @@ package com.agentlife.notifications
 import com.agentlife.core.model.AuthorizationDecision
 import com.agentlife.core.model.NotificationCaptureResult
 import com.agentlife.core.model.NotificationAuthorization
+import com.agentlife.core.model.NotificationDeliveryMode
 import com.agentlife.core.model.NotificationOutbox
 import com.agentlife.policy.PersistentNotificationPolicyAuthority
 import kotlinx.coroutines.CancellationException
@@ -64,14 +65,16 @@ class NotificationRuntime(
     /** Shared deterministic boundary used by the flow and revoke-race tests. */
     internal suspend fun persistAndDispatch(capture: NotificationCaptureResult) {
         val sink = outbox ?: return
-        capture.records.forEach { record ->
-            if (!egressGate.allows(record)) return@forEach
-            try {
-                sink.enqueueAccepted(record)
-            } catch (failure: Throwable) {
-                if (failure is CancellationException) throw failure
-                failureReporter.report(NotificationRuntimeFailure.OUTBOX_WRITE_FAILED)
-                return@forEach
+        if (policyAuthority == null || policyAuthority.snapshot().deliveryMode == NotificationDeliveryMode.AUTO_SEND) {
+            capture.records.forEach { record ->
+                if (!egressGate.allows(record)) return@forEach
+                try {
+                    sink.enqueueAccepted(record)
+                } catch (failure: Throwable) {
+                    if (failure is CancellationException) throw failure
+                    failureReporter.report(NotificationRuntimeFailure.OUTBOX_WRITE_FAILED)
+                    return@forEach
+                }
             }
         }
         try {
