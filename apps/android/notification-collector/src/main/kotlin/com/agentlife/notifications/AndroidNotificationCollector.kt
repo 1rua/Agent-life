@@ -76,6 +76,11 @@ class AndroidNotificationCollector(
             // Revocation immediately removes records; they cannot be surfaced
             // by a later on-demand call after the revision changes.
             active.entries.removeIf { !evaluator.evaluate(it.value.raw.packageName).accepted }
+            if (policy.fieldAccess == NotificationFieldAccess.METADATA) {
+                active.replaceAll { _, accepted ->
+                    accepted.copy(raw = accepted.raw.copy(title = null, body = null))
+                }
+            }
         }
     }
 
