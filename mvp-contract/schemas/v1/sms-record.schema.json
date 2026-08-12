@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agent-life:mvp:sms-record:v1",
+  "title": "Agent Life SMS event",
+  "type": "object",
+  "additionalProperties": false,
+  "unevaluatedProperties": false,
+  "required": ["kind", "record_id", "source_epoch", "record_revision", "cursor_message_at_epoch_ms", "cursor_provider_id", "captured_at_epoch_ms", "capture_revision", "policy_revision", "metadata", "content"],
+  "properties": {
+    "kind": { "const": "upsert" },
+    "record_id": { "type": "string", "minLength": 1 },
+    "source_epoch": { "$ref": "#/$defs/u64" },
+    "record_revision": { "$ref": "#/$defs/positive_u64" },
+    "cursor_message_at_epoch_ms": { "$ref": "#/$defs/u64" },
+    "cursor_provider_id": { "$ref": "#/$defs/u64" },
+    "captured_at_epoch_ms": { "$ref": "#/$defs/u64" },
+    "capture_revision": { "$ref": "#/$defs/u64" },
+    "policy_revision": { "$ref": "#/$defs/u64" },
+    "metadata": { "$ref": "#/$defs/metadata" },
+    "content": { "$ref": "#/$defs/content" }
+  },
+  "$defs": {
+    "u64": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{4}|18446744073709550[0-9]{3}|18446744073709551[0-5][0-9]{2}|1844674407370955160[0-9]{1}|1844674407370955161[0-4][0-9]{0}|18446744073709551615)$"
+    },
+    "positive_u64": {
+      "type": "string",
+      "pattern": "^([1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{4}|18446744073709550[0-9]{3}|18446744073709551[0-5][0-9]{2}|1844674407370955160[0-9]{1}|1844674407370955161[0-4][0-9]{0}|18446744073709551615)$"
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "unevaluatedProperties": false,
+      "required": ["sender_address", "thread_id", "message_at_epoch_ms", "observed_at_epoch_ms", "read", "subscription_id"],
+      "properties": {
+        "sender_address": { "type": ["string", "null"] },
+        "thread_id": { "type": ["string", "null"] },
+        "message_at_epoch_ms": { "$ref": "#/$defs/u64" },
+        "observed_at_epoch_ms": { "$ref": "#/$defs/u64" },
+        "read": { "type": "boolean" },
+        "subscription_id": { "type": ["integer", "null"], "minimum": 0, "maximum": 2147483647 }
+      }
+    },
+    "content": {
+      "type": "object",
+      "additionalProperties": false,
+      "unevaluatedProperties": false,
+      "required": ["body"],
+      "properties": { "body": { "type": "string" } }
+    }
+  }
+}

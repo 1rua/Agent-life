@@ -245,6 +245,148 @@ export const validateWireNotificationOperation = (value: unknown): boolean => {
   return false;
 };
 
+type RuntimeSmsRecord = Readonly<{
+  recordId: string;
+  sourceEpoch: bigint;
+  recordRevision: bigint;
+  cursorMessageAtEpochMs: bigint;
+  cursorProviderId: bigint;
+  capturedAtEpochMs: bigint;
+  captureRevision: bigint;
+  policyRevision: bigint;
+  senderAddress: string | null;
+  threadId: string | null;
+  messageAtEpochMs: bigint;
+  observedAtEpochMs: bigint;
+  read: boolean;
+  subscriptionId: number | null;
+  body: string;
+}>;
+
+export type WireSmsRecord = Readonly<{
+  kind: "upsert";
+  record_id: string;
+  source_epoch: string;
+  record_revision: string;
+  cursor_message_at_epoch_ms: string;
+  cursor_provider_id: string;
+  captured_at_epoch_ms: string;
+  capture_revision: string;
+  policy_revision: string;
+  metadata: Readonly<{
+    sender_address: string | null;
+    thread_id: string | null;
+    message_at_epoch_ms: string;
+    observed_at_epoch_ms: string;
+    read: boolean;
+    subscription_id: number | null;
+  }>;
+  content: Readonly<{ body: string }>;
+}>;
+
+const validSmsSubscriptionId = (value: unknown): value is number =>
+  typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && value <= 2_147_483_647;
+
+const validSmsMetadata = (value: unknown): boolean => recordObject(value)
+  && exactKeys(value, ["sender_address", "thread_id", "message_at_epoch_ms", "observed_at_epoch_ms", "read", "subscription_id"])
+  && (value.sender_address === null || stringValue(value.sender_address))
+  && (value.thread_id === null || stringValue(value.thread_id))
+  && isDecimalU64(value.message_at_epoch_ms)
+  && isDecimalU64(value.observed_at_epoch_ms)
+  && typeof value.read === "boolean"
+  && (value.subscription_id === null || validSmsSubscriptionId(value.subscription_id));
+
+const validSmsContent = (value: unknown): boolean => recordObject(value)
+  && exactKeys(value, ["body"])
+  && stringValue(value.body);
+
+export const validateWireSmsRecord = (value: unknown): value is WireSmsRecord => recordObject(value)
+  && exactKeys(value, [
+    "kind", "record_id", "source_epoch", "record_revision", "cursor_message_at_epoch_ms", "cursor_provider_id",
+    "captured_at_epoch_ms", "capture_revision", "policy_revision", "metadata", "content",
+  ])
+  && value.kind === "upsert"
+  && stringValue(value.record_id) && value.record_id.length > 0
+  && isDecimalU64(value.source_epoch)
+  && isPositiveU64(value.record_revision)
+  && isDecimalU64(value.cursor_message_at_epoch_ms)
+  && isDecimalU64(value.cursor_provider_id)
+  && isDecimalU64(value.captured_at_epoch_ms)
+  && isDecimalU64(value.capture_revision)
+  && isDecimalU64(value.policy_revision)
+  && validSmsMetadata(value.metadata)
+  && validSmsContent(value.content);
+
+export const encodeSmsRecord = (record: RuntimeSmsRecord): WireSmsRecord => {
+  const metadata = Object.freeze({
+    sender_address: record.senderAddress,
+    thread_id: record.threadId,
+    message_at_epoch_ms: bigintString(record.messageAtEpochMs),
+    observed_at_epoch_ms: bigintString(record.observedAtEpochMs),
+    read: record.read,
+    subscription_id: record.subscriptionId,
+  });
+  const content = Object.freeze({ body: record.body });
+  const wire = Object.freeze({
+    kind: "upsert" as const,
+    record_id: record.recordId,
+    source_epoch: bigintString(record.sourceEpoch),
+    record_revision: bigintString(record.recordRevision, true),
+    cursor_message_at_epoch_ms: bigintString(record.cursorMessageAtEpochMs),
+    cursor_provider_id: bigintString(record.cursorProviderId),
+    captured_at_epoch_ms: bigintString(record.capturedAtEpochMs),
+    capture_revision: bigintString(record.captureRevision),
+    policy_revision: bigintString(record.policyRevision),
+    metadata,
+    content,
+  });
+  if (!validateWireSmsRecord(wire)) throw new Error("WIRE_RECORD_UNREPRESENTABLE");
+  return wire;
+};
+
+export const encodeSmsQuery = (input: Readonly<{ operationId: string; policyRevision: bigint; limit: number }>): WireAssistantMessage => {
+  const wire = Object.freeze({
+    operation: "mobile.sms.query", operation_id: input.operationId,
+    policy_revision: bigintString(input.policyRevision), limit: input.limit,
+  });
+  if (!validateWireSmsOperation(wire)) throw new Error("WIRE_OPERATION_UNREPRESENTABLE");
+  return wire;
+};
+
+export const encodeSmsSubscribe = (input: Readonly<{ subscriptionId: string; policyRevision: bigint }>): WireAssistantMessage => {
+  const wire = Object.freeze({
+    operation: "mobile.sms.subscribe", subscription_id: input.subscriptionId,
+    policy_revision: bigintString(input.policyRevision),
+  });
+  if (!validateWireSmsOperation(wire)) throw new Error("WIRE_OPERATION_UNREPRESENTABLE");
+  return wire;
+};
+
+export const encodeSmsUnsubscribe = (input: Readonly<{ subscriptionId: string; policyRevision: bigint }>): WireAssistantMessage => {
+  const wire = Object.freeze({
+    operation: "mobile.sms.unsubscribe", subscription_id: input.subscriptionId,
+    policy_revision: bigintString(input.policyRevision),
+  });
+  if (!validateWireSmsOperation(wire)) throw new Error("WIRE_OPERATION_UNREPRESENTABLE");
+  return wire;
+};
+
+export const validateWireSmsOperation = (value: unknown): boolean => {
+  if (!recordObject(value) || typeof value.operation !== "string") return false;
+  if (value.operation === "mobile.sms.query") {
+    return exactKeys(value, ["operation", "operation_id", "policy_revision", "limit"])
+      && stringValue(value.operation_id) && value.operation_id.length > 0
+      && isDecimalU64(value.policy_revision)
+      && typeof value.limit === "number" && Number.isSafeInteger(value.limit) && value.limit >= 1 && value.limit <= 10_000;
+  }
+  if (value.operation === "mobile.sms.subscribe" || value.operation === "mobile.sms.unsubscribe") {
+    return exactKeys(value, ["operation", "subscription_id", "policy_revision"])
+      && stringValue(value.subscription_id) && value.subscription_id.length > 0
+      && isDecimalU64(value.policy_revision);
+  }
+  return false;
+};
+
 export const encodeAssistantRequest = (input: Readonly<{ operationId: string; text: string; attachments: readonly RuntimeAssistantAttachment[] }>): WireAssistantMessage => {
   const wire = Object.freeze({
     kind: "request",

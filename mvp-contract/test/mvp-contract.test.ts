@@ -71,8 +71,8 @@ const validRecord = (value: unknown): boolean => {
 };
 
 describe("MVP closed schemas and deterministic fixtures", () => {
-  it("ships exactly the four versioned closed schemas", () => {
-    for (const name of ["notification-policy.schema.json", "notification-record.schema.json", "notification-api.schema.json", "assistant-chat.schema.json"]) {
+  it("ships exactly the six versioned closed schemas", () => {
+    for (const name of ["notification-policy.schema.json", "notification-record.schema.json", "notification-api.schema.json", "assistant-chat.schema.json", "sms-record.schema.json", "sms-api.schema.json"]) {
       const schema = load(name);
       expect(schema.$schema).toBe("https://json-schema.org/draft/2020-12/schema");
       expect(schema.additionalProperties === false || schema.unevaluatedProperties === false).toBe(true);
