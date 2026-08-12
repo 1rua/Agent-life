@@ -51,6 +51,10 @@ observed timestamp, read state, and nullable subscription ID.
 History start and maximum-record settings are local, bounded by the closed
 `SmsHistoryPolicy` contract (one through 10,000 records). Sync interval is the
 closed `SmsSyncInterval` set: manual, 15 minutes, 30 minutes, or 60 minutes.
+`agentMayRequest` controls whether a remote Agent may request SMS reads or
+subscriptions. It does not authorize local periodic auto-send, which instead
+uses current device-local auto-send consent. Agent requests never mutate local
+grant, history, maximum records, interval, or modes.
 Periodic work is best-effort under Android `JobScheduler`, not an exact-time or
 delivery guarantee. The app retains accepted event wire bytes in the encrypted
 capability outbox until a verifier-approved Bridge acknowledgement; failures,

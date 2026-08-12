@@ -8,6 +8,7 @@ must be collected separately.
 
 from pathlib import Path
 import re
+import tempfile
 import unittest
 import xml.etree.ElementTree as ET
 
@@ -23,14 +24,23 @@ MANIFEST = ROOT / "app" / "src" / "main" / "AndroidManifest.xml"
 SETTINGS_GRADLE = ROOT / "settings.gradle.kts"
 APP_BUILD_GRADLE = ROOT / "app" / "build.gradle.kts"
 READINESS = REPO_ROOT / "docs" / "mvp" / "sms-read-readiness.md"
+VERTICAL_SLICE_CONTRACT = REPO_ROOT / "docs" / "mvp" / "mvp-vertical-slice-contract.md"
 ANDROID_NS = "{http://schemas.android.com/apk/res/android}"
 
 
 class SmsCollectorStaticTest(unittest.TestCase):
     def sms_sources(self) -> dict[Path, str]:
-        sources = {path: path.read_text(encoding="utf-8") for path in SMS_SOURCE_ROOT.glob("*.kt")}
+        sources = {path: path.read_text(encoding="utf-8") for path in SMS_SOURCE_ROOT.rglob("*.kt")}
         self.assertNotEqual({}, sources)
         return sources
+
+    def test_sms_source_walk_includes_nested_kotlin_files(self):
+        with tempfile.TemporaryDirectory(dir=SMS_SOURCE_ROOT) as directory:
+            nested = Path(directory) / "nested" / "NestedSmsBoundary.kt"
+            nested.parent.mkdir()
+            nested.write_text("package com.agentlife.sms\n", encoding="utf-8")
+
+            self.assertIn(nested, self.sms_sources())
 
     def test_sms_collector_is_registered_as_an_android_module(self):
         self.assertIn('":sms-collector"', SETTINGS_GRADLE.read_text(encoding="utf-8"))
@@ -50,12 +60,17 @@ class SmsCollectorStaticTest(unittest.TestCase):
             self.assertNotIn(forbidden_uri, source)
 
     def test_manifest_grants_read_only_and_protects_the_job_service(self):
-        manifest = MANIFEST.read_text(encoding="utf-8")
-        self.assertIn('android.permission.READ_SMS', manifest)
-        self.assertNotIn('android.permission.RECEIVE_SMS', manifest)
-        self.assertNotIn('android.permission.SEND_SMS', manifest)
+        root = ET.parse(MANIFEST).getroot()
+        declared_permissions = [
+            permission.get(f"{ANDROID_NS}name")
+            for permission in root.findall("uses-permission")
+        ]
+        self.assertEqual(
+            ["android.permission.INTERNET", "android.permission.READ_SMS"],
+            declared_permissions,
+        )
 
-        application = ET.parse(MANIFEST).getroot().find("application")
+        application = root.find("application")
         self.assertIsNotNone(application)
         service = next(
             (
@@ -94,7 +109,9 @@ class SmsCollectorStaticTest(unittest.TestCase):
 
     def test_readiness_packet_records_the_remaining_evidence_boundary(self):
         self.assertTrue(READINESS.is_file(), READINESS)
-        source = " ".join(READINESS.read_text(encoding="utf-8").casefold().split())
+        self.assertTrue(VERTICAL_SLICE_CONTRACT.is_file(), VERTICAL_SLICE_CONTRACT)
+
+        readiness = " ".join(READINESS.read_text(encoding="utf-8").casefold().split())
         for required_statement in (
             "complete SMS body text",
             "local user authorization",
@@ -108,7 +125,16 @@ class SmsCollectorStaticTest(unittest.TestCase):
             "aar",
             "receive_boot_completed",
         ):
-            self.assertIn(required_statement.casefold(), source)
+            self.assertIn(required_statement.casefold(), readiness)
+
+        for document in (readiness, " ".join(VERTICAL_SLICE_CONTRACT.read_text(encoding="utf-8").casefold().split())):
+            for required_statement in (
+                "agentmayrequest",
+                "remote agent may request sms reads or subscriptions",
+                "does not authorize local periodic auto-send",
+                "never mutate local grant, history, maximum records, interval, or modes",
+            ):
+                self.assertIn(required_statement, document)
 
 
 if __name__ == "__main__":

@@ -17,6 +17,10 @@ local user controls the permission prompt, grant, on-demand/auto-send choices,
 Agent-request choice, history policy, maximum records, and schedule. History
 start and maximum-record settings are local, with the max bounded to 1 through
 10,000 records; the interval contract is manual, 15, 30, or 60 minutes.
+`agentMayRequest` controls whether a remote Agent may request SMS reads or
+subscriptions. It does not authorize local periodic auto-send: that path is
+minted from current device-local auto-send consent. Agent requests never
+mutate local grant, history, maximum records, interval, or modes.
 
 Auto-sync is best-effort Android scheduling, not a promise of exact timing,
 execution, capture, or delivery. A locally authorized batch uses the paired
