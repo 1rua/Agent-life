@@ -129,7 +129,7 @@
 
 **Interfaces:**
 - Consumes: `SmsCapabilityProvider`, `SmsHistoryPolicy`, `AuthorizedReadScope`, `AuthorizedAutoSendScope`, and the Android `ContentResolver`.
-- Produces: `SmsCursor`, `SmsHistoryPolicySource`, `SmsInboxRow`, `SmsInboxQuery`, `SmsInboxReader`, `AndroidSmsInboxReader`, and `AndroidSmsCapabilityProvider`.
+- Produces: `SmsCursor`, `SmsHistoryPolicySource`, `SmsCursorSource`, `SmsInboxRow`, `SmsInboxQuery`, `SmsInboxReader`, `AndroidSmsInboxReader`, and `AndroidSmsCapabilityProvider`.
 
   The provider exposes `read(scope): CapabilityReadResult<SmsPayload>` and `observeAutoSend(scope): Flow<CapabilityEvent<SmsPayload>>`. Each auto-send collection is one bounded batch; the coordinator in Task 4 starts a new collection for each scheduled job.
 
@@ -172,6 +172,10 @@
       fun current(): SmsHistoryPolicy
   }
 
+  fun interface SmsCursorSource {
+      fun current(): SmsCursor?
+  }
+
   data class SmsInboxQuery(val history: SmsHistoryPolicy, val cursor: SmsCursor? = null)
 
   fun interface SmsInboxReader {
@@ -183,7 +187,7 @@
 
 - [ ] **Step 4: Implement provider normalization.**
 
-  `AndroidSmsCapabilityProvider` accepts an `SmsInboxReader`, a `SmsHistoryPolicySource`, a `SmsCursorStore`, and a clock. It reads the local policy at collection time, queries the inbox, maps provider ID to `recordId = "sms:$providerId"`, maps `body ?: ""`, creates `SmsMetadata`, and returns `SmsPayload(metadata, NormalizedContent.Released(body))` only through the checked SMS scope. It must sort on `(messageAtEpochMs, providerId)` for auto-send emission so cursor advancement is monotonic even though history queries arrive newest-first.
+  `AndroidSmsCapabilityProvider` accepts an `SmsInboxReader`, a `SmsHistoryPolicySource`, a `SmsCursorSource`, and a clock. It reads the local policy at collection time, queries the inbox, maps provider ID to `recordId = "sms:$providerId"`, maps `body ?: ""`, creates `SmsMetadata`, and returns `SmsPayload(metadata, NormalizedContent.Released(body))` only through the checked SMS scope. It must sort on `(messageAtEpochMs, providerId)` for auto-send emission so cursor advancement is monotonic even though history queries arrive newest-first.
 
   `read(scope)` returns `COMPLETE` with at most `history.maxRecords` records. `observeAutoSend(scope)` reads strictly after the stored cursor, returns a finite flow of `CapabilityEvent<SmsPayload>`, and never writes the cursor itself. Query exceptions return `FAILED` with reason `SMS_QUERY_FAILED` and an empty record list.
 
@@ -211,7 +215,7 @@
 - Create: `apps/android/sms-collector/src/test/kotlin/com/agentlife/sms/SmsSettingsAuthorityTest.kt`
 
 **Interfaces:**
-- Consumes: `SmsHistoryPolicy`, `SmsSyncInterval`, `SmsCursor`, `SmsHistoryPolicySource`, `CapabilityGrant`, and app-private byte persistence.
+- Consumes: `SmsHistoryPolicy`, `SmsSyncInterval`, `SmsCursor`, `SmsHistoryPolicySource`, `SmsCursorSource`, `CapabilityGrant`, and app-private byte persistence.
 - Produces: `SmsCursor(providerId, messageAtEpochMs)`, `SmsCursorStore`, `InMemorySmsCursorStore`, `FileSmsCursorStore`, `SmsSettingsSnapshot`, `PersistentSmsSettingsAuthority`, and `LocalSmsSettingsController`.
 
 - [ ] **Step 1: Write failing persistence tests.**
