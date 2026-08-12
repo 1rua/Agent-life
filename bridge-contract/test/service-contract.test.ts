@@ -377,6 +377,12 @@ describe("in-memory assistant operation service", () => {
 
   it.each([
     ["session", (current: BridgeSessionIdentity) => ({ ...committedAudio(current), session: session({ sessionId: "other" }) })],
+    ["pairing generation", (current: BridgeSessionIdentity) => ({ ...committedAudio(current), pairingGeneration: 2n })],
+    ["bound connection generation", (current: BridgeSessionIdentity) => ({ ...committedAudio(current), connectionGeneration: 2n })],
+    ["artifact ID", (current: BridgeSessionIdentity) => ({ ...committedAudio(current), artifactId: "artifact-other" })],
+    ["kind", (current: BridgeSessionIdentity) => ({ ...committedAudio(current), kind: "file" as const, mimeType: "application/pdf" as const })],
+    ["MIME type", (current: BridgeSessionIdentity) => ({ ...committedAudio(current), mimeType: "image/png" as const })],
+    ["size", (current: BridgeSessionIdentity) => ({ ...committedAudio(current), sizeBytes: 511 })],
     ["digest", (current: BridgeSessionIdentity) => ({ ...committedAudio(current), sha256: "d".repeat(64) })],
     ["duration", (current: BridgeSessionIdentity) => ({ ...committedAudio(current), durationMs: 4999 })],
     ["policy revision", (current: BridgeSessionIdentity) => ({ ...committedAudio(current), policyRevision: 4n })],
@@ -413,6 +419,37 @@ describe("in-memory assistant operation service", () => {
       { kind: "complete", operationId: "stream-op", messageId: "stream-message", sequence: 2n, text: "reply delta" },
     ]);
     expect(events.replay("stream-op", 0n)).toEqual(delivered);
+  });
+
+  it("keeps a persisted completion as the only terminal event when its sink throws", async () => {
+    const current = session();
+    const events = new InMemoryAssistantReplyEventStore();
+    const service = new AssistantChatService({
+      boundSession: current, eventStore: events,
+      authorize: ({ policyRevision }) => ({ allowed: true, policyRevision }),
+      respondStream: async function* () { yield "complete despite sink"; },
+    });
+
+    await expect(service.stream({
+      operationId: "complete-sink-failure", messageId: "complete-sink-message", session: current, text: "hello", zeroRetention: zeroRetention(),
+    }, (event) => { if (event.kind === "complete") throw new Error("sink unavailable"); })).resolves.toMatchObject({ reply: "complete despite sink" });
+    expect(events.replay("complete-sink-failure", 0n).map((event) => event.kind)).toEqual(["delta", "complete"]);
+  });
+
+  it("persists one failed terminal event when a delta sink throws", async () => {
+    const current = session();
+    const events = new InMemoryAssistantReplyEventStore();
+    const service = new AssistantChatService({
+      boundSession: current, eventStore: events,
+      authorize: ({ policyRevision }) => ({ allowed: true, policyRevision }),
+      respondStream: async function* () { yield "delta that cannot deliver"; },
+    });
+
+    await expect(service.stream({
+      operationId: "delta-sink-failure", messageId: "delta-sink-message", session: current, text: "hello", zeroRetention: zeroRetention(),
+    }, (event) => { if (event.kind === "delta") throw new Error("sink unavailable"); })).rejects.toMatchObject({ code: "ASSISTANT_REPLY_FAILED" });
+    expect(events.replay("delta-sink-failure", 0n).map((event) => [event.kind, event.sequence]))
+      .toEqual([["delta", 1n], ["failed", 2n]]);
   });
 
   it("emits one closed failed event without artifact data when streaming fails", async () => {
@@ -452,6 +489,31 @@ describe("in-memory assistant operation service", () => {
     await expect(service.stream(request, () => {})).resolves.toMatchObject({ reply: "retry reply" });
     expect(events.replay("retry-stream", 0n).map((event) => [event.kind, event.sequence]))
       .toEqual([["failed", 1n], ["delta", 2n], ["complete", 3n]]);
+  });
+
+  it("returns a completed retry before invoking a resolver that later changes", async () => {
+    const current = session();
+    let resolve = true;
+    let resolverCalls = 0;
+    let replies = 0;
+    const service = new AssistantChatService({
+      boundSession: current, boundConnectionGeneration: 1n,
+      authorize: ({ policyRevision }) => ({ allowed: true, policyRevision }),
+      resolveArtifact: async ({ session: requested }) => {
+        resolverCalls += 1;
+        return resolve ? committedAudio(requested) : null;
+      },
+      respond: async () => { replies += 1; return "stable reply"; },
+    });
+    const request = {
+      operationId: "resolver-retry", messageId: "resolver-message", session: current, text: "listen",
+      zeroRetention: zeroRetention(), attachments: [audioAttachment()],
+    };
+
+    await expect(service.send(request)).resolves.toMatchObject({ reply: "stable reply" });
+    resolve = false;
+    await expect(service.send(request)).resolves.toMatchObject({ reply: "stable reply" });
+    expect({ resolverCalls, replies }).toEqual({ resolverCalls: 1, replies: 1 });
   });
 
   it("rejects invalid reply-event sequences and malformed failed event errors", () => {

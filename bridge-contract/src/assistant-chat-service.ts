@@ -145,6 +145,7 @@ export class AssistantChatService {
   async send(request: AssistantMessageRequest): Promise<AssistantMessageResult> {
     const attachments = await this.#prepare(request);
     return this.#operations.execute(this.#operation(request, attachments), async () => {
+      await this.#resolveArtifactsForClaim(attachments, request.session);
       const reply = await this.#respond(request.text, attachments);
       return this.#complete(request, attachments, reply);
     });
@@ -154,14 +155,17 @@ export class AssistantChatService {
     const attachments = await this.#prepare(request);
     if (typeof sink !== "function") throw new BridgeServiceError("ASSISTANT_EVENT_INVALID");
     return this.#operations.execute(this.#operation(request, attachments), async () => {
+      await this.#resolveArtifactsForClaim(attachments, request.session);
       const previous = await this.#eventStore.replay(request.operationId, 0n);
       let sequence = (previous.at(-1)?.sequence ?? 0n) + 1n;
+      let terminal: "complete" | "failed" | null = null;
       let reply = "";
       const emit = async (kind: AssistantReplyEvent["kind"], text: string, error?: string): Promise<void> => {
         const event = Object.freeze({ kind, operationId: request.operationId, messageId: request.messageId, sequence, text, ...(error === undefined ? {} : { error }) });
         await this.#eventStore.append(event);
-        await sink(event);
         sequence += 1n;
+        if (kind !== "delta") terminal = kind;
+        await sink(event);
       };
       try {
         if (!this.#respondStream) {
@@ -176,14 +180,17 @@ export class AssistantChatService {
         }
         if (reply.length > 50_000) throw new BridgeServiceError("ASSISTANT_REPLY_INVALID");
         await emit("complete", reply);
-        return this.#complete(request, attachments, reply);
       } catch (error) {
+        if (terminal === "complete") return this.#complete(request, attachments, reply);
         const code = error instanceof BridgeServiceError && error.code === "ASSISTANT_REPLY_INVALID"
           ? "ASSISTANT_REPLY_INVALID"
           : "ASSISTANT_REPLY_FAILED";
-        await emit("failed", "", code);
+        if (terminal !== "failed") {
+          try { await emit("failed", "", code); } catch { /* The failed event was appended before its sink attempt. */ }
+        }
         throw new BridgeServiceError(code);
       }
+      return this.#complete(request, attachments, reply);
     });
   }
 
@@ -210,9 +217,13 @@ export class AssistantChatService {
     if (decision.policyRevision !== request.session.policyAttestationRevision) throw new BridgeServiceError("AUTHORIZATION_REVISION_STALE");
     if (!decision.allowed) throw new BridgeServiceError(decision.reason ?? "NOT_AUTHORIZED");
     const attachments = Object.freeze([...(request.attachments ?? [])].map((attachment) => freezeRecord({ ...attachment }) as AssistantAttachment));
-    await this.#assertArtifacts(attachments, request.session);
-    this.#assertSession(request.session);
     return attachments;
+  }
+
+  async #resolveArtifactsForClaim(attachments: readonly AssistantAttachment[], session: BridgeSessionIdentity): Promise<void> {
+    this.#assertSession(session);
+    await this.#assertArtifacts(attachments, session);
+    this.#assertSession(session);
   }
 
   async #assertArtifacts(attachments: readonly AssistantAttachment[], session: BridgeSessionIdentity): Promise<void> {
