@@ -12,6 +12,13 @@ SOURCES = (
     / "artifact-ports/src/main/kotlin/com/agentlife/artifact/ArtifactSelectionPorts.kt",
     ROOT / "core-model/src/main/kotlin/com/agentlife/core/model/AssistantAudioContracts.kt",
 )
+FORBIDDEN_BACKEND_SURFACE = re.compile(
+    r"^\s*import\s+(?:android|androidx)\.|"
+    r"\b(?:[A-Za-z_][A-Za-z0-9_]*)?(?:uri|path|url|rawbyte(?:s|buffer)?|socket)"
+    r"(?:[A-Za-z0-9_]+)?\b|\bProcessBuilder\b|Runtime\.getRuntime|"
+    r"\b(VpnService|Recorder|MediaRecorder|AudioRecord)\b",
+    re.IGNORECASE,
+)
 
 
 class AssistantAudioBackendStaticTest(unittest.TestCase):
@@ -40,18 +47,26 @@ class AssistantAudioBackendStaticTest(unittest.TestCase):
             self.assertIn(required, assistant_source)
 
     def test_backend_sources_exclude_platform_and_data_access_surfaces(self):
-        forbidden = re.compile(
-            r"^\s*import\s+android\.|\bUri\b|\b(path|url|rawBytes)\b|"
-            r"\b(Socket|ServerSocket|ProcessBuilder)\b|Runtime\.getRuntime|"
-            r"\b(VpnService|Recorder|MediaRecorder|AudioRecord)\b",
-            re.IGNORECASE,
-        )
         for source in SOURCES:
             with self.subTest(source=source):
                 self.assertEqual(
                     [],
-                    [line for line in self.read(source).splitlines() if forbidden.search(line)],
+                    [line for line in self.read(source).splitlines() if FORBIDDEN_BACKEND_SURFACE.search(line)],
                 )
+
+    def test_forbidden_snippets_are_rejected_by_the_gate(self):
+        snippets = (
+            "import android.media.MediaRecorder",
+            "import androidx.core.net.toUri",
+            "val filePath = \"forbidden\"",
+            "val uploadUrl = \"forbidden\"",
+            "val rawByteBuffer = \"forbidden\"",
+            "val datagramSocket = \"forbidden\"",
+            "val FiLePaTh = \"forbidden\"",
+        )
+        for snippet in snippets:
+            with self.subTest(snippet=snippet):
+                self.assertIsNotNone(FORBIDDEN_BACKEND_SURFACE.search(snippet))
 
 
 if __name__ == "__main__":
