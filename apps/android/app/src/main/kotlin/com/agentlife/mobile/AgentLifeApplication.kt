@@ -21,6 +21,7 @@ import com.agentlife.notifications.NotificationRuntimeFactoryRegistry
 import com.agentlife.notifications.PairedBridgeBindingSource
 import com.agentlife.policy.FileNotificationPolicyPersistence
 import com.agentlife.policy.LocalNotificationPolicyController
+import com.agentlife.policy.NotificationAuthoritySnapshot
 import com.agentlife.policy.PersistentNotificationPolicyAuthority
 import java.io.File
 
@@ -93,6 +94,10 @@ class AgentLifeApplication : Application() {
     /** The local settings UI owns this capability; no Agent/wire type exposes it. */
     fun localNotificationPolicyController(): LocalNotificationPolicyController =
         notificationAuthority.localController()
+
+    /** Read-only local snapshot for refreshing the settings view on resume. */
+    fun localNotificationAuthoritySnapshot(): NotificationAuthoritySnapshot =
+        notificationAuthority.snapshot()
 
     private fun createOutboxFailClosed(): NotificationOutbox = try {
         NotificationOutboxStore(
