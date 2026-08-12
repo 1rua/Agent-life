@@ -88,6 +88,11 @@ const exactKeys = (value: Record<string, unknown>, keys: readonly string[]): boo
 
 const fail = (code: string): never => { throw new ArtifactContractError(code); };
 
+const stripArtifactId = (ticket: ArtifactTicket): Omit<ArtifactTicket, "artifactId"> => {
+  const { artifactId: _artifactId, ...withoutArtifactId } = ticket;
+  return withoutArtifactId;
+};
+
 const assertClock = (value: number): void => {
   if (!Number.isSafeInteger(value) || value < 0) fail("TIMESTAMP_INVALID");
 };
@@ -156,14 +161,15 @@ export const verifyArtifactProof = async (
   verifier: ProofVerifier,
 ): Promise<ArtifactTicket> => {
   if (!ticket || ticket.status !== "issued") fail("TICKET_NOT_ISSUED");
+  const sanitizedTicket = stripArtifactId(ticket);
   const proofRecord = isRecord(proof) ? proof : fail("PROOF_INVALID");
   if (!exactKeys(proofRecord, ["ticketId", "sha256", "proof"])) fail("PROOF_INVALID");
-  if (proofRecord.ticketId !== ticket.ticketId) fail("PROOF_TICKET_MISMATCH");
-  if (typeof proofRecord.sha256 !== "string" || proofRecord.sha256.toLowerCase() !== ticket.sha256) fail("PROOF_DIGEST_MISMATCH");
+  if (proofRecord.ticketId !== sanitizedTicket.ticketId) fail("PROOF_TICKET_MISMATCH");
+  if (typeof proofRecord.sha256 !== "string" || proofRecord.sha256.toLowerCase() !== sanitizedTicket.sha256) fail("PROOF_DIGEST_MISMATCH");
   if (typeof proofRecord.proof !== "string" || proofRecord.proof.length < 1) fail("PROOF_INVALID");
   if (!verifier || typeof verifier.verify !== "function") fail("PROOF_VERIFIER_INVALID");
-  if ((await verifier.verify({ ticket, proof: proofRecord as ArtifactProof })) !== "verified") fail("PROOF_REJECTED");
-  const branded = { ...ticket, status: "proof_verified" as const, proofVerifiedAt: ticket.issuedAt } as ArtifactTicket & { [PROOF_BRAND]?: true };
+  if ((await verifier.verify({ ticket: sanitizedTicket, proof: proofRecord as ArtifactProof })) !== "verified") fail("PROOF_REJECTED");
+  const branded = { ...sanitizedTicket, status: "proof_verified" as const, proofVerifiedAt: sanitizedTicket.issuedAt } as ArtifactTicket & { [PROOF_BRAND]?: true };
   Object.defineProperty(branded, PROOF_BRAND, { value: true, enumerable: false, writable: false, configurable: false });
   return Object.freeze(branded) as BrandedProofTicket;
 };
@@ -195,12 +201,13 @@ export const commitArtifactMessage = (
 /** Marks a verified upload as interrupted; only a fresh ticket may commit. */
 export const interruptArtifactTicket = (ticket: ArtifactTicket): ArtifactTicket => {
   if (!ticket || ticket.status !== "proof_verified") fail("TICKET_NOT_PROOF_VERIFIED");
-  return Object.freeze({ ...ticket, status: "upload_interrupted" as const });
+  return Object.freeze({ ...stripArtifactId(ticket), status: "upload_interrupted" as const });
 };
 
 export const reclaimOrphanTicket = (ticket: ArtifactTicket, nowMs: number): ArtifactTicket => {
   assertClock(nowMs);
   if (ticket.status === "message_committed" || ticket.status === "orphan_reclaimed") return ticket;
-  if (nowMs - ticket.issuedAt < ARTIFACT_LIMITS.orphanReclaimAfterMs) return ticket;
-  return Object.freeze({ ...ticket, status: "orphan_reclaimed", localCopyDeletionAllowed: true });
+  const sanitizedTicket = stripArtifactId(ticket);
+  if (nowMs - ticket.issuedAt < ARTIFACT_LIMITS.orphanReclaimAfterMs) return Object.freeze(sanitizedTicket);
+  return Object.freeze({ ...sanitizedTicket, status: "orphan_reclaimed", localCopyDeletionAllowed: true });
 };

@@ -64,10 +64,33 @@ describe("M1.1 source-only artifact ticket contract", () => {
 
   it("mints an opaque artifact id only on message commit", async () => {
     const issued = issueArtifactTicket(ticketInput({ mediaType: "audio/mp4", durationMs: 25 }), 1000, ticketIds("ticket-a"));
-    const verified = await verifyArtifactProof(issued, { ticketId: "ticket-a", sha256: digest, proof: "p".repeat(32) }, { verify: async () => "verified" });
+    let verifierInput: { ticket: typeof issued; proof: unknown } | undefined;
+    const verified = await verifyArtifactProof(issued, { ticketId: "ticket-a", sha256: digest, proof: "p".repeat(32) }, {
+      verify: async (input) => {
+        verifierInput = input;
+        return "verified";
+      },
+    });
+    expect(verifierInput?.ticket).toMatchObject({ mediaType: "audio/mp4", durationMs: 25 });
     expect(verified.artifactId).toBeUndefined();
     const receipt = commitArtifactMessage("message-a", [verified], 1500);
     expect(receipt.tickets[0]).toMatchObject({ status: "message_committed", artifactId: "ticket-a", durationMs: 25 });
+  });
+
+  it("strips forged artifact IDs from every non-committed ticket transition", async () => {
+    const issued = issueArtifactTicket(ticketInput(), 1000, ticketIds("ticket-a"));
+    const forgedIssued = { ...issued, artifactId: "forged-before-commit" };
+    const verified = await verifyArtifactProof(forgedIssued, {
+      ticketId: "ticket-a", sha256: digest, proof: "p".repeat(32),
+    }, { verify: async () => "verified" });
+    expect(verified.artifactId).toBeUndefined();
+
+    const forgedVerified = { ...verified, artifactId: "forged-before-interrupt" };
+    expect(interruptArtifactTicket(forgedVerified).artifactId).toBeUndefined();
+    expect(reclaimOrphanTicket({ ...issued, artifactId: "forged-before-reclaim" }, 1000 + ARTIFACT_LIMITS.orphanReclaimAfterMs - 1).artifactId)
+      .toBeUndefined();
+    expect(reclaimOrphanTicket({ ...issued, artifactId: "forged-before-reclaim" }, 1000 + ARTIFACT_LIMITS.orphanReclaimAfterMs).artifactId)
+      .toBeUndefined();
   });
 
   it("rejects arbitrary paths, URLs, and unrecognized keys instead of treating them as an artifact selection", () => {
