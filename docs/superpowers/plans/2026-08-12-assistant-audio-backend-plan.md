@@ -523,31 +523,11 @@ git commit -m "feat(android): add assistant audio backend ports"
 - Consumes: all completed wire, artifact, Bridge, adapter, and Android port contracts.
 - Produces: source-backed documentation that no longer describes assistant chat as text-only and a verification record from fresh commands.
 
-- [ ] **Step 1: Write the documentation regression assertion.** Extend the existing MVP contract test with this literal file-boundary check so it requires the documented assistant section to mention `audio/mp4`, `duration_ms`, `artifact_id`, and `delta`, while rejecting the stale phrase `text-only MVP`:
-
-```ts
-const verticalSliceContract = readFileSync(resolve(process.cwd(), "docs/mvp/mvp-vertical-slice-contract.md"), "utf8");
-
-it("documents the assistant audio and ordered reply backend", () => {
-  expect(verticalSliceContract).toContain("audio/mp4");
-  expect(verticalSliceContract).toContain("duration_ms");
-  expect(verticalSliceContract).toContain("artifact_id");
-  expect(verticalSliceContract).toContain("delta");
-  expect(verticalSliceContract).not.toContain("text-only MVP");
-});
-```
-
-- [ ] **Step 2: Run the documentation test to verify the stale documentation fails.**
-
-Run: `./tools/run-node24 npm test -- mvp-contract/test/mvp-contract.test.ts`
-
-Expected: FAIL because `docs/mvp/mvp-vertical-slice-contract.md` still says the assistant chat path is text-only.
-
-- [ ] **Step 3: Update the documentation from the implemented contract.**
+- [ ] **Step 1: Update the documentation from the implemented contract.**
 
 Describe the text-plus-audio request, opaque committed artifact metadata, audio limits, agent-side processing, and ordered `delta/complete/failed` reply events. Do not claim an Android recorder, UI, animation, TTS, or provider integration that is not implemented by these tasks.
 
-- [ ] **Step 4: Run the complete fresh verification set.**
+- [ ] **Step 2: Run the complete fresh verification set.**
 
 Run:
 
@@ -564,7 +544,7 @@ python3 -m unittest discover -s apps/android/tools -p 'test_*.py'
 
 Expected: every command exits 0. If the Android SDK/AAR is unavailable, report the exact Gradle dependency failure and still retain the passing SDK-free gates; do not claim the Android build passes.
 
-- [ ] **Step 5: Inspect the final diff and commit documentation only.**
+- [ ] **Step 3: Inspect the final diff and commit documentation only.**
 
 Run: `git diff --check`, `git status --short`, and `git diff --stat HEAD~6..HEAD` after confirming the commits contain only the task files. Then:
 
