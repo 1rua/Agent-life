@@ -42,11 +42,11 @@ class SmsCursorTest {
         val directory = Files.createTempDirectory("sms-cursor-").toFile()
         try {
             val file = File(directory, "cursor.bin")
-            FileSmsCursorStore.forTesting(file).advance(SmsCursor(providerId = 42L, messageAtEpochMs = 1_700L))
+            fileStore(file).advance(SmsCursor(providerId = 42L, messageAtEpochMs = 1_700L))
 
             assertEquals(
                 SmsCursor(providerId = 42L, messageAtEpochMs = 1_700L),
-                FileSmsCursorStore.forTesting(file).current(),
+                fileStore(file).current(),
             )
         } finally {
             directory.deleteRecursively()
@@ -58,13 +58,13 @@ class SmsCursorTest {
         val directory = Files.createTempDirectory("sms-cursor-").toFile()
         try {
             val file = File(directory, "cursor.bin")
-            FileSmsCursorStore.forTesting(file).advance(SmsCursor(providerId = 2L, messageAtEpochMs = 100L))
-            val restarted = FileSmsCursorStore.forTesting(file)
+            fileStore(file).advance(SmsCursor(providerId = 2L, messageAtEpochMs = 100L))
+            val restarted = fileStore(file)
 
             assertFalse(restarted.advance(SmsCursor(providerId = 1L, messageAtEpochMs = 100L)))
             assertFalse(restarted.advance(SmsCursor(providerId = 2L, messageAtEpochMs = 100L)))
 
-            assertEquals(SmsCursor(providerId = 2L, messageAtEpochMs = 100L), FileSmsCursorStore.forTesting(file).current())
+            assertEquals(SmsCursor(providerId = 2L, messageAtEpochMs = 100L), fileStore(file).current())
         } finally {
             directory.deleteRecursively()
         }
@@ -74,16 +74,23 @@ class SmsCursorTest {
     fun `no backup directory factory uses the fixed app-private cursor child`() {
         val noBackupDirectory = Files.createTempDirectory("sms-no-backup-").toFile()
         try {
-            val store = FileSmsCursorStore.fromNoBackupDirectory(noBackupDirectory)
+            val cursorFile = File(noBackupDirectory, "sms-cursor-v1.bin")
+            val store = fileStore(cursorFile)
 
             assertTrue(store.advance(SmsCursor(providerId = 7L, messageAtEpochMs = 700L)))
             assertEquals(
                 SmsCursor(providerId = 7L, messageAtEpochMs = 700L),
-                FileSmsCursorStore.fromNoBackupDirectory(noBackupDirectory).current(),
+                fileStore(cursorFile).current(),
             )
             assertTrue(File(noBackupDirectory, "sms-cursor-v1.bin").isFile)
         } finally {
             noBackupDirectory.deleteRecursively()
         }
     }
+
+    private fun fileStore(file: File): FileSmsCursorStore =
+        FileSmsCursorStore::class.java.getDeclaredConstructor(File::class.java).let { constructor ->
+            constructor.isAccessible = true
+            constructor.newInstance(file)
+        }
 }

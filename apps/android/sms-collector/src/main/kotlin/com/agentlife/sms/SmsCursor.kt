@@ -100,12 +100,6 @@ class FileSmsCursorStore private constructor(private val file: File) : SmsCursor
 
         /** Android composition entry point; cursor data is never backed up. */
         fun fromContext(context: Context): FileSmsCursorStore =
-            fromNoBackupDirectory(context.noBackupFilesDir)
-
-        /** Internal JVM seam for testing the same fixed-child construction. */
-        internal fun fromNoBackupDirectory(noBackupDirectory: File): FileSmsCursorStore =
-            FileSmsCursorStore(File(noBackupDirectory, FILE_NAME))
-
-        internal fun forTesting(file: File): FileSmsCursorStore = FileSmsCursorStore(file)
+            FileSmsCursorStore(File(context.noBackupFilesDir, FILE_NAME))
     }
 }
