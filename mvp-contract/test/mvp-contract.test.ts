@@ -200,6 +200,27 @@ describe("MVP closed schemas and deterministic fixtures", () => {
     })).toBe(false);
   });
 
+  it("enforces the 50 MiB aggregate attachment limit across mixed media", () => {
+    const image = { kind: "image", artifact_id: "artifact-image-1", media_type: "image/png", byte_length: 25 * 1024 * 1024, sha256: "a".repeat(64), display_name: "image.png" };
+    const file = { kind: "file", artifact_id: "artifact-file-1", media_type: "application/pdf", byte_length: 15 * 1024 * 1024, sha256: "b".repeat(64), display_name: "file.pdf" };
+    const audio = { kind: "audio", artifact_id: "artifact-audio-1", media_type: "audio/mp4", byte_length: 10 * 1024 * 1024, sha256: "c".repeat(64), display_name: "voice.m4a", duration_ms: 120000 };
+    const request = (attachments: unknown[]) => ({ kind: "request", operation_id: "op", text: "x", attachments });
+    expect(validateWireAssistantMessage(request([image, file, audio]))).toBe(true);
+    expect(validateWireAssistantMessage(request([{ ...image, byte_length: 25 * 1024 * 1024 }, { ...file, byte_length: 15 * 1024 * 1024 + 1 }, audio]))).toBe(false);
+  });
+
+  it("keeps image and file MIME boundaries aligned with the closed codec rules", () => {
+    const attachment = (kind: string, mediaType: string) => ({
+      kind, artifact_id: "artifact-1", media_type: mediaType, byte_length: 1, sha256: "a".repeat(64), display_name: "attachment",
+    });
+    const request = (value: unknown) => ({ kind: "request", operation_id: "op", text: "x", attachments: [value] });
+    expect(validateWireAssistantMessage(request(attachment("image", "image/png")))).toBe(true);
+    expect(validateWireAssistantMessage(request(attachment("file", "application/pdf")))).toBe(true);
+    expect(validateWireAssistantMessage(request(attachment("image", "application/pdf")))).toBe(false);
+    expect(validateWireAssistantMessage(request(attachment("file", "image/png")))).toBe(false);
+    expect(validateWireAssistantMessage(request(attachment("file", "application/octet-stream")))).toBe(false);
+  });
+
   it("encodes ordered delta, complete, and failed reply events", () => {
     expect(encodeAssistantEvent({ operationId: "op", messageId: "m", sequence: 1n, event: "delta", text: "hel" }))
       .toEqual({ kind: "event", operation_id: "op", message_id: "m", sequence: "1", event: "delta", text: "hel" });
@@ -209,6 +230,19 @@ describe("MVP closed schemas and deterministic fixtures", () => {
     expect(validateWireAssistantMessage({
       kind: "event", operation_id: "op", message_id: "m", sequence: "0", event: "delta", text: "x",
     })).toBe(false);
+  });
+
+  it("keeps event sequence at positive u64 boundaries", () => {
+    const base = { kind: "event", operation_id: "op", message_id: "m", event: "delta", text: "x" };
+    expect(validateWireAssistantMessage({ ...base, sequence: "18446744073709551615" })).toBe(true);
+    expect(validateWireAssistantMessage({ ...base, sequence: "18446744073709551616" })).toBe(false);
+    expect(() => encodeAssistantEvent({ operationId: "op", messageId: "m", sequence: 18_446_744_073_709_551_616n, event: "delta", text: "x" })).toThrow("WIRE_RECORD_UNREPRESENTABLE");
+    const sequencePattern = (load("assistant-chat.schema.json").$defs as Record<string, unknown>);
+    const event = sequencePattern.event as Record<string, unknown>;
+    const properties = event.properties as Record<string, unknown>;
+    expect(new RegExp((properties.sequence as Record<string, unknown>).pattern as string).test("10000000000000000000")).toBe(true);
+    expect(new RegExp((properties.sequence as Record<string, unknown>).pattern as string).test("18446744073709551615")).toBe(true);
+    expect(new RegExp((properties.sequence as Record<string, unknown>).pattern as string).test("18446744073709551616")).toBe(false);
   });
 
   it("binds notification subscription lifecycle wire requests to a policy revision", () => {

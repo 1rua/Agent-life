@@ -18,6 +18,7 @@ const SHA256 = /^[A-Fa-f0-9]{64}$/;
 const MEDIA_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "application/pdf", "text/plain"]);
 const AUDIO_MAX_BYTES = 10 * 1024 * 1024;
 const AUDIO_MAX_DURATION_MS = 120000;
+const ASSISTANT_MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024;
 const ARTIFACT_ID = /^[A-Za-z0-9._~-]{1,128}$/;
 
 type RuntimeNotificationRecord = Readonly<{
@@ -309,7 +310,9 @@ export const validateWireAssistantMessage = (value: unknown): value is WireAssis
   if (value.kind === "request") return exactKeys(value, ["kind", "operation_id", "text", "attachments"])
     && stringValue(value.operation_id) && value.operation_id.length > 0
     && stringValue(value.text) && value.text.length <= 50_000
-    && Array.isArray(value.attachments) && value.attachments.length <= 4 && value.attachments.every(validWireAttachment);
+    && Array.isArray(value.attachments) && value.attachments.length <= 4
+    && value.attachments.every(validWireAttachment)
+    && value.attachments.reduce((total, attachment) => total + (attachment as Record<string, unknown>).byte_length as number, 0) <= ASSISTANT_MAX_ATTACHMENT_BYTES;
   if (value.kind === "response") return (exactKeys(value, ["kind", "operation_id", "text", "status"]) || exactKeys(value, ["kind", "operation_id", "text", "status", "error"]))
     && stringValue(value.operation_id) && value.operation_id.length > 0
     && stringValue(value.text) && value.text.length <= 50_000
