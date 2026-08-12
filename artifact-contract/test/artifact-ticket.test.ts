@@ -184,4 +184,15 @@ describe("M1.1 source-only artifact ticket contract", () => {
     expect(reclaimOrphanTicket(committed, 1_000 + ARTIFACT_LIMITS.orphanReclaimAfterMs + 1).status)
       .toBe("message_committed");
   });
+
+  it("preserves an unexpired proof-verified ticket's proof brand for commit", async () => {
+    const issued = issueArtifactTicket(ticketInput(), 1_000, ticketIds("ticket-a"));
+    const verified = await verifyArtifactProof(issued, {
+      ticketId: "ticket-a", sha256: digest, proof: "p".repeat(32),
+    }, { verify: async () => "verified" });
+    const retained = reclaimOrphanTicket(verified, 1_000 + ARTIFACT_LIMITS.orphanReclaimAfterMs - 1);
+
+    expect(retained.status).toBe("proof_verified");
+    expect(() => commitArtifactMessage("message-a", [retained], 1_500)).not.toThrow();
+  });
 });

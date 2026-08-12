@@ -206,7 +206,9 @@ export const interruptArtifactTicket = (ticket: ArtifactTicket): ArtifactTicket 
 
 export const reclaimOrphanTicket = (ticket: ArtifactTicket, nowMs: number): ArtifactTicket => {
   assertClock(nowMs);
-  if (ticket.status === "message_committed" || ticket.status === "orphan_reclaimed") return ticket;
+  if (ticket.status === "message_committed") return ticket;
+  if (ticket.status === "orphan_reclaimed") return Object.freeze(stripArtifactId(ticket));
+  if (nowMs - ticket.issuedAt < ARTIFACT_LIMITS.orphanReclaimAfterMs && ticket.status === "proof_verified") return ticket;
   const sanitizedTicket = stripArtifactId(ticket);
   if (nowMs - ticket.issuedAt < ARTIFACT_LIMITS.orphanReclaimAfterMs) return Object.freeze(sanitizedTicket);
   return Object.freeze({ ...sanitizedTicket, status: "orphan_reclaimed", localCopyDeletionAllowed: true });
