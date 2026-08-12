@@ -19,7 +19,7 @@
         "media_type": { "enum": ["image/jpeg", "image/png", "image/webp"] },
         "byte_length": { "type": "integer", "minimum": 0, "maximum": 26214400 },
         "sha256": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$" },
-        "display_name": { "type": "string", "minLength": 1, "maxLength": 255 }
+        "display_name": { "type": "string", "minLength": 1, "maxLength": 255, "pattern": "^[^/\\\\]+$" }
       }
     },
     "file_attachment": {
@@ -31,7 +31,7 @@
         "media_type": { "enum": ["application/pdf", "text/plain"] },
         "byte_length": { "type": "integer", "minimum": 0, "maximum": 26214400 },
         "sha256": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$" },
-        "display_name": { "type": "string", "minLength": 1, "maxLength": 255 }
+        "display_name": { "type": "string", "minLength": 1, "maxLength": 255, "pattern": "^[^/\\\\]+$" }
       }
     },
     "audio_attachment": {
@@ -43,7 +43,7 @@
         "media_type": { "const": "audio/mp4" },
         "byte_length": { "type": "integer", "minimum": 0, "maximum": 10485760 },
         "sha256": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$" },
-        "display_name": { "type": "string", "minLength": 1, "maxLength": 255 },
+        "display_name": { "type": "string", "minLength": 1, "maxLength": 255, "pattern": "^[^/\\\\]+$" },
         "duration_ms": { "type": "integer", "minimum": 1, "maximum": 120000 }
       }
     },

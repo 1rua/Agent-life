@@ -133,6 +133,19 @@ describe("shared Agent adapter contract", () => {
     }]);
   });
 
+  it("accepts uppercase SHA-256 metadata and retains its lowercase canonical form", async () => {
+    const adapter = createFakeAdapter({ context: fixtureContext(), zeroRetention: fixtureZeroRetentionEvidence() });
+    await adapter.pair(fixtureBinding());
+
+    await expect(adapter.sendAssistantMessage({
+      messageId: "digest-1", text: "analyze this",
+      attachments: [{ kind: "image", artifactId: "artifact-image", filename: "photo.png", mimeType: "image/png", sizeBytes: 512, sha256: "A".repeat(64) }],
+    })).resolves.toMatchObject({ status: "accepted" });
+    expect(adapter.assistantMetadata()?.attachments).toEqual([{
+      kind: "image", artifactId: "artifact-image", filename: "photo.png", mimeType: "image/png", sizeBytes: 512, sha256: "a".repeat(64),
+    }]);
+  });
+
   it.each([
     [10485761, 1, "ATTACHMENT_INVALID"],
     [1, 120001, "ATTACHMENT_INVALID"],

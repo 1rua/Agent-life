@@ -35,14 +35,15 @@ field selection. Responses explicitly distinguish `complete`, `waiting_device`, 
 ## Assistant chat
 
 `assistant-chat.schema.json` keeps the assistant request path closed and
-bounded for text plus user-recorded AAC/M4A audio. Image, file, and audio
+bounded for text plus user-selected/committed AAC/M4A audio. Image, file, and audio
 attachments are metadata-only references to opaque, committed Bridge-issued
 `artifact_id` values; no Base64, URI, path, URL, provider handle, or
 model-supplied invocation context crosses the chat wire. Audio is
 `audio/mp4`, at most 10 MiB and 120 seconds, and remains an artifact rather
 than inline message data. The phone does not transcribe it; processing is
-allocated to the paired agent, while this slice validates committed artifact
-metadata and passes only that metadata through injected responder seams.
+allocated to the paired agent, while this slice validates and forwards
+committed artifact metadata through injected responder seams and does not
+deliver artifact bytes.
 
 Bridge accepts an attachment only after the current session, pairing,
 connection-generation, policy, digest, media type, size, and (for audio)

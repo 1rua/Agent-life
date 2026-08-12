@@ -255,7 +255,7 @@ export const encodeAssistantRequest = (input: Readonly<{ operationId: string; te
       artifact_id: attachment.artifactId,
       media_type: attachment.mimeType,
       byte_length: attachment.sizeBytes,
-      sha256: attachment.sha256,
+      sha256: attachment.sha256.toLowerCase(),
       display_name: attachment.filename,
       ...(attachment.kind === "audio" ? { duration_ms: attachment.durationMs } : {}),
     }))),
@@ -303,6 +303,7 @@ const validWireAttachment = (value: unknown): boolean => recordObject(value)
   && (value.kind !== "audio" || (value.byte_length as number) <= AUDIO_MAX_BYTES)
   && stringValue(value.sha256) && SHA256.test(value.sha256)
   && stringValue(value.display_name) && value.display_name.length > 0 && value.display_name.length <= 255
+  && !value.display_name.includes("/") && !value.display_name.includes("\\")
 ;
 
 export const validateWireAssistantMessage = (value: unknown): value is WireAssistantMessage => {
