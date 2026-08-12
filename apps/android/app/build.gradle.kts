@@ -16,6 +16,8 @@ dependencies {
     implementation(project(":transport"))
     implementation(project(":policy-engine"))
     implementation(project(":notification-collector"))
+    implementation(project(":sms-collector"))
     implementation(project(":encrypted-store"))
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
+    testImplementation("junit:junit:4.13.2")
 }

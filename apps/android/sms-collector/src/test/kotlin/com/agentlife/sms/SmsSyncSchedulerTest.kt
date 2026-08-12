@@ -1,0 +1,50 @@
+package com.agentlife.sms
+
+import com.agentlife.capability.SmsSyncInterval
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class SmsSyncSchedulerTest {
+    @Test
+    fun `manual interval cancels the fixed scheduled job`() {
+        val jobs = RecordingAndroidSmsJobScheduler()
+
+        AndroidSmsSyncScheduler(jobs).schedule(SmsSyncInterval.MANUAL)
+
+        assertEquals(listOf(AndroidSmsSyncScheduler.JOB_ID), jobs.cancelledJobIds)
+        assertTrue(jobs.periodicJobs.isEmpty())
+    }
+
+    @Test
+    fun `periodic intervals schedule persisted jobs at the exact allowed periods`() {
+        val jobs = RecordingAndroidSmsJobScheduler()
+        val scheduler = AndroidSmsSyncScheduler(jobs)
+
+        scheduler.schedule(SmsSyncInterval.MINUTES_15)
+        scheduler.schedule(SmsSyncInterval.MINUTES_30)
+        scheduler.schedule(SmsSyncInterval.MINUTES_60)
+
+        assertEquals(
+            listOf(
+                ScheduledPeriodicSmsJob(AndroidSmsSyncScheduler.JOB_ID, 15 * 60 * 1000L, persisted = true),
+                ScheduledPeriodicSmsJob(AndroidSmsSyncScheduler.JOB_ID, 30 * 60 * 1000L, persisted = true),
+                ScheduledPeriodicSmsJob(AndroidSmsSyncScheduler.JOB_ID, 60 * 60 * 1000L, persisted = true),
+            ),
+            jobs.periodicJobs,
+        )
+    }
+
+    private class RecordingAndroidSmsJobScheduler : AndroidSmsJobScheduler {
+        val periodicJobs = mutableListOf<ScheduledPeriodicSmsJob>()
+        val cancelledJobIds = mutableListOf<Int>()
+
+        override fun schedulePersistedPeriodic(jobId: Int, periodMs: Long) {
+            periodicJobs += ScheduledPeriodicSmsJob(jobId, periodMs, persisted = true)
+        }
+
+        override fun cancel(jobId: Int) {
+            cancelledJobIds += jobId
+        }
+    }
+}
