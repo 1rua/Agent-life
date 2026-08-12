@@ -77,19 +77,25 @@ private fun CapabilityFilter.allowsContentDisclosure(): Boolean = when (this) {
  * notification content access are the reviewed filters that may release it;
  * all other sealed filters remain withheld by default.
  */
-fun <T> normalizeContent(rawContent: T?, scope: AuthorizedReadScope): NormalizedContent<T> =
-    if (rawContent != null && scope.contentDisclosureAllowed) {
-        NormalizedContent.Released(rawContent)
-    } else {
-        NormalizedContent.Withheld
+fun <T> normalizeContent(rawContent: T?, scope: AuthorizedReadScope): NormalizedContent<T> = when {
+    !scope.contentDisclosureAllowed -> NormalizedContent.Withheld
+    rawContent != null -> NormalizedContent.Released(rawContent)
+    scope.capability == MobileDataCapability.SMS -> {
+        @Suppress("UNCHECKED_CAST")
+        NormalizedContent.Released("") as NormalizedContent<T>
     }
+    else -> NormalizedContent.Withheld
+}
 
-fun <T> normalizeContent(rawContent: T?, scope: AuthorizedAutoSendScope): NormalizedContent<T> =
-    if (rawContent != null && scope.contentDisclosureAllowed) {
-        NormalizedContent.Released(rawContent)
-    } else {
-        NormalizedContent.Withheld
+fun <T> normalizeContent(rawContent: T?, scope: AuthorizedAutoSendScope): NormalizedContent<T> = when {
+    !scope.contentDisclosureAllowed -> NormalizedContent.Withheld
+    rawContent != null -> NormalizedContent.Released(rawContent)
+    scope.capability == MobileDataCapability.SMS -> {
+        @Suppress("UNCHECKED_CAST")
+        NormalizedContent.Released("") as NormalizedContent<T>
     }
+    else -> NormalizedContent.Withheld
+}
 
 /** Shared shape for non-content metadata emitted by a future provider. */
 sealed interface CapabilityMetadata {

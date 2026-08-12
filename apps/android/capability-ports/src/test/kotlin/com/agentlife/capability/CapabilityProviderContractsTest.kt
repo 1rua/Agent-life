@@ -31,6 +31,7 @@ class CapabilityProviderContractsTest {
 
         assertEquals(NormalizedContent.Released("full body"), normalizeContent("full body", scope))
         assertEquals(NormalizedContent.Released(""), normalizeContent("", scope))
+        assertEquals(NormalizedContent.Released(""), normalizeContent(null, scope))
     }
 
     @Test
