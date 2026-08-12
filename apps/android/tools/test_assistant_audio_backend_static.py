@@ -14,7 +14,7 @@ SOURCES = (
 )
 FORBIDDEN_BACKEND_SURFACE = re.compile(
     r"^\s*import\s+(?i:android|androidx)\.|"
-    r"\b(?i:uri|path|url|socket|raw_?byte(?:s|_?buffer)?)(?=[A-Z_]|\b)|"
+    r"(?<![A-Za-z0-9])(?i:uri|path|url|socket|raw_?byte(?:s|_?buffer)?)(?=[A-Z_]|\b)|"
     r"(?<=[A-Za-z0-9])(?=[A-Z])(?i:uri|path|url|socket|rawbyte(?:s|buffer)?)(?=[A-Z_]|\b)|"
     r"\b(?i:ProcessBuilder)\b|Runtime\.getRuntime|"
     r"\b(?i:VpnService|Recorder|MediaRecorder|AudioRecord)\b",
@@ -59,11 +59,16 @@ class AssistantAudioBackendStaticTest(unittest.TestCase):
             "import android.media.MediaRecorder",
             "import androidx.core.net.toUri",
             "val filePath = \"forbidden\"",
+            "val file_path = \"forbidden\"",
             "val uploadUrl = \"forbidden\"",
+            "val upload_url = \"forbidden\"",
             "val rawByteBuffer = \"forbidden\"",
             "val raw_bytes = \"forbidden\"",
             "val raw_byte_buffer = \"forbidden\"",
             "val datagramSocket = \"forbidden\"",
+            "val datagram_socket = \"forbidden\"",
+            "val payload_raw_bytes = \"forbidden\"",
+            "val payload_raw_byte_buffer = \"forbidden\"",
             "val FiLePaTh = \"forbidden\"",
         )
         for snippet in snippets:
