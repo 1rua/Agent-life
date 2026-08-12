@@ -38,11 +38,11 @@ class NotificationRuntime(
     fun start() = synchronized(lock) {
         if (subscription?.isActive == true) return@synchronized
         policyAuthority?.let { authority ->
-            collector.applyPolicyBlocking(authority.snapshot().policy)
             policyRegistration?.close()
             policyRegistration = authority.addListener { state ->
                 synchronized(lock) { collector.applyPolicyBlocking(state.policy) }
             }
+            collector.applyPolicyBlocking(authority.snapshot().policy)
         }
         if (outbox == null) return@synchronized
         subscription = scope.launch {

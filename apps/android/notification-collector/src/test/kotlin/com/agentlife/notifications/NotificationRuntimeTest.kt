@@ -8,6 +8,7 @@ import com.agentlife.core.model.NotificationContent
 import com.agentlife.core.model.NotificationDeliveryMode
 import com.agentlife.core.model.NotificationFieldAccess
 import com.agentlife.core.model.NotificationMetadata
+import com.agentlife.core.model.NotificationAuthorization
 import com.agentlife.core.model.NotificationOutbox
 import com.agentlife.core.model.NotificationRecordV1
 import com.agentlife.core.model.NotificationRuleMode
@@ -19,6 +20,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlin.coroutines.startCoroutine
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -74,6 +77,101 @@ class NotificationRuntimeTest {
         runSuspendRuntime { runtime.persistAndDispatch(capture) }
         assertEquals(1, outbox.events.size)
         scope.cancel()
+    }
+
+    @Test
+    fun authority_present_egress_gate_still_refuses_auto_enqueue() {
+        val authority = authorityWithContentPolicy(NotificationDeliveryMode.AUTO_SEND)
+        val outbox = RecordingOutbox()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        val runtime = NotificationRuntime(
+            initialCollector = AndroidNotificationCollector(authorization = authority),
+            outbox = outbox,
+            scope = scope,
+            egressGate = NotificationRecordEgressGate { false },
+            policyAuthority = authority,
+        )
+
+        runSuspendRuntime {
+            runtime.persistAndDispatch(NotificationCaptureResult(listOf(record())))
+        }
+
+        assertTrue(outbox.events.isEmpty())
+        scope.cancel()
+    }
+
+    @Test
+    fun null_authority_preserves_legacy_enqueue_behavior() {
+        val outbox = RecordingOutbox()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        val runtime = NotificationRuntime(
+            initialCollector = AndroidNotificationCollector(
+                authorization = { _, _, _ -> AuthorizationDecision.allow() },
+            ),
+            outbox = outbox,
+            scope = scope,
+        )
+
+        runSuspendRuntime {
+            runtime.persistAndDispatch(NotificationCaptureResult(listOf(record())))
+        }
+
+        assertEquals(1, outbox.events.size)
+        scope.cancel()
+    }
+
+    @Test
+    fun start_reconciles_policy_update_that_lands_during_initial_apply() {
+        val authority = authorityWithContentPolicy(NotificationDeliveryMode.AUTO_SEND)
+        val blockingAuthorization = BlockingNotificationAuthorization()
+        val collector = AndroidNotificationCollector(authorization = blockingAuthorization).also {
+            it.applyPolicyBlocking(authority.snapshot().policy)
+            assertTrue(it.onPosted(RawNotification("mail", "mail-key", "Mail", "title", "body", null, 1)))
+        }
+        blockingAuthorization.blockNextEvaluation()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        val runtime = NotificationRuntime(
+            initialCollector = collector,
+            outbox = RecordingOutbox(),
+            scope = scope,
+            policyAuthority = authority,
+        )
+        val updatePublished = CountDownLatch(1)
+        val updateObserver = authority.addListener { state ->
+            if (state.policy.policyRevision == 2uL) updatePublished.countDown()
+        }
+        val startThread = Thread { runtime.start() }
+        val updateThread = Thread {
+            authority.localController().apply(
+                NotificationCollectionPolicyV1(
+                    NotificationRuleMode.ALLOWLIST,
+                    listOf("chat"),
+                    NotificationFieldAccess.CONTENT,
+                    2u,
+                ),
+                authorizationRevision = 2u,
+                granted = true,
+                deliveryMode = NotificationDeliveryMode.AUTO_SEND,
+            )
+        }
+
+        startThread.start()
+        try {
+            assertTrue(blockingAuthorization.entered.await(5, TimeUnit.SECONDS))
+            updateThread.start()
+            assertTrue(updatePublished.await(5, TimeUnit.SECONDS))
+        } finally {
+            blockingAuthorization.release()
+            startThread.join(5_000)
+            updateThread.join(5_000)
+            updateObserver.close()
+            runtime.stop()
+            scope.cancel()
+        }
+
+        assertFalse(startThread.isAlive)
+        assertFalse(updateThread.isAlive)
+        assertTrue(collector.onPosted(RawNotification("chat", "chat-key", "Chat", "title", "body", null, 2)))
     }
 
     @Test
@@ -169,6 +267,32 @@ private class RecordingOutbox : NotificationOutbox {
     override suspend fun acknowledge(eventId: String, eventAckWire: ByteArray) = Unit
 
     override suspend fun recoverUnacknowledged(): List<DurableEvent> = emptyList()
+}
+
+private class BlockingNotificationAuthorization : NotificationAuthorization {
+    private val blockNext = java.util.concurrent.atomic.AtomicBoolean(false)
+    val entered = CountDownLatch(1)
+    private val released = CountDownLatch(1)
+
+    fun blockNextEvaluation() {
+        blockNext.set(true)
+    }
+
+    fun release() {
+        released.countDown()
+    }
+
+    override fun decide(
+        packageName: String,
+        fieldAccess: NotificationFieldAccess,
+        policyRevision: ULong,
+    ): AuthorizationDecision {
+        if (blockNext.compareAndSet(true, false)) {
+            entered.countDown()
+            check(released.await(5, TimeUnit.SECONDS)) { "blocked authorization was not released" }
+        }
+        return AuthorizationDecision.allow()
+    }
 }
 
 private fun <T> runSuspendRuntime(block: suspend () -> T): T {
