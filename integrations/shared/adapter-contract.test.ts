@@ -169,6 +169,20 @@ describe("shared Agent adapter contract", () => {
     })).rejects.toMatchObject({ code });
   });
 
+  it.each([
+    "artifact/audio",
+    42,
+  ] as const)("rejects an invalid opaque artifact ID %o", async (artifactId) => {
+    const adapter = createFakeAdapter({ context: fixtureContext(), zeroRetention: fixtureZeroRetentionEvidence() });
+    await adapter.pair(fixtureBinding());
+
+    await expect(adapter.sendAssistantMessage({
+      messageId: "invalid-artifact-id", text: "x", attachments: [{
+        kind: "image", artifactId, filename: "photo.png", mimeType: "image/png", sizeBytes: 1, sha256: "a".repeat(64),
+      } as never],
+    })).rejects.toMatchObject({ code: "ATTACHMENT_INVALID" });
+  });
+
   it("fails closed when zero-retention provider evidence is absent, stale, or provider-retained", async () => {
     const stale = { ...fixtureZeroRetentionEvidence(), expiresAt: "2020-01-01T00:00:00.000Z" };
     const retained = { ...fixtureZeroRetentionEvidence(), providerObjectRetention: "provider_retains" as const };

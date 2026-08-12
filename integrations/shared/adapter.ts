@@ -21,6 +21,7 @@ export const ASSISTANT_ATTACHMENT_LIMITS = Object.freeze({
 });
 
 export const ZERO_RETENTION_UNAVAILABLE = "ZERO_RETENTION_UNAVAILABLE" as const;
+const ARTIFACT_ID = /^[A-Za-z0-9._~-]{1,128}$/;
 
 export type AdapterIdentity = Readonly<{
   tenantId: string;
@@ -447,7 +448,7 @@ export const createFakeAdapter = (options: AdapterOptions): FakeAdapter => {
         const isAudio = kind === "audio";
         assertExactKeys(attachment, isAudio ? ["kind", "artifactId", "filename", "mimeType", "sizeBytes", "sha256", "durationMs"] : ["kind", "artifactId", "filename", "mimeType", "sizeBytes", "sha256"], "ATTACHMENT_INVALID");
         const sizeLimit = isAudio ? ASSISTANT_ATTACHMENT_LIMITS.maxAudioBytes : ASSISTANT_ATTACHMENT_LIMITS.maxFileBytes;
-        if (!attachment.artifactId || !attachment.filename || !/^[a-fA-F0-9]{64}$/.test(attachment.sha256) || !Number.isSafeInteger(attachment.sizeBytes) || attachment.sizeBytes < 0 || attachment.sizeBytes > sizeLimit) throw new AdapterError("ATTACHMENT_INVALID");
+        if (typeof attachment.artifactId !== "string" || !ARTIFACT_ID.test(attachment.artifactId) || !attachment.filename || !/^[a-fA-F0-9]{64}$/.test(attachment.sha256) || !Number.isSafeInteger(attachment.sizeBytes) || attachment.sizeBytes < 0 || attachment.sizeBytes > sizeLimit) throw new AdapterError("ATTACHMENT_INVALID");
         const durationMs = isAudio ? (attachment as { durationMs?: unknown }).durationMs : undefined;
         if (isAudio && (typeof durationMs !== "number" || !Number.isSafeInteger(durationMs) || durationMs < 1 || durationMs > ASSISTANT_ATTACHMENT_LIMITS.maxAudioDurationMs)) throw new AdapterError("ATTACHMENT_INVALID");
         const normalizedDurationMs = durationMs as number;
