@@ -1,6 +1,6 @@
 {
   "backend": "hermes",
-  "upstream": { "release": "locked-fixture", "tag": "hermes-fixture-v1", "commit": "fixture" },
+  "upstream": { "release": "latest-stable", "tag": "hermes-fixture-v1", "commit": "fixture" },
   "protocolVersion": "mobile-bridge-v1",
   "capabilitySchemaHash": "fixture-capability-schema-v1",
   "authoritativeProfiles": { "chat": "platform", "tool": "plugin", "event": "plugin-hook" },

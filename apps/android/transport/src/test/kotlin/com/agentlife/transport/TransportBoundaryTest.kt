@@ -8,10 +8,12 @@ import com.agentlife.core.model.TransportCloseReason
 import com.agentlife.core.model.TransportFailure
 import com.agentlife.core.model.TransportPath
 import com.agentlife.core.model.VerifiedPairingTransportBinding
+import com.agentlife.tailnet.core.ConnectionGenerationStore
 import com.agentlife.tailnet.core.InMemoryConnectionGenerationStore
 import com.agentlife.tailnet.core.InMemoryEncryptedNoBackupState
 import com.agentlife.tailnet.core.LibTailscaleBinding
 import com.agentlife.tailnet.core.NoBackupTailnetStateStore
+import com.agentlife.tailnet.core.PersistentConnectionGenerationStore
 import com.agentlife.tailnet.core.TsnetLibTailscaleCore
 import com.agentlife.tailnet.core.TailscaleUserspaceCore
 import com.agentlife.tailnet.core.UserspaceBridgeChannel
@@ -178,6 +180,165 @@ class TransportBoundaryTest {
         assertArrayEquals(byteArrayOf(9), passedState.restoreNodeState())
     }
 
+    @Test
+    fun coordinator_rejects_invalid_material_before_starting_core() {
+        val core = LifecycleRecordingCore()
+        val coordinator = coordinator(core)
+        val invalid = pairingMaterial(expiresAtEpochSeconds = 9)
+
+        assertThrows(IllegalArgumentException::class.java) {
+            runSuspend { coordinator.connect(invalid) }
+        }
+        assertEquals(0, core.startCalls)
+        assertEquals(0, core.openCalls)
+    }
+
+    @Test
+    fun coordinator_connect_starts_core_once_and_returns_first_generation() {
+        val core = LifecycleRecordingCore()
+        val coordinator = coordinator(core)
+
+        val session = runSuspend { coordinator.connect(pairingMaterial()) }
+        val reconnected = runSuspend { coordinator.reconnect(pairingMaterial("ticket-2")) }
+
+        assertEquals(1uL, session.connectionGeneration)
+        assertEquals(2uL, reconnected.connectionGeneration)
+        assertEquals(1, core.startCalls)
+        assertEquals(2, core.openCalls)
+        assertEquals(0, core.stopCalls)
+    }
+
+    @Test
+    fun coordinator_reconnect_closes_old_channel_persists_new_generation_and_fences_old_session() {
+        val persistence = RecordingGenerationPersistence()
+        val generations = PersistentConnectionGenerationStore(persistence)
+        val core = LifecycleRecordingCore()
+        val coordinator = coordinator(core, generations)
+        val first = runSuspend { coordinator.connect(pairingMaterial()) }
+        runSuspend { first.sendControl(byteArrayOf(1)) }
+
+        val second = runSuspend { coordinator.reconnect(pairingMaterial("ticket-2")) }
+
+        assertEquals(2uL, second.connectionGeneration)
+        assertEquals(2uL, persistence.value)
+        assertEquals(1, core.channels[0].closeCalls)
+        assertThrows(IllegalStateException::class.java) {
+            runSuspend { first.sendControl(byteArrayOf(2)) }
+        }
+        runSuspend { second.sendControl(byteArrayOf(3)) }
+        assertArrayEquals(byteArrayOf(3), core.channels[1].sent.single())
+    }
+
+    @Test
+    fun coordinator_rejects_invalid_reconnect_without_disturbing_active_session() {
+        val core = LifecycleRecordingCore()
+        val coordinator = coordinator(core)
+        val active = runSuspend { coordinator.connect(pairingMaterial()) }
+
+        assertThrows(IllegalArgumentException::class.java) {
+            runSuspend { coordinator.reconnect(pairingMaterial("expired", expiresAtEpochSeconds = 9)) }
+        }
+
+        runSuspend { active.sendControl(byteArrayOf(6)) }
+        assertEquals(1, core.startCalls)
+        assertEquals(1, core.openCalls)
+        assertEquals(0, core.stopCalls)
+        assertArrayEquals(byteArrayOf(6), core.channels.single().sent.single())
+    }
+
+    @Test
+    fun coordinator_reconnect_failure_stops_core_and_exposes_no_new_session() {
+        val core = LifecycleRecordingCore(failOnOpenCall = 2)
+        val coordinator = coordinator(core)
+        val first = runSuspend { coordinator.connect(pairingMaterial()) }
+
+        assertThrows(IllegalStateException::class.java) {
+            runSuspend { coordinator.reconnect(pairingMaterial("ticket-2")) }
+        }
+
+        assertEquals(1, core.stopCalls)
+        assertEquals(1, core.channels[0].closeCalls)
+        assertEquals(1, core.channels.size)
+        assertThrows(IllegalStateException::class.java) {
+            runSuspend { first.sendControl(byteArrayOf(4)) }
+        }
+    }
+
+    @Test
+    fun coordinator_generation_race_closes_new_channel_and_reports_stale_generation() {
+        val generations = InMemoryConnectionGenerationStore()
+        val core = LifecycleRecordingCore(onOpen = { generations.reserveNext() })
+        val coordinator = coordinator(core, generations)
+
+        assertThrows(IllegalStateException::class.java) {
+            runSuspend { coordinator.connect(pairingMaterial()) }
+        }
+
+        assertEquals(1, core.openCalls)
+        assertEquals(1, core.channels.single().closeCalls)
+        assertEquals(
+            com.agentlife.core.model.PairingTransportStatus.Failed(TransportFailure.STALE_GENERATION),
+            coordinator.status(),
+        )
+    }
+
+    @Test
+    fun tsnet_reconnect_stops_when_the_old_session_generation_is_already_stale() {
+        val generations = InMemoryConnectionGenerationStore()
+        val core = LifecycleRecordingCore()
+        val transport = TsnetPairedBridgeTransport(core, generations)
+        val first = runSuspend { transport.open(validBinding()) }
+        generations.reserveNext()
+
+        assertThrows(IllegalStateException::class.java) {
+            runSuspend { transport.reconnect(validBinding()) }
+        }
+
+        assertEquals(1, core.openCalls)
+        assertEquals(1, core.channels.single().closeCalls)
+        assertEquals(
+            com.agentlife.core.model.PairingTransportStatus.Failed(TransportFailure.STALE_GENERATION),
+            transport.status(),
+        )
+        assertThrows(IllegalStateException::class.java) {
+            runSuspend { first.sendControl(byteArrayOf(5)) }
+        }
+    }
+
+    @Test
+    fun coordinator_close_stops_core_and_is_idempotent() {
+        val core = LifecycleRecordingCore()
+        val coordinator = coordinator(core)
+        runSuspend { coordinator.connect(pairingMaterial()) }
+
+        runSuspend { coordinator.close(TransportCloseReason.USER_REQUEST) }
+        runSuspend { coordinator.close(TransportCloseReason.USER_REQUEST) }
+
+        assertEquals(1, core.stopCalls)
+        assertEquals(1, core.channels.single().closeCalls)
+    }
+
+    @Test
+    fun coordinator_restores_generation_after_process_restart() {
+        val persistence = RecordingGenerationPersistence()
+        val firstCore = LifecycleRecordingCore()
+        val first = coordinator(
+            firstCore,
+            PersistentConnectionGenerationStore(persistence),
+        )
+        assertEquals(1uL, runSuspend { first.connect(pairingMaterial()) }.connectionGeneration)
+        runSuspend { first.close(TransportCloseReason.PROCESS_STOPPED) }
+
+        val secondCore = LifecycleRecordingCore()
+        val second = coordinator(
+            secondCore,
+            PersistentConnectionGenerationStore(persistence),
+        )
+
+        assertEquals(2uL, runSuspend { second.connect(pairingMaterial("ticket-2")) }.connectionGeneration)
+        assertEquals(2uL, persistence.value)
+    }
+
     private fun validBinding(): VerifiedPairingTransportBinding =
         VerifiedPairingTransportBindingFactory.mint(
             ticket = EnrollmentTicket("ticket", "device", "bridge-a", 7u, 2u, 100),
@@ -186,6 +347,34 @@ class TransportBoundaryTest {
             expectedPairingGeneration = 7u,
             nowEpochSeconds = 10,
         )
+
+    private fun pairingMaterial(
+        ticketId: String = "ticket-1",
+        expiresAtEpochSeconds: Long = 100,
+    ): PairingMaterial = PairingMaterial(
+        ticket = EnrollmentTicket(
+            id = ticketId,
+            deviceId = "device",
+            bridgeIdentity = "bridge-a",
+            pairingGeneration = 7u,
+            minimumPolicyRevision = 2u,
+            expiresAtEpochSeconds = expiresAtEpochSeconds,
+        ),
+        bridge = BridgeIdentity("bridge-a"),
+        policy = PolicyAttestation(2u, "digest"),
+        expectedPairingGeneration = 7u,
+        nowEpochSeconds = 10,
+    )
+
+    private fun coordinator(
+        core: TailscaleUserspaceCore,
+        generations: ConnectionGenerationStore = InMemoryConnectionGenerationStore(),
+    ): PairedBridgeSessionCoordinator = PairedBridgeSessionCoordinator(
+        core = core,
+        nodeIdentity = "node-a",
+        stateStore = NoBackupTailnetStateStore(InMemoryEncryptedNoBackupState()),
+        generationStore = generations,
+    )
 
     private class RecordingCore(
         private val onOpen: () -> Unit = {},
@@ -242,6 +431,51 @@ class TransportBoundaryTest {
         ): UserspaceBridgeChannel = error("not used")
 
         override fun stopNode(node: Any) = Unit
+    }
+
+    private class LifecycleRecordingCore(
+        private val onOpen: () -> Unit = {},
+        private val failOnOpenCall: Int? = null,
+    ) : TailscaleUserspaceCore {
+        var startCalls = 0
+        var stopCalls = 0
+        var openCalls = 0
+        val channels = mutableListOf<LifecycleRecordingChannel>()
+
+        override suspend fun start(
+            nodeIdentity: String,
+            stateStore: NoBackupTailnetStateStore,
+        ) {
+            startCalls += 1
+        }
+
+        override suspend fun openPairedBridge(
+            binding: VerifiedPairingTransportBinding,
+        ): UserspaceBridgeChannel {
+            openCalls += 1
+            onOpen()
+            if (openCalls == failOnOpenCall) throw IllegalStateException("open failed")
+            return LifecycleRecordingChannel().also(channels::add)
+        }
+
+        override suspend fun stop() {
+            stopCalls += 1
+        }
+    }
+
+    private class LifecycleRecordingChannel : UserspaceBridgeChannel {
+        var closeCalls = 0
+        val sent = mutableListOf<ByteArray>()
+
+        override suspend fun sendControl(canonicalWire: ByteArray) {
+            sent += canonicalWire.copyOf()
+        }
+
+        override suspend fun receiveControl(): ByteArray = byteArrayOf(0)
+
+        override suspend fun close() {
+            closeCalls += 1
+        }
     }
 }
 

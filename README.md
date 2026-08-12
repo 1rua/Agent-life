@@ -113,7 +113,7 @@ Agent Life 让你的 Android 手机安全连接到自托管 AI Agent，让 Agent
 
 | 目录 | 说明 | 技术栈 |
 | --- | --- | --- |
-| `apps/android/` | Android 双 APK（11 个 Gradle 模块） | Kotlin, AGP 8.7.3, SDK 35 |
+| `apps/android/` | Android 双 APK（11 个 Gradle 模块） | Kotlin 2.1.20, AGP 8.9.2, SDK 35 |
 | `bridge-contract/` | Bridge 服务契约（配对/通知/订阅/操作/对话） | TypeScript |
 | `bridge-runtime/` | Bridge 运行时适配器与部署模板 | TypeScript, Docker, systemd |
 | `artifact-contract/` | 附件 ticket/PoP/提交契约 | TypeScript |
@@ -144,7 +144,7 @@ npx tsc --noEmit --strict bridge-runtime/src/*.ts
 
 ### Android 构建
 
-需要 Android SDK 35+、JDK 17、Kotlin 2.0.21：
+需要 Android SDK 35+、JDK 17、Kotlin 2.1.20：
 
 ```bash
 cd apps/android

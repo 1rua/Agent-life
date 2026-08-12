@@ -38,15 +38,17 @@ class TransportBoundaryTest(unittest.TestCase):
             ROOT / "tailnet-core" / "src" / "main" / "kotlin" / "com" / "agentlife" / "tailnet" / "core" / "PairingReconnectState.kt",
             ROOT / "transport" / "src" / "main" / "kotlin" / "com" / "agentlife" / "transport" / "FakeUserspaceTransport.kt",
             ROOT / "transport" / "src" / "main" / "kotlin" / "com" / "agentlife" / "transport" / "TsnetPairedBridgeTransport.kt",
+            ROOT / "transport" / "src" / "main" / "kotlin" / "com" / "agentlife" / "transport" / "PairedBridgeSessionCoordinator.kt",
         )
         missing = [str(path.relative_to(ROOT)) for path in expected if not path.is_file()]
         self.assertEqual([], missing)
 
-    def test_gradle_launcher_discovers_project_toolchain(self):
-        launcher = (ROOT / "gradlew").read_text(encoding="utf-8")
-        self.assertIn("jdk-17.0.20+8", launcher)
-        self.assertIn("gradle-8.9/bin", launcher)
-        self.assertIn("android-sdk", launcher)
+    def test_gradle_wrapper_uses_pinned_distribution(self):
+        properties = (ROOT / "gradle" / "wrapper" / "gradle-wrapper.properties").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("gradle-8.12-bin.zip", properties)
+        self.assertTrue((ROOT / "gradle" / "wrapper" / "gradle-wrapper.jar").is_file())
 
     def test_closed_contract_modules_are_registered_and_scanned(self):
         """A source-only module must still be compiled and covered by no-VPN CI.
@@ -129,7 +131,8 @@ class TransportBoundaryTest(unittest.TestCase):
     def test_only_transport_depends_directly_on_tailnet_core(self):
         for module in ("app", "assistant-holder", "core-model", "policy-engine", "notification-collector", "encrypted-store"):
             source = (ROOT / module / "build.gradle.kts").read_text(encoding="utf-8")
-            self.assertNotIn('project(":tailnet-core")', source, module)
+            production_dependencies = re.findall(r"^\s*implementation\((.+)\)", source, re.MULTILINE)
+            self.assertNotIn('project(":tailnet-core")', production_dependencies, module)
         transport = (ROOT / "transport" / "build.gradle.kts").read_text(encoding="utf-8")
         self.assertIn('implementation(project(":tailnet-core"))', transport)
 

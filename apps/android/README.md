@@ -33,8 +33,8 @@ cd apps/android
 ./gradlew --no-daemon check
 ```
 
-The source scaffold currently declares provisional Gradle 8.9, AGP 8.7.3,
-Kotlin 2.0.21, compile/target SDK 35 and min SDK 34 values; these are not a
+The source scaffold currently declares provisional Gradle 8.12, AGP 8.9.2,
+Kotlin 2.1.20, compile/target SDK 35 and min SDK 34 values; these are not a
 controller-approved dependency lock. This checkout does not contain the
 wrapper JAR, SDK, or native AAR, so a toolchain-enabled environment must supply
 them according to `MVP-DEP-ANDROID` and `MVP-DEP-TSNET` before claiming a

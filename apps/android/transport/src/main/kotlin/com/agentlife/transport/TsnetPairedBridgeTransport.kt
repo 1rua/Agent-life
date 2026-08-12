@@ -44,10 +44,39 @@ class TsnetPairedBridgeTransport(
         }
     }
 
+    /** Fences the current session before opening the next connection generation. */
+    suspend fun reconnect(
+        binding: VerifiedPairingTransportBinding,
+        cause: TransportCloseReason = TransportCloseReason.NETWORK_CHANGED,
+        attempt: Int = 1,
+    ): BridgeSession {
+        require(attempt > 0) { "attempt must be positive" }
+        val previous = active
+        if (previous != null) {
+            active = null
+            state.markDisconnected(previous.connectionGeneration, cause, attempt)
+            val generationWasFenced = state.status !is PairingTransportStatus.Reconnecting
+            try {
+                previous.channel.close()
+            } catch (failure: Throwable) {
+                state.close(TransportCloseReason.FAILURE)
+                throw failure
+            }
+            check(!generationWasFenced) {
+                "connection generation was fenced before reconnect"
+            }
+        }
+        return open(binding)
+    }
+
     override suspend fun close(reason: TransportCloseReason) {
-        active?.channel?.close()
+        val previous = active
         active = null
-        state.close(reason)
+        try {
+            previous?.channel?.close()
+        } finally {
+            state.close(reason)
+        }
     }
 
     fun status() = state.status
