@@ -298,24 +298,56 @@ class NotificationRuntimeTest {
     }
 
     @Test
-    fun revoke_race_is_rechecked_before_enqueue() {
+    fun revoke_race_is_linearized_between_admission_and_egress_enqueue() {
+        val authority = authorityWithContentPolicy(NotificationDeliveryMode.AUTO_SEND)
+        val gateEntered = CountDownLatch(1)
+        val releaseGate = CountDownLatch(1)
         val outbox = RecordingOutbox()
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
         val runtime = NotificationRuntime(
-            initialCollector = AndroidNotificationCollector(
-                authorization = { _, _, _ -> AuthorizationDecision.allow() },
-            ),
+            initialCollector = AndroidNotificationCollector(authorization = authority),
             outbox = outbox,
             scope = scope,
-            egressGate = NotificationRecordEgressGate { false },
+            egressGate = NotificationRecordEgressGate { record ->
+                gateEntered.countDown()
+                check(releaseGate.await(5, TimeUnit.SECONDS)) { "egress gate was not released" }
+                authority.allows(record)
+            },
+            policyAuthority = authority,
         )
-
-        runSuspendRuntime {
-            runtime.persistAndDispatch(NotificationCaptureResult(listOf(record())))
+        val capture = NotificationCaptureResult(listOf(record()))
+        val enqueueThread = Thread {
+            runSuspendRuntime { runtime.persistAndDispatch(capture) }
+        }
+        val mutationFinished = CountDownLatch(1)
+        val mutationThread = Thread {
+            try {
+                authority.localController().revoke(authorizationRevision = 2u)
+            } finally {
+                mutationFinished.countDown()
+            }
         }
 
-        assertTrue(outbox.events.isEmpty())
-        scope.cancel()
+        enqueueThread.start()
+        try {
+            assertTrue(gateEntered.await(5, TimeUnit.SECONDS))
+            mutationThread.start()
+            assertFalse(mutationFinished.await(200, TimeUnit.MILLISECONDS))
+
+            releaseGate.countDown()
+            enqueueThread.join(5_000)
+            mutationThread.join(5_000)
+        } finally {
+            releaseGate.countDown()
+            enqueueThread.join(5_000)
+            mutationThread.join(5_000)
+            scope.cancel()
+        }
+
+        assertFalse(enqueueThread.isAlive)
+        assertFalse(mutationThread.isAlive)
+        assertFalse(authority.snapshot().granted)
+        assertEquals(1, outbox.events.size)
     }
 
     @Test

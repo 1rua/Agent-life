@@ -66,10 +66,11 @@ class NotificationRuntime(
     internal suspend fun persistAndDispatch(capture: NotificationCaptureResult) {
         val sink = outbox ?: return
         capture.records.forEach { record ->
-            if (!egressGate.allows(record)) return@forEach
             val permit = policyAuthority?.acquireDeliveryAdmissionPermit()
             try {
-                if (policyAuthority == null || policyAuthority.snapshot().deliveryMode == NotificationDeliveryMode.AUTO_SEND) {
+                if (egressGate.allows(record) &&
+                    (policyAuthority == null || policyAuthority.snapshot().deliveryMode == NotificationDeliveryMode.AUTO_SEND)
+                ) {
                     sink.enqueueAccepted(record)
                 }
             } catch (failure: Throwable) {
