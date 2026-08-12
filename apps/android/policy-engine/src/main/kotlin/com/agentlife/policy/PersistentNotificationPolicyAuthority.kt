@@ -3,6 +3,7 @@ package com.agentlife.policy
 import com.agentlife.core.model.AuthorizationDecision
 import com.agentlife.core.model.NotificationAuthorization
 import com.agentlife.core.model.NotificationCollectionPolicyV1
+import com.agentlife.core.model.NotificationDeliveryMode
 import com.agentlife.core.model.NotificationFieldAccess
 import com.agentlife.core.model.NotificationRecordV1
 import com.agentlife.core.model.NotificationRuleMode
@@ -51,6 +52,7 @@ data class NotificationAuthoritySnapshot(
     val authorizationRevision: ULong,
     val granted: Boolean,
     val corrupted: Boolean = false,
+    val deliveryMode: NotificationDeliveryMode = NotificationDeliveryMode.ON_DEMAND,
 )
 
 /**
@@ -108,9 +110,11 @@ class PersistentNotificationPolicyAuthority(
         policy: NotificationCollectionPolicyV1,
         authorizationRevision: ULong,
         granted: Boolean,
+        deliveryMode: NotificationDeliveryMode?,
     ) {
         val next = synchronized(lock) {
             val previous = current
+            val nextDeliveryMode = deliveryMode ?: previous.deliveryMode
             if (previous.corrupted) throw PolicyStateCorrupted("notification policy evidence is corrupted")
             if (policy.policyRevision < previous.policy.policyRevision) {
                 throw PolicyRevisionRace("policy revision rollback")
@@ -127,10 +131,14 @@ class PersistentNotificationPolicyAuthority(
             if (policy != previous.policy && authorizationRevision == previous.authorizationRevision) {
                 throw PolicyRevisionRace("policy changed without an authorization revision")
             }
+            if (nextDeliveryMode != previous.deliveryMode && authorizationRevision == previous.authorizationRevision) {
+                throw PolicyRevisionRace("delivery mode changed without an authorization revision")
+            }
             NotificationAuthoritySnapshot(
                 policy = policy.copy(packageIds = policy.packageIds.toList()),
                 authorizationRevision = authorizationRevision,
                 granted = granted,
+                deliveryMode = nextDeliveryMode,
             ).also { candidate ->
                 // Commit durable state before exposing a grant in memory.
                 persistence.write(encode(candidate))
@@ -160,9 +168,10 @@ class PersistentNotificationPolicyAuthority(
 
     private fun encode(value: NotificationAuthoritySnapshot): ByteArray = ByteArrayOutputStream().use { bytes ->
         DataOutputStream(bytes).use { output ->
-            writeString(output, MAGIC)
+            writeString(output, MAGIC_V2)
             output.writeLong(value.authorizationRevision.toLong())
             output.writeBoolean(value.granted)
+            output.writeByte(value.deliveryMode.ordinal)
             output.writeByte(value.policy.mode.ordinal)
             output.writeByte(value.policy.fieldAccess.ordinal)
             output.writeLong(value.policy.policyRevision.toLong())
@@ -175,9 +184,15 @@ class PersistentNotificationPolicyAuthority(
     private fun decode(bytes: ByteArray): NotificationAuthoritySnapshot = DataInputStream(
         ByteArrayInputStream(bytes),
     ).use { input ->
-        check(readString(input) == MAGIC) { "policy format mismatch" }
+        val magic = readString(input)
         val authorizationRevision = input.readLong().toULong()
         val granted = input.readBoolean()
+        val deliveryMode = when (magic) {
+            MAGIC_V1 -> NotificationDeliveryMode.ON_DEMAND
+            MAGIC_V2 -> NotificationDeliveryMode.entries.getOrNull(input.readUnsignedByte())
+                ?: error("invalid delivery mode")
+            else -> error("policy format mismatch")
+        }
         val mode = NotificationRuleMode.entries.getOrNull(input.readUnsignedByte()) ?: error("invalid policy mode")
         val access = NotificationFieldAccess.entries.getOrNull(input.readUnsignedByte()) ?: error("invalid field access")
         val policyRevision = input.readLong().toULong()
@@ -189,6 +204,7 @@ class PersistentNotificationPolicyAuthority(
             policy = NotificationCollectionPolicyV1(mode, packages, access, policyRevision),
             authorizationRevision = authorizationRevision,
             granted = granted,
+            deliveryMode = deliveryMode,
         )
     }
 
@@ -206,7 +222,8 @@ class PersistentNotificationPolicyAuthority(
     }
 
     companion object {
-        private const val MAGIC = "AGENT_LIFE_NOTIFICATION_AUTHORITY_V1"
+        private const val MAGIC_V1 = "AGENT_LIFE_NOTIFICATION_AUTHORITY_V1"
+        private const val MAGIC_V2 = "AGENT_LIFE_NOTIFICATION_AUTHORITY_V2"
         private const val MAX_PACKAGES = 10_000
         private const val MAX_STRING_BYTES = 1024
         private val UTF8 = StandardCharsets.UTF_8
@@ -214,6 +231,7 @@ class PersistentNotificationPolicyAuthority(
             policy = NotificationCollectionPolicyV1.default(),
             authorizationRevision = 0u,
             granted = false,
+            deliveryMode = NotificationDeliveryMode.ON_DEMAND,
         )
     }
 }
@@ -226,10 +244,17 @@ class LocalNotificationPolicyController internal constructor(
         policy: NotificationCollectionPolicyV1,
         authorizationRevision: ULong,
         granted: Boolean,
-    ) = authority.applyLocal(policy, authorizationRevision, granted)
+    ) = authority.applyLocal(policy, authorizationRevision, granted, deliveryMode = null)
+
+    fun apply(
+        policy: NotificationCollectionPolicyV1,
+        authorizationRevision: ULong,
+        granted: Boolean,
+        deliveryMode: NotificationDeliveryMode,
+    ) = authority.applyLocal(policy, authorizationRevision, granted, deliveryMode)
 
     fun revoke(authorizationRevision: ULong) {
         val snapshot = authority.snapshot()
-        authority.applyLocal(snapshot.policy, authorizationRevision, granted = false)
+        authority.applyLocal(snapshot.policy, authorizationRevision, granted = false, deliveryMode = null)
     }
 }
