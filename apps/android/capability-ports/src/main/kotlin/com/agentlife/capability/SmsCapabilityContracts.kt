@@ -14,6 +14,7 @@ data class SmsMetadata(
     init {
         requireMetadata(recordId, observedAtEpochMs)
         require(messageAtEpochMs >= 0) { "message time must not be negative" }
+        require(subscriptionId == null || subscriptionId >= 0) { "subscription ID must not be negative" }
     }
 }
 

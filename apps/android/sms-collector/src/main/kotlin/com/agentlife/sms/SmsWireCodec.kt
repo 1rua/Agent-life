@@ -2,32 +2,48 @@ package com.agentlife.sms
 
 import com.agentlife.capability.NormalizedContent
 import com.agentlife.capability.SmsPayload
-import com.agentlife.core.model.CapabilityDurableEvent
 
 /** Encodes released SMS records into the closed v1 JSON wire representation. */
-class SmsEventEncoder {
-    fun encode(
-        payload: SmsPayload,
-        event: CapabilityDurableEvent,
+class SmsWireCodec : SmsEventEncoder {
+    override fun encode(eventId: String, record: SmsPayload, policyRevision: ULong): ByteArray {
+        require(eventId == record.metadata.recordId) { "SMS wire record ID mismatch" }
+        val providerId = numericProviderId(eventId)
+        return encodeRecord(
+            record = record,
+            recordId = eventId,
+            sourceEpoch = 1uL,
+            recordRevision = 1uL,
+            cursor = SmsCursor(providerId, record.metadata.messageAtEpochMs),
+            capturedAtEpochMs = record.metadata.observedAtEpochMs,
+            captureRevision = policyRevision,
+            policyRevision = policyRevision,
+        )
+    }
+
+    private fun encodeRecord(
+        record: SmsPayload,
+        recordId: String,
         sourceEpoch: ULong,
         recordRevision: ULong,
         cursor: SmsCursor,
         capturedAtEpochMs: Long,
         captureRevision: ULong,
+        policyRevision: ULong,
     ): ByteArray {
-        require(event.capability == "sms") { "SMS wire event capability mismatch" }
-        require(event.recordId == payload.metadata.recordId) { "SMS wire record ID mismatch" }
         require(recordRevision > 0u) { "SMS wire record revision must be positive" }
         require(capturedAtEpochMs >= 0) { "SMS wire capture time must not be negative" }
-        val body = (payload.content as? NormalizedContent.Released<String>)?.value
+        val body = (record.content as? NormalizedContent.Released<String>)?.value
             ?: throw IllegalArgumentException("SMS wire content is withheld")
-        val metadata = payload.metadata
+        val metadata = record.metadata
+        require(metadata.subscriptionId == null || metadata.subscriptionId >= 0) {
+            "SMS subscription ID must not be negative"
+        }
 
         return buildString {
             append('{')
             appendField("kind", "upsert")
             append(',')
-            appendField("record_id", metadata.recordId)
+            appendField("record_id", recordId)
             append(',')
             appendField("source_epoch", sourceEpoch.toString())
             append(',')
@@ -41,7 +57,7 @@ class SmsEventEncoder {
             append(',')
             appendField("capture_revision", captureRevision.toString())
             append(',')
-            appendField("policy_revision", event.policyRevision.toString())
+            appendField("policy_revision", policyRevision.toString())
             append(",\"metadata\":{")
             appendNullableField("sender_address", metadata.senderAddress)
             append(',')
@@ -57,6 +73,14 @@ class SmsEventEncoder {
             appendField("body", body)
             append("}}")
         }.encodeToByteArray()
+    }
+
+    private fun numericProviderId(eventId: String): Long {
+        val numeric = eventId.removePrefix("sms:")
+        require(eventId != numeric && numeric.matches(Regex("0|[1-9][0-9]*"))) {
+            "SMS event ID must be sms:<numericProviderId>"
+        }
+        return numeric.toLongOrNull() ?: throw IllegalArgumentException("SMS provider ID is out of range")
     }
 
     private fun StringBuilder.appendField(name: String, value: String) {

@@ -1,9 +1,25 @@
 package com.agentlife.capability
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class CapabilityProviderContractsTest {
+    @Test
+    fun sms_metadata_rejects_negative_subscription_ids() {
+        assertThrows(IllegalArgumentException::class.java) {
+            SmsMetadata(
+                recordId = "sms:1",
+                senderAddress = null,
+                threadId = null,
+                messageAtEpochMs = 1,
+                observedAtEpochMs = 1,
+                read = false,
+                subscriptionId = -1,
+            )
+        }
+    }
+
     @Test
     fun sms_scope_releases_complete_body_including_empty_body() {
         val request = AgentDataRequest(
