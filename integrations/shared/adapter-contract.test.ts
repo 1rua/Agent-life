@@ -64,7 +64,7 @@ describe("shared Agent adapter contract", () => {
       packageId: null,
       title: null,
       content: null,
-    });
+    })!;
 
     await expect(adapter.receiveNotificationEvent(event)).resolves.toMatchObject({
       eventId: "event-1",
@@ -118,7 +118,31 @@ describe("shared Agent adapter contract", () => {
     });
     expect(JSON.stringify(adapter.diagnostics())).not.toContain("hello phone");
     expect(JSON.stringify(adapter.diagnostics())).not.toContain("photo.png");
-    expect(ASSISTANT_ATTACHMENT_LIMITS).toEqual({ maxFiles: 4, maxFileBytes: 25 * 1024 * 1024, maxMessageBytes: 50 * 1024 * 1024 });
+    expect(ASSISTANT_ATTACHMENT_LIMITS).toEqual({ maxFiles: 4, maxFileBytes: 25 * 1024 * 1024, maxAudioBytes: 10 * 1024 * 1024, maxAudioDurationMs: 120000, maxMessageBytes: 50 * 1024 * 1024 });
+  });
+
+  it("passes bounded audio metadata to the common agent adapter", async () => {
+    const adapter = createFakeAdapter({ context: fixtureContext(), zeroRetention: fixtureZeroRetentionEvidence() });
+    await adapter.pair(fixtureBinding());
+    await expect(adapter.sendAssistantMessage({
+      messageId: "voice-1", text: "analyze this",
+      attachments: [{ kind: "audio", artifactId: "artifact-audio", filename: "voice.m4a", mimeType: "audio/mp4", sizeBytes: 512, sha256: "c".repeat(64), durationMs: 5000 }],
+    })).resolves.toMatchObject({ status: "accepted" });
+    expect(adapter.assistantMetadata()?.attachments).toEqual([{
+      kind: "audio", artifactId: "artifact-audio", filename: "voice.m4a", mimeType: "audio/mp4", sizeBytes: 512, sha256: "c".repeat(64), durationMs: 5000,
+    }]);
+  });
+
+  it.each([
+    [10485761, 1, "ATTACHMENT_INVALID"],
+    [1, 120001, "ATTACHMENT_INVALID"],
+  ] as const)("rejects audio size/duration %s/%s", async (sizeBytes, durationMs, code) => {
+    const adapter = createFakeAdapter({ context: fixtureContext(), zeroRetention: fixtureZeroRetentionEvidence() });
+    await adapter.pair(fixtureBinding());
+    await expect(adapter.sendAssistantMessage({
+      messageId: `bad-${sizeBytes}-${durationMs}`, text: "x",
+      attachments: [{ kind: "audio", artifactId: "artifact-audio", filename: "voice.m4a", mimeType: "audio/mp4", sizeBytes, sha256: "c".repeat(64), durationMs }],
+    })).rejects.toMatchObject({ code });
   });
 
   it("fails closed when zero-retention provider evidence is absent, stale, or provider-retained", async () => {
