@@ -1,5 +1,6 @@
 package com.agentlife.sms
 
+import android.content.Context
 import com.agentlife.capability.SmsHistoryPolicy
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -44,8 +45,8 @@ class InMemorySmsCursorStore(initial: SmsCursor? = null) : SmsCursorStore {
     }
 }
 
-/** File adapter intended only for a child of Context.noBackupFilesDir. */
-class FileSmsCursorStore(private val file: File) : SmsCursorStore {
+/** File adapter backed by an app-private no-backup child. */
+class FileSmsCursorStore private constructor(private val file: File) : SmsCursorStore {
     private val lock = Any()
     private var cursor: SmsCursor? = readCursor()
 
@@ -93,7 +94,18 @@ class FileSmsCursorStore(private val file: File) : SmsCursorStore {
         SmsCursor(providerId, messageAtEpochMs)
     }
 
-    private companion object {
-        val MAGIC = "AGENT_LIFE_SMS_CURSOR_V1".encodeToByteArray()
+    companion object {
+        private const val FILE_NAME = "sms-cursor-v1.bin"
+        private val MAGIC = "AGENT_LIFE_SMS_CURSOR_V1".encodeToByteArray()
+
+        /** Android composition entry point; cursor data is never backed up. */
+        fun fromContext(context: Context): FileSmsCursorStore =
+            fromNoBackupDirectory(context.noBackupFilesDir)
+
+        /** Internal JVM seam for testing the same fixed-child construction. */
+        internal fun fromNoBackupDirectory(noBackupDirectory: File): FileSmsCursorStore =
+            FileSmsCursorStore(File(noBackupDirectory, FILE_NAME))
+
+        internal fun forTesting(file: File): FileSmsCursorStore = FileSmsCursorStore(file)
     }
 }

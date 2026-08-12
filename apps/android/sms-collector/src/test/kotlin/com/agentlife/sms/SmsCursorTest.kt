@@ -42,14 +42,48 @@ class SmsCursorTest {
         val directory = Files.createTempDirectory("sms-cursor-").toFile()
         try {
             val file = File(directory, "cursor.bin")
-            FileSmsCursorStore(file).advance(SmsCursor(providerId = 42L, messageAtEpochMs = 1_700L))
+            FileSmsCursorStore.forTesting(file).advance(SmsCursor(providerId = 42L, messageAtEpochMs = 1_700L))
 
             assertEquals(
                 SmsCursor(providerId = 42L, messageAtEpochMs = 1_700L),
-                FileSmsCursorStore(file).current(),
+                FileSmsCursorStore.forTesting(file).current(),
             )
         } finally {
             directory.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `file store ignores older and equal advances after restart`() {
+        val directory = Files.createTempDirectory("sms-cursor-").toFile()
+        try {
+            val file = File(directory, "cursor.bin")
+            FileSmsCursorStore.forTesting(file).advance(SmsCursor(providerId = 2L, messageAtEpochMs = 100L))
+            val restarted = FileSmsCursorStore.forTesting(file)
+
+            assertFalse(restarted.advance(SmsCursor(providerId = 1L, messageAtEpochMs = 100L)))
+            assertFalse(restarted.advance(SmsCursor(providerId = 2L, messageAtEpochMs = 100L)))
+
+            assertEquals(SmsCursor(providerId = 2L, messageAtEpochMs = 100L), FileSmsCursorStore.forTesting(file).current())
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `no backup directory factory uses the fixed app-private cursor child`() {
+        val noBackupDirectory = Files.createTempDirectory("sms-no-backup-").toFile()
+        try {
+            val store = FileSmsCursorStore.fromNoBackupDirectory(noBackupDirectory)
+
+            assertTrue(store.advance(SmsCursor(providerId = 7L, messageAtEpochMs = 700L)))
+            assertEquals(
+                SmsCursor(providerId = 7L, messageAtEpochMs = 700L),
+                FileSmsCursorStore.fromNoBackupDirectory(noBackupDirectory).current(),
+            )
+            assertTrue(File(noBackupDirectory, "sms-cursor-v1.bin").isFile)
+        } finally {
+            noBackupDirectory.deleteRecursively()
         }
     }
 }
