@@ -40,8 +40,9 @@ attachments are metadata-only references to opaque, committed Bridge-issued
 `artifact_id` values; no Base64, URI, path, URL, provider handle, or
 model-supplied invocation context crosses the chat wire. Audio is
 `audio/mp4`, at most 10 MiB and 120 seconds, and remains an artifact rather
-than inline message data. The phone does not transcribe it; the paired agent
-receives the committed artifact for its own processing.
+than inline message data. The phone does not transcribe it; processing is
+allocated to the paired agent, while this slice validates committed artifact
+metadata and passes only that metadata through injected responder seams.
 
 Bridge accepts an attachment only after the current session, pairing,
 connection-generation, policy, digest, media type, size, and (for audio)
