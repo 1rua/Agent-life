@@ -145,6 +145,17 @@ describe("shared Agent adapter contract", () => {
     })).rejects.toMatchObject({ code });
   });
 
+  it.each([
+    [{ kind: "file", artifactId: "artifact-audio", filename: "voice.m4a", mimeType: "audio/mp4", sizeBytes: 512, sha256: "c".repeat(64) }, "ATTACHMENT_UNSUPPORTED"],
+    [{ kind: "unknown", artifactId: "artifact-audio", filename: "voice.m4a", mimeType: "text/plain", sizeBytes: 512, sha256: "c".repeat(64) }, "ATTACHMENT_INVALID"],
+  ] as const)("rejects runtime attachment discriminator bypass %o", async (attachment, code) => {
+    const adapter = createFakeAdapter({ context: fixtureContext(), zeroRetention: fixtureZeroRetentionEvidence() });
+    await adapter.pair(fixtureBinding());
+    await expect(adapter.sendAssistantMessage({
+      messageId: "forged-attachment", text: "x", attachments: [attachment as never],
+    })).rejects.toMatchObject({ code });
+  });
+
   it("fails closed when zero-retention provider evidence is absent, stale, or provider-retained", async () => {
     const stale = { ...fixtureZeroRetentionEvidence(), expiresAt: "2020-01-01T00:00:00.000Z" };
     const retained = { ...fixtureZeroRetentionEvidence(), providerObjectRetention: "provider_retains" as const };
