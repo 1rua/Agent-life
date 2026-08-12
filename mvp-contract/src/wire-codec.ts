@@ -16,6 +16,9 @@ const isPositiveU64 = (value: unknown): value is string =>
   isDecimalU64(value) && value !== "0";
 const SHA256 = /^[A-Fa-f0-9]{64}$/;
 const MEDIA_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "application/pdf", "text/plain"]);
+const AUDIO_MAX_BYTES = 10 * 1024 * 1024;
+const AUDIO_MAX_DURATION_MS = 120000;
+const ARTIFACT_ID = /^[A-Za-z0-9._~-]{1,128}$/;
 
 type RuntimeNotificationRecord = Readonly<{
   kind: "upsert" | "delete_tombstone" | "loss_marker";
@@ -51,13 +54,9 @@ export type WireNotificationRecord = Readonly<{
   loss: Readonly<{ lost_from_cursor: string; lost_to_cursor: string; reason: string }> | null;
 }>;
 
-export type RuntimeAssistantAttachment = Readonly<{
-  kind: "image" | "file";
-  filename: string;
-  mimeType: string;
-  sizeBytes: number;
-  sha256: string;
-}>;
+export type RuntimeAssistantAttachment =
+  | Readonly<{ kind: "image" | "file"; artifactId: string; filename: string; mimeType: string; sizeBytes: number; sha256: string }>
+  | Readonly<{ kind: "audio"; artifactId: string; filename: string; mimeType: "audio/mp4"; sizeBytes: number; sha256: string; durationMs: number }>;
 
 export type WireAssistantMessage = Readonly<Record<string, unknown>>;
 
@@ -252,10 +251,12 @@ export const encodeAssistantRequest = (input: Readonly<{ operationId: string; te
     text: input.text,
     attachments: Object.freeze(input.attachments.map((attachment) => Object.freeze({
       kind: attachment.kind,
+      artifact_id: attachment.artifactId,
       media_type: attachment.mimeType,
       byte_length: attachment.sizeBytes,
       sha256: attachment.sha256,
       display_name: attachment.filename,
+      ...(attachment.kind === "audio" ? { duration_ms: attachment.durationMs } : {}),
     }))),
   });
   if (!validateWireAssistantMessage(wire)) throw new Error("WIRE_ASSISTANT_UNREPRESENTABLE");
@@ -270,15 +271,38 @@ export const encodeAssistantResponse = (input: Readonly<{ operationId: string; r
   return wire;
 };
 
+export const encodeAssistantEvent = (input: Readonly<{
+  operationId: string;
+  messageId: string;
+  sequence: bigint;
+  event: "delta" | "complete" | "failed";
+  text: string;
+  error?: string;
+}>): WireAssistantMessage => {
+  const wire = Object.freeze({
+    kind: "event", operation_id: input.operationId, message_id: input.messageId,
+    sequence: bigintString(input.sequence, true), event: input.event, text: input.text,
+    ...(input.error === undefined ? {} : { error: input.error }),
+  });
+  if (!validateWireAssistantMessage(wire)) throw new Error("WIRE_ASSISTANT_UNREPRESENTABLE");
+  return wire;
+};
+
 const validWireAttachment = (value: unknown): boolean => recordObject(value)
-  && exactKeys(value, ["kind", "media_type", "byte_length", "sha256", "display_name"])
-  && (value.kind === "image" || value.kind === "file")
-  && stringValue(value.media_type) && MEDIA_TYPES.has(value.media_type)
+  && stringValue(value.artifact_id) && ARTIFACT_ID.test(value.artifact_id)
+  && ((exactKeys(value, ["kind", "artifact_id", "media_type", "byte_length", "sha256", "display_name"])
+    && (value.kind === "image" || value.kind === "file")
+    && stringValue(value.media_type) && MEDIA_TYPES.has(value.media_type)
+    && (value.kind !== "image" || value.media_type.startsWith("image/"))
+    && (value.kind !== "file" || !value.media_type.startsWith("image/")))
+    || (exactKeys(value, ["kind", "artifact_id", "media_type", "byte_length", "sha256", "display_name", "duration_ms"])
+      && value.kind === "audio" && value.media_type === "audio/mp4"
+      && Number.isSafeInteger(value.duration_ms) && (value.duration_ms as number) >= 1 && (value.duration_ms as number) <= AUDIO_MAX_DURATION_MS))
   && Number.isSafeInteger(value.byte_length) && (value.byte_length as number) >= 0 && (value.byte_length as number) <= 26_214_400
+  && (value.kind !== "audio" || (value.byte_length as number) <= AUDIO_MAX_BYTES)
   && stringValue(value.sha256) && SHA256.test(value.sha256)
   && stringValue(value.display_name) && value.display_name.length > 0 && value.display_name.length <= 255
-  && (value.kind !== "image" || value.media_type.startsWith("image/"))
-  && (value.kind !== "file" || !value.media_type.startsWith("image/"));
+;
 
 export const validateWireAssistantMessage = (value: unknown): value is WireAssistantMessage => {
   if (!recordObject(value) || typeof value.kind !== "string") return false;
@@ -291,5 +315,13 @@ export const validateWireAssistantMessage = (value: unknown): value is WireAssis
     && stringValue(value.text) && value.text.length <= 50_000
     && (value.status === "complete" || value.status === "failed")
     && (!Object.hasOwn(value, "error") || value.error === null || stringValue(value.error));
+  if (value.kind === "event") return (exactKeys(value, ["kind", "operation_id", "message_id", "sequence", "event", "text"])
+    || exactKeys(value, ["kind", "operation_id", "message_id", "sequence", "event", "text", "error"]))
+    && stringValue(value.operation_id) && value.operation_id.length > 0
+    && stringValue(value.message_id) && value.message_id.length > 0
+    && isPositiveU64(value.sequence)
+    && (value.event === "delta" || value.event === "complete" || value.event === "failed")
+    && stringValue(value.text) && value.text.length <= 50_000
+    && (value.event === "failed" ? stringValue(value.error) && value.error.length > 0 : !Object.hasOwn(value, "error"));
   return false;
 };

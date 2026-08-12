@@ -5,26 +5,42 @@
   "unevaluatedProperties": false,
   "oneOf": [
     { "$ref": "#/$defs/request" },
-    { "$ref": "#/$defs/response" }
+    { "$ref": "#/$defs/response" },
+    { "$ref": "#/$defs/event" }
   ],
   "$defs": {
-    "attachment": {
+    "artifact_id": { "type": "string", "pattern": "^[A-Za-z0-9._~-]{1,128}$" },
+    "common_attachment": {
       "type": "object", "additionalProperties": false,
-      "required": ["kind", "media_type", "byte_length", "sha256", "display_name"],
+      "required": ["kind", "artifact_id", "media_type", "byte_length", "sha256", "display_name"],
       "properties": {
         "kind": { "enum": ["image", "file"] },
+        "artifact_id": { "$ref": "#/$defs/artifact_id" },
         "media_type": { "type": "string", "minLength": 1 },
         "byte_length": { "type": "integer", "minimum": 0, "maximum": 26214400 },
         "sha256": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$" },
         "display_name": { "type": "string", "minLength": 1, "maxLength": 255 }
       }
     },
+    "audio_attachment": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "artifact_id", "media_type", "byte_length", "sha256", "display_name", "duration_ms"],
+      "properties": {
+        "kind": { "const": "audio" },
+        "artifact_id": { "$ref": "#/$defs/artifact_id" },
+        "media_type": { "const": "audio/mp4" },
+        "byte_length": { "type": "integer", "minimum": 0, "maximum": 10485760 },
+        "sha256": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$" },
+        "display_name": { "type": "string", "minLength": 1, "maxLength": 255 },
+        "duration_ms": { "type": "integer", "minimum": 1, "maximum": 120000 }
+      }
+    },
+    "attachment": { "oneOf": [ { "$ref": "#/$defs/common_attachment" }, { "$ref": "#/$defs/audio_attachment" } ] },
     "request": {
       "type": "object", "additionalProperties": false,
       "required": ["kind", "operation_id", "text", "attachments"],
       "properties": {
-        "kind": { "const": "request" },
-        "operation_id": { "type": "string", "minLength": 1 },
+        "kind": { "const": "request" }, "operation_id": { "type": "string", "minLength": 1 },
         "text": { "type": "string", "maxLength": 50000 },
         "attachments": { "type": "array", "maxItems": 4, "items": { "$ref": "#/$defs/attachment" } }
       }
@@ -33,12 +49,25 @@
       "type": "object", "additionalProperties": false,
       "required": ["kind", "operation_id", "text", "status"],
       "properties": {
-        "kind": { "const": "response" },
-        "operation_id": { "type": "string", "minLength": 1 },
-        "text": { "type": "string", "maxLength": 50000 },
-        "status": { "enum": ["complete", "failed"] },
+        "kind": { "const": "response" }, "operation_id": { "type": "string", "minLength": 1 },
+        "text": { "type": "string", "maxLength": 50000 }, "status": { "enum": ["complete", "failed"] },
         "error": { "type": ["string", "null"] }
       }
+    },
+    "event": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "operation_id", "message_id", "sequence", "event", "text"],
+      "properties": {
+        "kind": { "const": "event" }, "operation_id": { "type": "string", "minLength": 1 },
+        "message_id": { "type": "string", "minLength": 1 },
+        "sequence": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "event": { "enum": ["delta", "complete", "failed"] }, "text": { "type": "string", "maxLength": 50000 },
+        "error": { "type": "string", "minLength": 1 }
+      },
+      "allOf": [
+        { "if": { "properties": { "event": { "const": "failed" } } }, "then": { "required": ["error"] } },
+        { "if": { "properties": { "event": { "enum": ["delta", "complete"] } } }, "then": { "not": { "required": ["error"] } } }
+      ]
     }
   }
 }

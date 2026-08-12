@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
   encodeAssistantRequest,
+  encodeAssistantEvent,
   encodeAssistantResponse,
   encodeNotificationRecord,
   encodeNotificationQuery,
@@ -153,13 +154,61 @@ describe("MVP closed schemas and deterministic fixtures", () => {
 
   it("encodes assistant attachments without leaking internal camel-case fields", () => {
     const request = encodeAssistantRequest({
-      operationId: "op-1", text: "hello", attachments: [{ kind: "image", filename: "photo.png", mimeType: "image/png", sizeBytes: 3, sha256: "a".repeat(64) }],
+      operationId: "op-1", text: "hello", attachments: [{ kind: "image", artifactId: "artifact-image-1", filename: "photo.png", mimeType: "image/png", sizeBytes: 3, sha256: "a".repeat(64) }],
     });
-    expect(Object.keys(request.attachments[0]!).sort()).toEqual(["byte_length", "display_name", "kind", "media_type", "sha256"]);
+    expect(Object.keys(request.attachments[0]!).sort()).toEqual(["artifact_id", "byte_length", "display_name", "kind", "media_type", "sha256"]);
     expect(validateWireAssistantMessage(request)).toBe(true);
     const response = encodeAssistantResponse({ operationId: "op-1", reply: "done" });
     expect(validateWireAssistantMessage(response)).toBe(true);
     expect(validateWireAssistantMessage({ ...request, session: "model" })).toBe(false);
+  });
+
+  it("encodes a committed audio artifact with a bounded duration", () => {
+    const wire = encodeAssistantRequest({
+      operationId: "op-audio",
+      text: "please transcribe",
+      attachments: [{
+        kind: "audio",
+        artifactId: "artifact-audio-1",
+        filename: "voice.m4a",
+        mimeType: "audio/mp4",
+        sizeBytes: 10485760,
+        sha256: "a".repeat(64),
+        durationMs: 120000,
+      }],
+    });
+    expect(wire.attachments).toEqual([{
+      kind: "audio", artifact_id: "artifact-audio-1", media_type: "audio/mp4",
+      byte_length: 10485760, sha256: "a".repeat(64), display_name: "voice.m4a", duration_ms: 120000,
+    }]);
+    expect(validateWireAssistantMessage(wire)).toBe(true);
+  });
+
+  it("rejects audio outside the closed size, duration, and field rules", () => {
+    const valid = {
+      kind: "audio", artifact_id: "artifact-audio-1", media_type: "audio/mp4",
+      byte_length: 1, sha256: "a".repeat(64), display_name: "voice.m4a", duration_ms: 1,
+    };
+    expect(validateWireAssistantMessage({
+      kind: "request", operation_id: "op", text: "x", attachments: [{ ...valid, duration_ms: 120001 }],
+    })).toBe(false);
+    expect(validateWireAssistantMessage({
+      kind: "request", operation_id: "op", text: "x", attachments: [{ ...valid, byte_length: 10485761 }],
+    })).toBe(false);
+    expect(validateWireAssistantMessage({
+      kind: "request", operation_id: "op", text: "x", attachments: [{ ...valid, uri: "content://forbidden" }],
+    })).toBe(false);
+  });
+
+  it("encodes ordered delta, complete, and failed reply events", () => {
+    expect(encodeAssistantEvent({ operationId: "op", messageId: "m", sequence: 1n, event: "delta", text: "hel" }))
+      .toEqual({ kind: "event", operation_id: "op", message_id: "m", sequence: "1", event: "delta", text: "hel" });
+    expect(validateWireAssistantMessage({
+      kind: "event", operation_id: "op", message_id: "m", sequence: "2", event: "failed", text: "", error: "CONNECTION_FENCED",
+    })).toBe(true);
+    expect(validateWireAssistantMessage({
+      kind: "event", operation_id: "op", message_id: "m", sequence: "0", event: "delta", text: "x",
+    })).toBe(false);
   });
 
   it("binds notification subscription lifecycle wire requests to a policy revision", () => {
