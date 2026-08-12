@@ -33,6 +33,16 @@ PROVIDER_SOURCE = (
     / "capability"
     / "CapabilityProviderContracts.kt"
 )
+SMS_CONTRACT_SOURCE = (
+    PORT_ROOT
+    / "src"
+    / "main"
+    / "kotlin"
+    / "com"
+    / "agentlife"
+    / "capability"
+    / "SmsCapabilityContracts.kt"
+)
 
 
 class CapabilityPortsStaticTest(unittest.TestCase):
@@ -158,6 +168,39 @@ class CapabilityPortsStaticTest(unittest.TestCase):
             re.IGNORECASE,
         )
         self.assertEqual([], [line for line in source.splitlines() if forbidden.search(line)])
+
+    def test_sms_scope_has_a_reviewed_complete_content_release_branch(self):
+        source = PROVIDER_SOURCE.read_text(encoding="utf-8")
+
+        self.assertIn("CapabilityFilter.Sms -> true", source)
+        self.assertIn("fun normalizeContent(rawContent: String?, scope: AuthorizedReadScope)", source)
+        self.assertIn("fun normalizeContent(rawContent: String?, scope: AuthorizedAutoSendScope)", source)
+        self.assertIn("NormalizedContent.Released(rawContent)", source)
+        self.assertIn("NormalizedContent.Withheld", source)
+
+    def test_sms_metadata_and_local_history_interval_contracts_are_closed(self):
+        self.assertTrue(SMS_CONTRACT_SOURCE.is_file(), SMS_CONTRACT_SOURCE)
+        source = SMS_CONTRACT_SOURCE.read_text(encoding="utf-8")
+
+        self.assertIn("data class SmsMetadata", source)
+        for field in (
+            "override val recordId: String",
+            "val senderAddress: String?",
+            "val threadId: String?",
+            "val messageAtEpochMs: Long",
+            "override val observedAtEpochMs: Long",
+            "val read: Boolean",
+            "val subscriptionId: Int?",
+        ):
+            self.assertIn(field, source)
+
+        self.assertIn("data class SmsHistoryPolicy", source)
+        self.assertIn("val fromEpochMs: Long?", source)
+        self.assertIn("val maxRecords: Int", source)
+        self.assertIn("MAX_SMS_BATCH_RECORDS", source)
+        self.assertIn("enum class SmsSyncInterval", source)
+        for interval in ("MANUAL", "MINUTES_15", "MINUTES_30", "MINUTES_60"):
+            self.assertRegex(source, rf"\b{interval}\b")
 
 
 if __name__ == "__main__":
