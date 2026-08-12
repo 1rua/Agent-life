@@ -44,6 +44,32 @@ describe("M1.1 source-only artifact ticket contract", () => {
       .toThrowError(new ArtifactContractError("ARTIFACT_TOO_LARGE"));
   });
 
+  it("accepts audio only within the 10 MiB and 120 second limits", () => {
+    const ticket = issueArtifactTicket(ticketInput({
+      mediaType: "audio/mp4", byteSize: 10485760, durationMs: 120000,
+    }), 1000, ticketIds("audio-ticket"));
+    expect(ticket).toMatchObject({ mediaType: "audio/mp4", byteSize: 10485760, durationMs: 120000 });
+    expect(() => issueArtifactTicket(ticketInput({ mediaType: "audio/mp4", byteSize: 10485761, durationMs: 1 }), 1000, ticketIds("too-large")))
+      .toThrowError(new ArtifactContractError("ARTIFACT_TOO_LARGE"));
+    expect(() => issueArtifactTicket(ticketInput({ mediaType: "audio/mp4", byteSize: 1, durationMs: 120001 }), 1000, ticketIds("too-long")))
+      .toThrowError(new ArtifactContractError("AUDIO_DURATION_INVALID"));
+  });
+
+  it("requires audio duration and rejects duration metadata on non-audio artifacts", () => {
+    expect(() => issueArtifactTicket(ticketInput({ mediaType: "audio/mp4" }), 1000, ticketIds("missing-duration")))
+      .toThrowError(new ArtifactContractError("AUDIO_DURATION_INVALID"));
+    expect(() => issueArtifactTicket(ticketInput({ mediaType: "image/png", durationMs: 1000 }), 1000, ticketIds("image-duration")))
+      .toThrowError(new ArtifactContractError("AUDIO_DURATION_INVALID"));
+  });
+
+  it("mints an opaque artifact id only on message commit", async () => {
+    const issued = issueArtifactTicket(ticketInput({ mediaType: "audio/mp4", durationMs: 25 }), 1000, ticketIds("ticket-a"));
+    const verified = await verifyArtifactProof(issued, { ticketId: "ticket-a", sha256: digest, proof: "p".repeat(32) }, { verify: async () => "verified" });
+    expect(verified.artifactId).toBeUndefined();
+    const receipt = commitArtifactMessage("message-a", [verified], 1500);
+    expect(receipt.tickets[0]).toMatchObject({ status: "message_committed", artifactId: "ticket-a", durationMs: 25 });
+  });
+
   it("rejects arbitrary paths, URLs, and unrecognized keys instead of treating them as an artifact selection", () => {
     expect(() => issueArtifactTicket(ticketInput({ path: "/sdcard/DCIM/a.jpg" }), 1_000, ticketIds("ticket-a")))
       .toThrowError(new ArtifactContractError("UNSAFE_LOCATION_INPUT"));

@@ -1,6 +1,8 @@
 export const ARTIFACT_LIMITS = Object.freeze({
   maxFiles: 4,
   maxSingleBytes: 25 * 1024 * 1024,
+  maxAudioBytes: 10 * 1024 * 1024,
+  maxAudioDurationMs: 120000,
   maxMessageBytes: 50 * 1024 * 1024,
   orphanReclaimAfterMs: 24 * 60 * 60 * 1000,
 } as const);
@@ -11,6 +13,7 @@ const MEDIA_TYPES = new Set([
   "image/webp",
   "application/pdf",
   "text/plain",
+  "audio/mp4",
 ]);
 const SHA256 = /^[A-Fa-f0-9]{64}$/;
 const ID = /^[A-Za-z0-9._~-]{1,128}$/;
@@ -39,17 +42,20 @@ export type ArtifactTicket = Readonly<{
   selection: ArtifactSelection;
   mediaType: string;
   byteSize: number;
+  durationMs?: number;
   sha256: string;
   issuedAt: number;
   proofVerifiedAt?: number;
   committedAt?: number;
   localCopyDeletionAllowed?: boolean;
+  artifactId?: string;
 }>;
 
 type ArtifactInput = Readonly<{
   selection: ArtifactSelection;
   mediaType: string;
   byteSize: number;
+  durationMs?: number;
   sha256: string;
 }>;
 
@@ -102,19 +108,33 @@ const parseSelection = (value: unknown): ArtifactSelection => {
 const parseInput = (value: unknown): ArtifactInput => {
   const record = isRecord(value) ? value : fail("ARTIFACT_INVALID");
   if (Object.keys(record).some((key) => key === "path" || key === "url" || key === "uri")) fail("UNSAFE_LOCATION_INPUT");
-  if (!exactKeys(record, ["selection", "mediaType", "byteSize", "sha256"])) fail("ARTIFACT_INVALID");
+  if (!exactKeys(record, Object.prototype.hasOwnProperty.call(record, "durationMs")
+    ? ["selection", "mediaType", "byteSize", "sha256", "durationMs"]
+    : ["selection", "mediaType", "byteSize", "sha256"])) fail("ARTIFACT_INVALID");
   const selection = parseSelection(record.selection);
   const mediaType = typeof record.mediaType === "string" && MEDIA_TYPES.has(record.mediaType)
     ? record.mediaType
     : fail("MEDIA_TYPE_NOT_ALLOWED");
+  const hasDuration = Object.prototype.hasOwnProperty.call(record, "durationMs");
+  if (mediaType === "audio/mp4" && (!hasDuration || typeof record.durationMs !== "number"
+    || !Number.isSafeInteger(record.durationMs) || record.durationMs < 1
+    || record.durationMs > ARTIFACT_LIMITS.maxAudioDurationMs)) fail("AUDIO_DURATION_INVALID");
+  if (mediaType !== "audio/mp4" && hasDuration) fail("AUDIO_DURATION_INVALID");
   const byteSize = typeof record.byteSize === "number" && Number.isSafeInteger(record.byteSize)
-    && record.byteSize >= 0 && record.byteSize <= ARTIFACT_LIMITS.maxSingleBytes
+    && record.byteSize >= 0 && record.byteSize <= (mediaType === "audio/mp4"
+      ? ARTIFACT_LIMITS.maxAudioBytes : ARTIFACT_LIMITS.maxSingleBytes)
     ? record.byteSize
     : fail("ARTIFACT_TOO_LARGE");
   const sha256 = typeof record.sha256 === "string" && SHA256.test(record.sha256)
     ? record.sha256
     : fail("DIGEST_REQUIRED");
-  return Object.freeze({ selection, mediaType, byteSize, sha256: sha256.toLowerCase() });
+  return Object.freeze({
+    selection,
+    mediaType,
+    byteSize,
+    ...(hasDuration ? { durationMs: record.durationMs as number } : {}),
+    sha256: sha256.toLowerCase(),
+  });
 };
 
 export const issueArtifactTicket = (
@@ -167,7 +187,7 @@ export const commitArtifactMessage = (
     if (!Number.isSafeInteger(ticket.byteSize) || ticket.byteSize < 0) fail("ARTIFACT_INVALID");
     total += ticket.byteSize;
     if (total > ARTIFACT_LIMITS.maxMessageBytes) fail("MESSAGE_ARTIFACT_BYTES_EXCEEDED");
-    return Object.freeze({ ...ticket, status: "message_committed" as const, committedAt: nowMs, localCopyDeletionAllowed: true as const });
+    return Object.freeze({ ...ticket, status: "message_committed" as const, artifactId: ticket.ticketId, committedAt: nowMs, localCopyDeletionAllowed: true as const });
   });
   return Object.freeze({ messageId, tickets: Object.freeze(committed), committedAt: nowMs });
 };

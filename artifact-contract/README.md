@@ -13,9 +13,11 @@ durable message commit and Android/device evidence. `localCopyDeletionAllowed`
 is a receipt fact only; a caller must perform deletion after its own durable
 commit transaction.
 
-Limits are four files per message, 25 MiB per file, 50 MiB total and 24 hours
-for uncommitted orphan reclamation. Supported media types are JPEG, PNG, WebP,
-PDF and plain text.
+Limits are four files per message, 25 MiB per non-audio file, 10 MiB per
+`AUDIO_MP4` AAC/M4A (`audio/mp4`) file, 120 seconds per audio file, 50 MiB total and 24 hours for
+uncommitted orphan reclamation. Supported media types are JPEG, PNG, WebP, PDF,
+plain text and AAC/M4A audio. A committed ticket receipt exposes an opaque
+`artifactId` equal to the Bridge-issued ticket ID; it is absent before commit.
 
 ## Local verification
 
