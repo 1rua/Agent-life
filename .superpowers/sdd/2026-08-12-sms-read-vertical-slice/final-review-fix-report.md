@@ -189,3 +189,85 @@ wave does not add the forbidden permission or suppress the lint finding.
   on a device.
 - Existing Kotlin 2.2 forward-compatibility and manifest namespace warnings are
   outside this final-review fix scope; they did not fail tests or assembly.
+
+## Final re-review follow-up: SMS provider IDs use signed Long range
+
+### Scope and resolution
+
+The remaining cross-layer contract split is resolved. SMS provider IDs now use
+the exact positive signed-Long range `1..9223372036854775807` at every SMS ID
+boundary. This applies only to `sms:<providerId>` record IDs and
+`cursor_provider_id`/`cursorProviderId`; message/capture/observed times and
+source/capture/policy revisions remain decimal u64 values through
+`18446744073709551615`.
+
+- Kotlin `SmsMetadata` parses its decimal suffix with `toLongOrNull()`;
+  `SmsCursor` and inbox rows require a positive `Long`. The wire codec and
+  auto-sync coordinator therefore cannot receive metadata that they cannot
+  convert to the Android `Long` provider-ID representation.
+- The MVP TypeScript validator/encoder limits the SMS record suffix and cursor
+  provider ID to `Long.MAX_VALUE`, without changing its shared u64 helper.
+- Bridge `SmsStore` and the shared Hermes/OpenClaw adapter apply the same bound
+  to their record suffix and bigint cursor provider ID only.
+- `sms-record.schema.json` now has auditable positive-i64 patterns for both
+  `record_id` and `cursor_provider_id`; its independent u64 definitions are
+  unchanged and AJV executes the boundary assertions.
+- No notification protocol or non-SMS capability u64 rule changed, and no
+  endpoint, socket, VPN, or shell surface was introduced.
+
+### TDD evidence
+
+The new boundary tests were written before the implementation change. RED
+evidence showed the original defect:
+
+- `SmsCapabilityContractsTest` accepted `sms:9223372036854775808`.
+- `mvp-contract/test/sms-contract.test.ts` had two failures: the runtime wire
+  validator and the compiled JSON Schema accepted the out-of-range provider ID.
+- `bridge-contract/test/sms-service.test.ts` and
+  `integrations/shared/sms-contract.test.ts` each accepted the same out-of-range
+  record.
+
+GREEN coverage accepts `Long.MAX_VALUE`, rejects `Long.MAX_VALUE + 1`, and
+asserts that independent u64 timestamps/revisions still accept `ULong.MAX_VALUE`.
+The Kotlin codec and cursor tests exercise `Long.MAX_VALUE` through Android's
+signed-Long path.
+
+### Verification evidence
+
+Focused GREEN commands:
+
+```sh
+ANDROID_HOME=/home/djbd/项目/Agent-life/.toolchains/android-sdk \
+  ./gradlew --no-daemon :capability-ports:testDebugUnitTest \
+  :sms-collector:testDebugUnitTest \
+  --tests 'com.agentlife.capability.SmsCapabilityContractsTest' \
+  --tests 'com.agentlife.sms.SmsCursorTest' \
+  --tests 'com.agentlife.sms.SmsWireCodecTest'
+npm test -- mvp-contract/test/sms-contract.test.ts
+(cd bridge-contract && npm test -- sms-service.test.ts)
+(cd integrations && npm test -- shared/sms-contract.test.ts)
+```
+
+All passed. The Android SDK was available and Gradle ran the actual unit-test
+tasks, not an SDK-free substitute.
+
+Full relevant verification:
+
+```sh
+ANDROID_HOME=/home/djbd/项目/Agent-life/.toolchains/android-sdk \
+  ./gradlew --no-daemon :capability-ports:testDebugUnitTest :sms-collector:testDebugUnitTest
+npm test && npm run typecheck
+(cd bridge-contract && npm test && npm run typecheck)
+(cd integrations && npm test && npm run typecheck)
+python3 -m unittest discover -s apps/android/tools -p 'test_*.py'
+git diff --check
+```
+
+Passed:
+
+- Android capability-port and SMS-collector unit-test tasks: `BUILD SUCCESSFUL`.
+- Root Node suite: `55` files, `477` tests; root typecheck exited 0.
+- Bridge suite: `6` files, `41` tests; typecheck exited 0.
+- Integrations suite: `5` files, `26` tests; typecheck exited 0.
+- Android Python static gates: `60` tests, `OK`.
+- `git diff --check`: no whitespace errors.

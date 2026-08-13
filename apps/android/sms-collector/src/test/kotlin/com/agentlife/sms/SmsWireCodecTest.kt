@@ -9,6 +9,26 @@ import org.junit.Test
 
 class SmsWireCodecTest {
     @Test
+    fun encodes_the_maximum_signed_long_sms_provider_id() {
+        val payload = SmsPayload(
+            metadata = SmsMetadata(
+                recordId = "sms:${Long.MAX_VALUE}",
+                senderAddress = null,
+                threadId = null,
+                messageAtEpochMs = 1L,
+                observedAtEpochMs = 2L,
+                read = false,
+                subscriptionId = null,
+            ),
+            content = releasedSmsContent("complete body"),
+        )
+
+        val actual = SmsWireCodec().encode("sms:${Long.MAX_VALUE}", payload, 7u).decodeToString()
+
+        org.junit.Assert.assertTrue(actual.contains("\"cursor_provider_id\":\"${Long.MAX_VALUE}\""))
+    }
+
+    @Test
     fun rejects_an_event_id_that_does_not_match_the_sms_metadata_record_id() {
         val payload = SmsPayload(
             metadata = SmsMetadata(

@@ -10,7 +10,7 @@ import java.io.File
 
 data class SmsCursor(val providerId: Long, val messageAtEpochMs: Long) : Comparable<SmsCursor> {
     init {
-        require(providerId >= 0) { "SMS provider ID must not be negative" }
+        require(providerId > 0) { "SMS provider ID must be positive" }
         require(messageAtEpochMs >= 0) { "SMS message time must not be negative" }
     }
 

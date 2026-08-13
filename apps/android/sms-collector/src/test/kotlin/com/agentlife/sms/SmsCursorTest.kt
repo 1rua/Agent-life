@@ -9,6 +9,14 @@ import org.junit.Test
 
 class SmsCursorTest {
     @Test
+    fun `cursor accepts the maximum signed long provider ID`() {
+        val store = InMemorySmsCursorStore()
+
+        assertTrue(store.advance(SmsCursor(providerId = Long.MAX_VALUE, messageAtEpochMs = 100L)))
+        assertEquals(SmsCursor(providerId = Long.MAX_VALUE, messageAtEpochMs = 100L), store.current())
+    }
+
+    @Test
     fun `advance persists a cursor with a newer message date`() {
         val store = InMemorySmsCursorStore()
 

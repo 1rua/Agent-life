@@ -9,11 +9,14 @@
 
 const PACKAGE_NAME = /^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)+$/;
 const MAX_U64 = 18_446_744_073_709_551_615n;
+const MAX_SMS_PROVIDER_ID = 9_223_372_036_854_775_807n;
 const DECIMAL_U64 = /^(0|[1-9][0-9]*)$/;
 const isDecimalU64 = (value: unknown): value is string =>
   typeof value === "string" && value.length <= 20 && DECIMAL_U64.test(value) && BigInt(value) <= MAX_U64;
 const isPositiveU64 = (value: unknown): value is string =>
   isDecimalU64(value) && value !== "0";
+const isPositiveSmsProviderId = (value: unknown): value is string =>
+  isPositiveU64(value) && BigInt(value) <= MAX_SMS_PROVIDER_ID;
 const SHA256 = /^[A-Fa-f0-9]{64}$/;
 const MEDIA_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "application/pdf", "text/plain"]);
 
@@ -288,7 +291,7 @@ const validSmsSubscriptionId = (value: unknown): value is number =>
   typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && value <= 2_147_483_647;
 
 const validSmsRecordId = (value: unknown): value is string =>
-  typeof value === "string" && value.startsWith("sms:") && isPositiveU64(value.slice(4));
+  typeof value === "string" && value.startsWith("sms:") && isPositiveSmsProviderId(value.slice(4));
 
 const validSmsMetadata = (value: unknown): boolean => recordObject(value)
   && exactKeys(value, ["sender_address", "thread_id", "message_at_epoch_ms", "observed_at_epoch_ms", "read", "subscription_id"])
@@ -313,7 +316,7 @@ export const validateWireSmsRecord = (value: unknown): value is WireSmsRecord =>
   && isDecimalU64(value.source_epoch)
   && isPositiveU64(value.record_revision)
   && isDecimalU64(value.cursor_message_at_epoch_ms)
-  && isDecimalU64(value.cursor_provider_id)
+  && isPositiveSmsProviderId(value.cursor_provider_id)
   && isDecimalU64(value.captured_at_epoch_ms)
   && isDecimalU64(value.capture_revision)
   && isDecimalU64(value.policy_revision)

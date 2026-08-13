@@ -19,6 +19,8 @@ const ticketInput = (overrides: Partial<PairingTicketInput> = {}): PairingTicket
   ...overrides,
 });
 
+const MAX_SMS_PROVIDER_ID = 9_223_372_036_854_775_807n;
+
 const record = (overrides: Partial<SmsRecordV1> = {}): SmsRecordV1 => ({
   recordId: "sms:42",
   senderAddress: "+8613800000000",
@@ -58,6 +60,11 @@ describe("closed Bridge SMS record and store", () => {
   it("accepts only the exact inbox record shape and preserves an empty body", () => {
     const empty = record({ body: "", senderAddress: null, threadId: null, subscriptionId: null });
     expect(() => validateSmsRecord(empty)).not.toThrow();
+    expect(() => validateSmsRecord(record({
+      recordId: `sms:${MAX_SMS_PROVIDER_ID}`,
+      cursorProviderId: MAX_SMS_PROVIDER_ID,
+      sourceEpoch: 18_446_744_073_709_551_615n,
+    }))).not.toThrow();
     expect(Object.keys(empty).sort()).toEqual([
       "body", "captureRevision", "cursorProviderId", "messageAtEpochMs", "observedAtEpochMs",
       "policyRevision", "read", "recordId", "senderAddress", "sourceEpoch", "subscriptionId", "threadId",
@@ -69,6 +76,7 @@ describe("closed Bridge SMS record and store", () => {
       { ...empty, recordId: "mms:42" },
       { ...empty, cursorProviderId: 43n },
       { ...empty, cursorProviderId: -1n },
+      { ...empty, recordId: "sms:9223372036854775808", cursorProviderId: 9_223_372_036_854_775_808n },
       { ...empty, messageAtEpochMs: "1700000000000" },
       { ...empty, subscriptionId: -1 },
       { ...empty, read: "false" },

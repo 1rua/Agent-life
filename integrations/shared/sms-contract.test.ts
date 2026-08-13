@@ -27,6 +27,8 @@ const smsRecord = (overrides: Partial<SmsRecord> = {}): SmsRecord => ({
   ...overrides,
 });
 
+const MAX_SMS_PROVIDER_ID = 9_223_372_036_854_775_807n;
+
 const bytes = (value: unknown): string => JSON.stringify(value, (_key, current) =>
   typeof current === "bigint" ? current.toString() : current);
 
@@ -117,12 +119,33 @@ describe("shared Hermes/OpenClaw SMS contract", () => {
       smsRecord({ recordId: "sms:0", cursorProviderId: 0n }),
       smsRecord({ recordId: "sms:01", cursorProviderId: 1n }),
       smsRecord({ cursorProviderId: 43n }),
+      smsRecord({ recordId: "sms:9223372036854775808", cursorProviderId: 9_223_372_036_854_775_808n }),
     ];
     for (const [index, candidate] of malformed.entries()) {
       supplied = candidate;
       await expect(adapter.querySms({ toolCallId: `sms-malformed-${index}`, deviceId: "device-a", limit: 1 }))
         .rejects.toMatchObject({ code: "SMS_RECORD_INVALID" });
     }
+  });
+
+  it("accepts Long.MAX_VALUE SMS provider IDs without narrowing independent u64 fields", async () => {
+    const adapter = createFakeAdapter({
+      context: fixtureContext(),
+      zeroRetention: fixtureZeroRetentionEvidence(),
+      onDemandSms: async () => [smsRecord({
+        recordId: `sms:${MAX_SMS_PROVIDER_ID}`,
+        cursorProviderId: MAX_SMS_PROVIDER_ID,
+        sourceEpoch: 18_446_744_073_709_551_615n,
+        messageAtEpochMs: 18_446_744_073_709_551_615n,
+        observedAtEpochMs: 18_446_744_073_709_551_615n,
+        captureRevision: 18_446_744_073_709_551_615n,
+        policyRevision: 18_446_744_073_709_551_615n,
+      })],
+    });
+    await adapter.pair(fixtureBinding());
+
+    await expect(adapter.querySms({ toolCallId: "sms-long-max", deviceId: "device-a", limit: 1 }))
+      .resolves.toEqual([expect.objectContaining({ recordId: `sms:${MAX_SMS_PROVIDER_ID}` })]);
   });
 
   it("keeps SMS query idempotent and binds auto-send delivery to its paired session", async () => {

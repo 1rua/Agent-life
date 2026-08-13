@@ -15,8 +15,8 @@ data class SmsMetadata(
 ) : CapabilityMetadata {
     init {
         requireMetadata(recordId, observedAtEpochMs)
-        require(SMS_RECORD_ID.matches(recordId) && recordId.removePrefix("sms:").toULongOrNull() != null) {
-            "SMS record ID must be sms:<positiveDecimalU64>"
+        require(SMS_RECORD_ID.matches(recordId) && recordId.removePrefix("sms:").toLongOrNull() != null) {
+            "SMS record ID must be sms:<positiveDecimalLong>"
         }
         require(messageAtEpochMs >= 0) { "message time must not be negative" }
         require(subscriptionId == null || subscriptionId >= 0) { "subscription ID must not be negative" }

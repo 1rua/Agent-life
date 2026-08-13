@@ -6,6 +6,31 @@ import org.junit.Test
 
 class SmsCapabilityContractsTest {
     @Test
+    fun sms_metadata_accepts_long_max_provider_id_and_rejects_the_next_u64_value() {
+        SmsMetadata(
+            recordId = "sms:${Long.MAX_VALUE}",
+            senderAddress = null,
+            threadId = null,
+            messageAtEpochMs = 0,
+            observedAtEpochMs = 0,
+            read = false,
+            subscriptionId = null,
+        )
+
+        assertThrows(IllegalArgumentException::class.java) {
+            SmsMetadata(
+                recordId = "sms:9223372036854775808",
+                senderAddress = null,
+                threadId = null,
+                messageAtEpochMs = 0,
+                observedAtEpochMs = 0,
+                read = false,
+                subscriptionId = null,
+            )
+        }
+    }
+
+    @Test
     fun sms_history_policy_rejects_negative_start_zero_limit_and_over_limit() {
         assertThrows(IllegalArgumentException::class.java) { SmsHistoryPolicy(fromEpochMs = -1, maxRecords = 1) }
         assertThrows(IllegalArgumentException::class.java) { SmsHistoryPolicy(fromEpochMs = null, maxRecords = 0) }

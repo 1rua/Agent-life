@@ -177,6 +177,7 @@ const cloneRecord = (record: NotificationRecord): NotificationRecord => Object.f
 const cloneSmsRecord = (record: SmsRecord): SmsRecord => Object.freeze({ ...record });
 
 const MAX_U64 = 18_446_744_073_709_551_615n;
+const MAX_SMS_PROVIDER_ID = 9_223_372_036_854_775_807n;
 const SMS_RECORD_ID = /^sms:[1-9][0-9]*$/;
 const SMS_RECORD_KEYS = new Set([
   "recordId", "senderAddress", "threadId", "messageAtEpochMs", "observedAtEpochMs", "read",
@@ -184,15 +185,20 @@ const SMS_RECORD_KEYS = new Set([
 ]);
 
 const isU64 = (value: unknown): value is bigint => typeof value === "bigint" && value >= 0n && value <= MAX_U64;
+const isSmsProviderId = (value: unknown): value is bigint =>
+  typeof value === "bigint" && value > 0n && value <= MAX_SMS_PROVIDER_ID;
+const isSmsRecordId = (value: unknown): value is string =>
+  typeof value === "string" && SMS_RECORD_ID.test(value) && BigInt(value.slice(4)) <= MAX_SMS_PROVIDER_ID;
 
 const validateSmsRecord = (record: SmsRecord): void => {
   if (typeof record !== "object" || record === null || Array.isArray(record)) throw new AdapterError("SMS_RECORD_INVALID");
   const keys = Object.keys(record);
   if (keys.length !== SMS_RECORD_KEYS.size || keys.some((key) => !SMS_RECORD_KEYS.has(key))) throw new AdapterError("SMS_RECORD_INVALID");
-  if (typeof record.recordId !== "string" || !SMS_RECORD_ID.test(record.recordId)) throw new AdapterError("SMS_RECORD_INVALID");
+  if (!isSmsRecordId(record.recordId)) throw new AdapterError("SMS_RECORD_INVALID");
   if ((record.senderAddress !== null && typeof record.senderAddress !== "string")
     || (record.threadId !== null && typeof record.threadId !== "string")) throw new AdapterError("SMS_RECORD_INVALID");
-  if (![record.messageAtEpochMs, record.observedAtEpochMs, record.sourceEpoch, record.cursorProviderId, record.captureRevision, record.policyRevision].every(isU64)) {
+  if (![record.messageAtEpochMs, record.observedAtEpochMs, record.sourceEpoch, record.captureRevision, record.policyRevision].every(isU64)
+    || !isSmsProviderId(record.cursorProviderId)) {
     throw new AdapterError("SMS_RECORD_INVALID");
   }
   if (record.recordId !== `sms:${record.cursorProviderId}`) throw new AdapterError("SMS_RECORD_INVALID");
