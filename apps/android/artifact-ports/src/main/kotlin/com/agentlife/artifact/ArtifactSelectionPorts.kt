@@ -4,6 +4,8 @@ package com.agentlife.artifact
 const val MAX_ARTIFACT_FILES: Int = 4
 const val MAX_SINGLE_ARTIFACT_BYTES: Long = 25L * 1024L * 1024L
 const val MAX_MESSAGE_ARTIFACT_BYTES: Long = 50L * 1024L * 1024L
+const val MAX_AUDIO_ARTIFACT_BYTES: Long = 10L * 1024L * 1024L
+const val MAX_AUDIO_DURATION_MS: Long = 120_000L
 const val ORPHAN_RECLAIM_AFTER_MS: Long = 24L * 60L * 60L * 1000L
 
 enum class ArtifactSelectionSource { PHOTO_PICKER, SAF }
@@ -15,6 +17,7 @@ enum class ArtifactMediaType(val mimeType: String) {
     WEBP("image/webp"),
     PDF("application/pdf"),
     TEXT_PLAIN("text/plain"),
+    AUDIO_MP4("audio/mp4"),
 }
 
 /** Opaque proof that the user granted this particular selection for reading. */
@@ -56,7 +59,12 @@ data class ArtifactSummary(
     val selection: GrantedArtifactSelection,
     val mediaType: ArtifactMediaType,
     val digest: ArtifactDigest,
-)
+    val durationMs: Long? = null,
+) {
+    init {
+        validateAudioArtifactMetadata(mediaType, digest.byteSize, durationMs)
+    }
+}
 
 /** The future provider must calculate a digest while it still holds the grant. */
 interface ArtifactDigestPort {
@@ -94,9 +102,11 @@ data class ArtifactTicket internal constructor(
     val selectionId: String,
     val mediaType: ArtifactMediaType,
     val digest: ArtifactDigest,
+    val durationMs: Long? = null,
     val revision: ArtifactAuthorizationRevision,
     val issuedAtEpochMs: Long,
     val status: ArtifactTicketStatus,
+    val artifactId: String? = null,
     val remoteProof: ArtifactRemoteProof? = null,
     val localCopyDeletionAllowed: Boolean = false,
     val requiresFreshTicket: Boolean = false,
@@ -105,6 +115,18 @@ data class ArtifactTicket internal constructor(
         require(ticketId.isNotBlank())
         require(selectionId.isNotBlank())
         require(issuedAtEpochMs >= 0L)
+        validateAudioArtifactMetadata(mediaType, digest.byteSize, durationMs)
+        require((status == ArtifactTicketStatus.MESSAGE_COMMITTED) == (artifactId != null)) {
+            "artifact ID is available only after message commit"
+        }
+        if (artifactId != null) {
+            require(artifactId.matches(Regex("^[A-Za-z0-9._~-]{1,128}$"))) {
+                "artifact ID must be an opaque identifier"
+            }
+            require(artifactId == ticketId) {
+                "committed artifact ID must match ticket ID"
+            }
+        }
     }
 }
 
@@ -212,6 +234,22 @@ interface EncryptedArtifactScratchStore {
 fun validateArtifactSummaries(summaries: List<ArtifactSummary>) {
     require(summaries.isNotEmpty()) { "at least one artifact is required" }
     require(summaries.size <= MAX_ARTIFACT_FILES) { "too many artifacts" }
+    summaries.forEach { summary ->
+        validateAudioArtifactMetadata(summary.mediaType, summary.digest.byteSize, summary.durationMs)
+    }
     val totalBytes = summaries.sumOf { it.digest.byteSize }
     require(totalBytes <= MAX_MESSAGE_ARTIFACT_BYTES) { "message artifacts are too large" }
+}
+
+private fun validateAudioArtifactMetadata(
+    mediaType: ArtifactMediaType,
+    byteSize: Long,
+    durationMs: Long?,
+) {
+    if (mediaType == ArtifactMediaType.AUDIO_MP4) {
+        require(byteSize <= MAX_AUDIO_ARTIFACT_BYTES) { "audio artifact is too large" }
+        require(durationMs in 1L..MAX_AUDIO_DURATION_MS) { "audio duration is invalid" }
+    } else {
+        require(durationMs == null) { "duration is valid only for audio artifacts" }
+    }
 }

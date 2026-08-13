@@ -8,4 +8,5 @@ export * from "./subscription-store.js";
 export * from "./operation-dispatch.js";
 export * from "./notification-service.js";
 export * from "./assistant-chat-service.js";
+export * from "./assistant-reply-events.js";
 export * from "./persistence.js";

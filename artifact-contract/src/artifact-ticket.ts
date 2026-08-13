@@ -1,6 +1,8 @@
 export const ARTIFACT_LIMITS = Object.freeze({
   maxFiles: 4,
   maxSingleBytes: 25 * 1024 * 1024,
+  maxAudioBytes: 10 * 1024 * 1024,
+  maxAudioDurationMs: 120000,
   maxMessageBytes: 50 * 1024 * 1024,
   orphanReclaimAfterMs: 24 * 60 * 60 * 1000,
 } as const);
@@ -11,6 +13,7 @@ const MEDIA_TYPES = new Set([
   "image/webp",
   "application/pdf",
   "text/plain",
+  "audio/mp4",
 ]);
 const SHA256 = /^[A-Fa-f0-9]{64}$/;
 const ID = /^[A-Za-z0-9._~-]{1,128}$/;
@@ -39,17 +42,20 @@ export type ArtifactTicket = Readonly<{
   selection: ArtifactSelection;
   mediaType: string;
   byteSize: number;
+  durationMs?: number;
   sha256: string;
   issuedAt: number;
   proofVerifiedAt?: number;
   committedAt?: number;
   localCopyDeletionAllowed?: boolean;
+  artifactId?: string;
 }>;
 
 type ArtifactInput = Readonly<{
   selection: ArtifactSelection;
   mediaType: string;
   byteSize: number;
+  durationMs?: number;
   sha256: string;
 }>;
 
@@ -82,6 +88,15 @@ const exactKeys = (value: Record<string, unknown>, keys: readonly string[]): boo
 
 const fail = (code: string): never => { throw new ArtifactContractError(code); };
 
+const stripArtifactId = (ticket: ArtifactTicket): Omit<ArtifactTicket, "artifactId"> => {
+  const { artifactId: _artifactId, ...withoutArtifactId } = ticket;
+  return withoutArtifactId;
+};
+
+const hasGenuineProofBrand = (ticket: ArtifactTicket): ticket is BrandedProofTicket =>
+  Object.prototype.hasOwnProperty.call(ticket, PROOF_BRAND)
+  && (ticket as ArtifactTicket & { readonly [PROOF_BRAND]?: unknown })[PROOF_BRAND] === true;
+
 const assertClock = (value: number): void => {
   if (!Number.isSafeInteger(value) || value < 0) fail("TIMESTAMP_INVALID");
 };
@@ -102,19 +117,33 @@ const parseSelection = (value: unknown): ArtifactSelection => {
 const parseInput = (value: unknown): ArtifactInput => {
   const record = isRecord(value) ? value : fail("ARTIFACT_INVALID");
   if (Object.keys(record).some((key) => key === "path" || key === "url" || key === "uri")) fail("UNSAFE_LOCATION_INPUT");
-  if (!exactKeys(record, ["selection", "mediaType", "byteSize", "sha256"])) fail("ARTIFACT_INVALID");
+  if (!exactKeys(record, Object.prototype.hasOwnProperty.call(record, "durationMs")
+    ? ["selection", "mediaType", "byteSize", "sha256", "durationMs"]
+    : ["selection", "mediaType", "byteSize", "sha256"])) fail("ARTIFACT_INVALID");
   const selection = parseSelection(record.selection);
   const mediaType = typeof record.mediaType === "string" && MEDIA_TYPES.has(record.mediaType)
     ? record.mediaType
     : fail("MEDIA_TYPE_NOT_ALLOWED");
+  const hasDuration = Object.prototype.hasOwnProperty.call(record, "durationMs");
+  if (mediaType === "audio/mp4" && (!hasDuration || typeof record.durationMs !== "number"
+    || !Number.isSafeInteger(record.durationMs) || record.durationMs < 1
+    || record.durationMs > ARTIFACT_LIMITS.maxAudioDurationMs)) fail("AUDIO_DURATION_INVALID");
+  if (mediaType !== "audio/mp4" && hasDuration) fail("AUDIO_DURATION_INVALID");
   const byteSize = typeof record.byteSize === "number" && Number.isSafeInteger(record.byteSize)
-    && record.byteSize >= 0 && record.byteSize <= ARTIFACT_LIMITS.maxSingleBytes
+    && record.byteSize >= 0 && record.byteSize <= (mediaType === "audio/mp4"
+      ? ARTIFACT_LIMITS.maxAudioBytes : ARTIFACT_LIMITS.maxSingleBytes)
     ? record.byteSize
     : fail("ARTIFACT_TOO_LARGE");
   const sha256 = typeof record.sha256 === "string" && SHA256.test(record.sha256)
     ? record.sha256
     : fail("DIGEST_REQUIRED");
-  return Object.freeze({ selection, mediaType, byteSize, sha256: sha256.toLowerCase() });
+  return Object.freeze({
+    selection,
+    mediaType,
+    byteSize,
+    ...(hasDuration ? { durationMs: record.durationMs as number } : {}),
+    sha256: sha256.toLowerCase(),
+  });
 };
 
 export const issueArtifactTicket = (
@@ -136,14 +165,15 @@ export const verifyArtifactProof = async (
   verifier: ProofVerifier,
 ): Promise<ArtifactTicket> => {
   if (!ticket || ticket.status !== "issued") fail("TICKET_NOT_ISSUED");
+  const sanitizedTicket = stripArtifactId(ticket);
   const proofRecord = isRecord(proof) ? proof : fail("PROOF_INVALID");
   if (!exactKeys(proofRecord, ["ticketId", "sha256", "proof"])) fail("PROOF_INVALID");
-  if (proofRecord.ticketId !== ticket.ticketId) fail("PROOF_TICKET_MISMATCH");
-  if (typeof proofRecord.sha256 !== "string" || proofRecord.sha256.toLowerCase() !== ticket.sha256) fail("PROOF_DIGEST_MISMATCH");
+  if (proofRecord.ticketId !== sanitizedTicket.ticketId) fail("PROOF_TICKET_MISMATCH");
+  if (typeof proofRecord.sha256 !== "string" || proofRecord.sha256.toLowerCase() !== sanitizedTicket.sha256) fail("PROOF_DIGEST_MISMATCH");
   if (typeof proofRecord.proof !== "string" || proofRecord.proof.length < 1) fail("PROOF_INVALID");
   if (!verifier || typeof verifier.verify !== "function") fail("PROOF_VERIFIER_INVALID");
-  if ((await verifier.verify({ ticket, proof: proofRecord as ArtifactProof })) !== "verified") fail("PROOF_REJECTED");
-  const branded = { ...ticket, status: "proof_verified" as const, proofVerifiedAt: ticket.issuedAt } as ArtifactTicket & { [PROOF_BRAND]?: true };
+  if ((await verifier.verify({ ticket: sanitizedTicket, proof: proofRecord as ArtifactProof })) !== "verified") fail("PROOF_REJECTED");
+  const branded = { ...sanitizedTicket, status: "proof_verified" as const, proofVerifiedAt: sanitizedTicket.issuedAt } as ArtifactTicket & { [PROOF_BRAND]?: true };
   Object.defineProperty(branded, PROOF_BRAND, { value: true, enumerable: false, writable: false, configurable: false });
   return Object.freeze(branded) as BrandedProofTicket;
 };
@@ -167,7 +197,7 @@ export const commitArtifactMessage = (
     if (!Number.isSafeInteger(ticket.byteSize) || ticket.byteSize < 0) fail("ARTIFACT_INVALID");
     total += ticket.byteSize;
     if (total > ARTIFACT_LIMITS.maxMessageBytes) fail("MESSAGE_ARTIFACT_BYTES_EXCEEDED");
-    return Object.freeze({ ...ticket, status: "message_committed" as const, committedAt: nowMs, localCopyDeletionAllowed: true as const });
+    return Object.freeze({ ...ticket, status: "message_committed" as const, artifactId: ticket.ticketId, committedAt: nowMs, localCopyDeletionAllowed: true as const });
   });
   return Object.freeze({ messageId, tickets: Object.freeze(committed), committedAt: nowMs });
 };
@@ -175,12 +205,18 @@ export const commitArtifactMessage = (
 /** Marks a verified upload as interrupted; only a fresh ticket may commit. */
 export const interruptArtifactTicket = (ticket: ArtifactTicket): ArtifactTicket => {
   if (!ticket || ticket.status !== "proof_verified") fail("TICKET_NOT_PROOF_VERIFIED");
-  return Object.freeze({ ...ticket, status: "upload_interrupted" as const });
+  return Object.freeze({ ...stripArtifactId(ticket), status: "upload_interrupted" as const });
 };
 
 export const reclaimOrphanTicket = (ticket: ArtifactTicket, nowMs: number): ArtifactTicket => {
   assertClock(nowMs);
-  if (ticket.status === "message_committed" || ticket.status === "orphan_reclaimed") return ticket;
-  if (nowMs - ticket.issuedAt < ARTIFACT_LIMITS.orphanReclaimAfterMs) return ticket;
-  return Object.freeze({ ...ticket, status: "orphan_reclaimed", localCopyDeletionAllowed: true });
+  if (ticket.status === "message_committed") return ticket;
+  if (ticket.status === "orphan_reclaimed") return Object.freeze(stripArtifactId(ticket));
+  if (nowMs - ticket.issuedAt < ARTIFACT_LIMITS.orphanReclaimAfterMs
+    && ticket.status === "proof_verified"
+    && !Object.prototype.hasOwnProperty.call(ticket, "artifactId")
+    && hasGenuineProofBrand(ticket)) return ticket;
+  const sanitizedTicket = stripArtifactId(ticket);
+  if (nowMs - ticket.issuedAt < ARTIFACT_LIMITS.orphanReclaimAfterMs) return Object.freeze(sanitizedTicket);
+  return Object.freeze({ ...sanitizedTicket, status: "orphan_reclaimed", localCopyDeletionAllowed: true });
 };

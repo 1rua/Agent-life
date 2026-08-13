@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { Ajv2020 } from "ajv/dist/2020.js";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
   encodeAssistantRequest,
+  encodeAssistantEvent,
   encodeAssistantResponse,
   encodeNotificationRecord,
   encodeNotificationQuery,
@@ -112,7 +114,7 @@ describe("MVP closed schemas and deterministic fixtures", () => {
     }
   });
 
-  it("keeps assistant chat text-only in MVP and rejects model-supplied invocation context", () => {
+  it("keeps assistant chat closed and bounded for text plus audio while rejecting model-supplied invocation context", () => {
     const chat = load("assistant-chat.schema.json");
     expect(JSON.stringify(chat)).toContain("text");
     expect(JSON.stringify(chat)).not.toContain("upload_url");
@@ -153,13 +155,120 @@ describe("MVP closed schemas and deterministic fixtures", () => {
 
   it("encodes assistant attachments without leaking internal camel-case fields", () => {
     const request = encodeAssistantRequest({
-      operationId: "op-1", text: "hello", attachments: [{ kind: "image", filename: "photo.png", mimeType: "image/png", sizeBytes: 3, sha256: "a".repeat(64) }],
+      operationId: "op-1", text: "hello", attachments: [{ kind: "image", artifactId: "artifact-image-1", filename: "photo.png", mimeType: "image/png", sizeBytes: 3, sha256: "a".repeat(64) }],
     });
-    expect(Object.keys(request.attachments[0]!).sort()).toEqual(["byte_length", "display_name", "kind", "media_type", "sha256"]);
+    const attachments = request.attachments as readonly Record<string, unknown>[];
+    expect(Object.keys(attachments[0]!).sort()).toEqual(["artifact_id", "byte_length", "display_name", "kind", "media_type", "sha256"]);
     expect(validateWireAssistantMessage(request)).toBe(true);
     const response = encodeAssistantResponse({ operationId: "op-1", reply: "done" });
     expect(validateWireAssistantMessage(response)).toBe(true);
     expect(validateWireAssistantMessage({ ...request, session: "model" })).toBe(false);
+  });
+
+  it("rejects path-shaped display names and canonicalizes accepted SHA-256 digests", () => {
+    const schemaValidator = new Ajv2020({ strict: false }).compile(load("assistant-chat.schema.json"));
+    const attachment = {
+      kind: "image", artifact_id: "artifact-image-1", media_type: "image/png",
+      byte_length: 1, sha256: "A".repeat(64), display_name: "photo.png",
+    };
+    const request = (display_name: string) => ({
+      kind: "request", operation_id: "op", text: "x", attachments: [{ ...attachment, display_name }],
+    });
+
+    expect(schemaValidator(request("photos/secret.png"))).toBe(false);
+    expect(schemaValidator(request("photos\\secret.png"))).toBe(false);
+    expect(validateWireAssistantMessage(request("photos/secret.png"))).toBe(false);
+    expect(validateWireAssistantMessage(request("photos\\secret.png"))).toBe(false);
+    expect(schemaValidator(request("photo.png"))).toBe(true);
+    expect(validateWireAssistantMessage(request("photo.png"))).toBe(true);
+    expect(encodeAssistantRequest({
+      operationId: "op", text: "x", attachments: [{
+        kind: "image", artifactId: "artifact-image-1", filename: "photo.png", mimeType: "image/png",
+        sizeBytes: 1, sha256: "A".repeat(64),
+      }],
+    }).attachments).toMatchObject([{ sha256: "a".repeat(64) }]);
+  });
+
+  it("encodes a committed audio artifact with a bounded duration", () => {
+    const wire = encodeAssistantRequest({
+      operationId: "op-audio",
+      text: "please transcribe",
+      attachments: [{
+        kind: "audio",
+        artifactId: "artifact-audio-1",
+        filename: "voice.m4a",
+        mimeType: "audio/mp4",
+        sizeBytes: 10485760,
+        sha256: "a".repeat(64),
+        durationMs: 120000,
+      }],
+    });
+    expect(wire.attachments).toEqual([{
+      kind: "audio", artifact_id: "artifact-audio-1", media_type: "audio/mp4",
+      byte_length: 10485760, sha256: "a".repeat(64), display_name: "voice.m4a", duration_ms: 120000,
+    }]);
+    expect(validateWireAssistantMessage(wire)).toBe(true);
+  });
+
+  it("rejects audio outside the closed size, duration, and field rules", () => {
+    const valid = {
+      kind: "audio", artifact_id: "artifact-audio-1", media_type: "audio/mp4",
+      byte_length: 1, sha256: "a".repeat(64), display_name: "voice.m4a", duration_ms: 1,
+    };
+    expect(validateWireAssistantMessage({
+      kind: "request", operation_id: "op", text: "x", attachments: [{ ...valid, duration_ms: 120001 }],
+    })).toBe(false);
+    expect(validateWireAssistantMessage({
+      kind: "request", operation_id: "op", text: "x", attachments: [{ ...valid, byte_length: 10485761 }],
+    })).toBe(false);
+    expect(validateWireAssistantMessage({
+      kind: "request", operation_id: "op", text: "x", attachments: [{ ...valid, uri: "content://forbidden" }],
+    })).toBe(false);
+  });
+
+  it("enforces the 50 MiB aggregate attachment limit across mixed media", () => {
+    const image = { kind: "image", artifact_id: "artifact-image-1", media_type: "image/png", byte_length: 25 * 1024 * 1024, sha256: "a".repeat(64), display_name: "image.png" };
+    const file = { kind: "file", artifact_id: "artifact-file-1", media_type: "application/pdf", byte_length: 15 * 1024 * 1024, sha256: "b".repeat(64), display_name: "file.pdf" };
+    const audio = { kind: "audio", artifact_id: "artifact-audio-1", media_type: "audio/mp4", byte_length: 10 * 1024 * 1024, sha256: "c".repeat(64), display_name: "voice.m4a", duration_ms: 120000 };
+    const request = (attachments: unknown[]) => ({ kind: "request", operation_id: "op", text: "x", attachments });
+    expect(validateWireAssistantMessage(request([image, file, audio]))).toBe(true);
+    expect(validateWireAssistantMessage(request([{ ...image, byte_length: 25 * 1024 * 1024 }, { ...file, byte_length: 15 * 1024 * 1024 + 1 }, audio]))).toBe(false);
+  });
+
+  it("keeps image and file MIME boundaries aligned with the closed codec rules", () => {
+    const attachment = (kind: string, mediaType: string) => ({
+      kind, artifact_id: "artifact-1", media_type: mediaType, byte_length: 1, sha256: "a".repeat(64), display_name: "attachment",
+    });
+    const request = (value: unknown) => ({ kind: "request", operation_id: "op", text: "x", attachments: [value] });
+    expect(validateWireAssistantMessage(request(attachment("image", "image/png")))).toBe(true);
+    expect(validateWireAssistantMessage(request(attachment("file", "application/pdf")))).toBe(true);
+    expect(validateWireAssistantMessage(request(attachment("image", "application/pdf")))).toBe(false);
+    expect(validateWireAssistantMessage(request(attachment("file", "image/png")))).toBe(false);
+    expect(validateWireAssistantMessage(request(attachment("file", "application/octet-stream")))).toBe(false);
+  });
+
+  it("encodes ordered delta, complete, and failed reply events", () => {
+    expect(encodeAssistantEvent({ operationId: "op", messageId: "m", sequence: 1n, event: "delta", text: "hel" }))
+      .toEqual({ kind: "event", operation_id: "op", message_id: "m", sequence: "1", event: "delta", text: "hel" });
+    expect(validateWireAssistantMessage({
+      kind: "event", operation_id: "op", message_id: "m", sequence: "2", event: "failed", text: "", error: "CONNECTION_FENCED",
+    })).toBe(true);
+    expect(validateWireAssistantMessage({
+      kind: "event", operation_id: "op", message_id: "m", sequence: "0", event: "delta", text: "x",
+    })).toBe(false);
+  });
+
+  it("keeps event sequence at positive u64 boundaries", () => {
+    const base = { kind: "event", operation_id: "op", message_id: "m", event: "delta", text: "x" };
+    expect(validateWireAssistantMessage({ ...base, sequence: "18446744073709551615" })).toBe(true);
+    expect(validateWireAssistantMessage({ ...base, sequence: "18446744073709551616" })).toBe(false);
+    expect(() => encodeAssistantEvent({ operationId: "op", messageId: "m", sequence: 18_446_744_073_709_551_616n, event: "delta", text: "x" })).toThrow("WIRE_RECORD_UNREPRESENTABLE");
+    const sequencePattern = (load("assistant-chat.schema.json").$defs as Record<string, unknown>);
+    const event = sequencePattern.event as Record<string, unknown>;
+    const properties = event.properties as Record<string, unknown>;
+    expect(new RegExp((properties.sequence as Record<string, unknown>).pattern as string).test("10000000000000000000")).toBe(true);
+    expect(new RegExp((properties.sequence as Record<string, unknown>).pattern as string).test("18446744073709551615")).toBe(true);
+    expect(new RegExp((properties.sequence as Record<string, unknown>).pattern as string).test("18446744073709551616")).toBe(false);
   });
 
   it("binds notification subscription lifecycle wire requests to a policy revision", () => {

@@ -12,6 +12,15 @@ describe("Hermes adapter", () => {
     expect(adapter.binding()).toMatchObject({ tenantId: "tenant-a", humanPrincipalId: "human-a", deviceId: "device-a" });
   });
 
+  it("accepts the shared bounded audio attachment contract", async () => {
+    const adapter = createHermesAdapter({ context: fixtureContext(), zeroRetention: fixtureZeroRetentionEvidence() });
+    await adapter.pair(fixtureBinding());
+    await expect(adapter.sendAssistantMessage({
+      messageId: "voice-1", text: "analyze this",
+      attachments: [{ kind: "audio", artifactId: "artifact-audio", filename: "voice.m4a", mimeType: "audio/mp4", sizeBytes: 512, sha256: "c".repeat(64), durationMs: 5000 }],
+    })).resolves.toMatchObject({ status: "accepted" });
+  });
+
   it("rejects duplicate or absent authoritative profiles at startup", () => {
     expect(() => createHermesAdapter({ context: fixtureContext(), zeroRetention: fixtureZeroRetentionEvidence(), profiles: [] }))
       .toThrowError("AUTHORITATIVE_PROFILE_REQUIRED");

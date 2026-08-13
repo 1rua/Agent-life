@@ -15,10 +15,13 @@ export type NotificationToolName = typeof FROZEN_NOTIFICATION_TOOLS[number];
 export const ASSISTANT_ATTACHMENT_LIMITS = Object.freeze({
   maxFiles: 4,
   maxFileBytes: 25 * 1024 * 1024,
+  maxAudioBytes: 10 * 1024 * 1024,
+  maxAudioDurationMs: 120000,
   maxMessageBytes: 50 * 1024 * 1024,
 });
 
 export const ZERO_RETENTION_UNAVAILABLE = "ZERO_RETENTION_UNAVAILABLE" as const;
+const ARTIFACT_ID = /^[A-Za-z0-9._~-]{1,128}$/;
 
 export type AdapterIdentity = Readonly<{
   tenantId: string;
@@ -70,14 +73,17 @@ export type ZeroRetentionEvidence = Readonly<{
   humanReviewDisabled: boolean;
 }>;
 
-export type AssistantAttachment = Readonly<{
-  kind: "image" | "file";
+type AssistantAttachmentBase = Readonly<{
   artifactId: string;
   filename: string;
-  mimeType: "image/jpeg" | "image/png" | "image/webp" | "application/pdf" | "text/plain";
   sizeBytes: number;
   sha256: string;
 }>;
+
+export type AssistantAttachment =
+  | (AssistantAttachmentBase & Readonly<{ kind: "image"; mimeType: "image/jpeg" | "image/png" | "image/webp" }>)
+  | (AssistantAttachmentBase & Readonly<{ kind: "file"; mimeType: "application/pdf" | "text/plain" }>)
+  | (AssistantAttachmentBase & Readonly<{ kind: "audio"; mimeType: "audio/mp4"; durationMs: number }>);
 
 export type AssistantMessageInput = Readonly<{
   messageId: string;
@@ -437,14 +443,24 @@ export const createFakeAdapter = (options: AdapterOptions): FakeAdapter => {
       let totalBytes = 0;
       const metadata = attachments.map((attachment) => {
         if (attachment === null || typeof attachment !== "object" || Array.isArray(attachment)) throw new AdapterError("ATTACHMENT_INVALID");
-        assertExactKeys(attachment, ["kind", "artifactId", "filename", "mimeType", "sizeBytes", "sha256"], "ATTACHMENT_INVALID");
-        if (!attachment.artifactId || !attachment.filename || !/^[a-f0-9]{64}$/.test(attachment.sha256) || !Number.isSafeInteger(attachment.sizeBytes) || attachment.sizeBytes < 0 || attachment.sizeBytes > ASSISTANT_ATTACHMENT_LIMITS.maxFileBytes) throw new AdapterError("ATTACHMENT_INVALID");
-        if (!["image/jpeg", "image/png", "image/webp", "application/pdf", "text/plain"].includes(attachment.mimeType)) throw new AdapterError("ATTACHMENT_UNSUPPORTED");
+        const kind = (attachment as { kind?: unknown }).kind;
+        if (kind !== "image" && kind !== "file" && kind !== "audio") throw new AdapterError("ATTACHMENT_INVALID");
+        const isAudio = kind === "audio";
+        assertExactKeys(attachment, isAudio ? ["kind", "artifactId", "filename", "mimeType", "sizeBytes", "sha256", "durationMs"] : ["kind", "artifactId", "filename", "mimeType", "sizeBytes", "sha256"], "ATTACHMENT_INVALID");
+        const sizeLimit = isAudio ? ASSISTANT_ATTACHMENT_LIMITS.maxAudioBytes : ASSISTANT_ATTACHMENT_LIMITS.maxFileBytes;
+        if (typeof attachment.artifactId !== "string" || !ARTIFACT_ID.test(attachment.artifactId) || !attachment.filename || !/^[a-fA-F0-9]{64}$/.test(attachment.sha256) || !Number.isSafeInteger(attachment.sizeBytes) || attachment.sizeBytes < 0 || attachment.sizeBytes > sizeLimit) throw new AdapterError("ATTACHMENT_INVALID");
+        const durationMs = isAudio ? (attachment as { durationMs?: unknown }).durationMs : undefined;
+        if (isAudio && (typeof durationMs !== "number" || !Number.isSafeInteger(durationMs) || durationMs < 1 || durationMs > ASSISTANT_ATTACHMENT_LIMITS.maxAudioDurationMs)) throw new AdapterError("ATTACHMENT_INVALID");
+        const normalizedDurationMs = durationMs as number;
+        const normalizedSha256 = attachment.sha256.toLowerCase();
         if (attachment.filename.includes("/") || attachment.filename.includes("\\")) throw new AdapterError("ATTACHMENT_INVALID");
-        if (attachment.kind === "image" && !attachment.mimeType.startsWith("image/")) throw new AdapterError("ATTACHMENT_INVALID");
-        if (attachment.kind === "file" && attachment.mimeType.startsWith("image/")) throw new AdapterError("ATTACHMENT_INVALID");
+        if (kind === "image" && !["image/jpeg", "image/png", "image/webp"].includes(attachment.mimeType)) throw new AdapterError("ATTACHMENT_UNSUPPORTED");
+        if (kind === "file" && !["application/pdf", "text/plain"].includes(attachment.mimeType)) throw new AdapterError("ATTACHMENT_UNSUPPORTED");
+        if (isAudio && attachment.mimeType !== "audio/mp4") throw new AdapterError("ATTACHMENT_UNSUPPORTED");
         totalBytes += attachment.sizeBytes;
-        return Object.freeze({ kind: attachment.kind, artifactId: attachment.artifactId, filename: attachment.filename, mimeType: attachment.mimeType, sizeBytes: attachment.sizeBytes, sha256: attachment.sha256 });
+        return Object.freeze(isAudio
+          ? { kind, artifactId: attachment.artifactId, filename: attachment.filename, mimeType: attachment.mimeType, sizeBytes: attachment.sizeBytes, sha256: normalizedSha256, durationMs: normalizedDurationMs }
+          : { kind, artifactId: attachment.artifactId, filename: attachment.filename, mimeType: attachment.mimeType, sizeBytes: attachment.sizeBytes, sha256: normalizedSha256 });
       });
       if (totalBytes > ASSISTANT_ATTACHMENT_LIMITS.maxMessageBytes) throw new AdapterError("ATTACHMENT_LIMIT");
       // Only metadata is retained for deterministic diagnostics. Text and bytes
