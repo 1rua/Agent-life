@@ -18,7 +18,7 @@ class SmsSyncSchedulerTest {
     }
 
     @Test
-    fun `periodic intervals schedule persisted jobs at the exact allowed periods`() {
+    fun `periodic intervals schedule jobs at the exact allowed periods`() {
         val jobs = RecordingAndroidSmsJobScheduler()
         val scheduler = AndroidSmsSyncScheduler(jobs)
 
@@ -28,9 +28,9 @@ class SmsSyncSchedulerTest {
 
         assertEquals(
             listOf(
-                ScheduledPeriodicSmsJob(AndroidSmsSyncScheduler.JOB_ID, 15 * 60 * 1000L, persisted = true),
-                ScheduledPeriodicSmsJob(AndroidSmsSyncScheduler.JOB_ID, 30 * 60 * 1000L, persisted = true),
-                ScheduledPeriodicSmsJob(AndroidSmsSyncScheduler.JOB_ID, 60 * 60 * 1000L, persisted = true),
+                ScheduledPeriodicSmsJob(AndroidSmsSyncScheduler.JOB_ID, 15 * 60 * 1000L, persisted = false),
+                ScheduledPeriodicSmsJob(AndroidSmsSyncScheduler.JOB_ID, 30 * 60 * 1000L, persisted = false),
+                ScheduledPeriodicSmsJob(AndroidSmsSyncScheduler.JOB_ID, 60 * 60 * 1000L, persisted = false),
             ),
             jobs.periodicJobs,
         )
@@ -52,7 +52,7 @@ class SmsSyncSchedulerTest {
         val cancelledJobIds = mutableListOf<Int>()
 
         override fun schedulePersistedPeriodic(jobId: Int, periodMs: Long): Boolean {
-            periodicJobs += ScheduledPeriodicSmsJob(jobId, periodMs, persisted = true)
+            periodicJobs += ScheduledPeriodicSmsJob(jobId, periodMs, persisted = false)
             return scheduleSucceeds
         }
 

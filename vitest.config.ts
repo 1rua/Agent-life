@@ -6,6 +6,7 @@ export default defineConfig({
     env: {
       TZ: "UTC"
     },
+    exclude: [".worktrees/**", "**/node_modules/**"],
     fileParallelism: false,
     maxWorkers: 1,
     minWorkers: 1,

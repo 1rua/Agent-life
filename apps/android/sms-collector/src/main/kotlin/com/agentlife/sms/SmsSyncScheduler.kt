@@ -1,5 +1,6 @@
 package com.agentlife.sms
 
+import android.annotation.SuppressLint
 import android.app.job.JobInfo
 import android.app.job.JobScheduler
 import android.content.ComponentName
@@ -63,11 +64,12 @@ private class AndroidSmsJobSchedulerAdapter(context: Context) : AndroidSmsJobSch
     }
     private val service = ComponentName(context, SmsSyncJobService::class.java)
 
+    @SuppressLint("MissingPermission")
     override fun schedulePersistedPeriodic(jobId: Int, periodMs: Long): Boolean =
         scheduler.schedule(
             JobInfo.Builder(jobId, service)
                 .setPeriodic(periodMs)
-                .setPersisted(true)
+                .setPersisted(false)
                 .build(),
         ) == JobScheduler.RESULT_SUCCESS
 

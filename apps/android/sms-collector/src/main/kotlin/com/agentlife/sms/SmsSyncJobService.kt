@@ -40,7 +40,7 @@ internal class SmsJobExecution(
     }
 }
 
-/** Runs one locally authorized SMS auto-send batch for the persisted periodic job. */
+/** Runs one locally authorized SMS auto-send batch for the periodic job. */
 class SmsSyncJobService : JobService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var runningJob: Job? = null
