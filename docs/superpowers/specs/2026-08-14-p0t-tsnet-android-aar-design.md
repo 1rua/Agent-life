@@ -1,6 +1,6 @@
 # P0t Tailscale Android userspace AAR 设计
 
-状态：方案 A 已确认，书面规格待用户复核（2026-08-14）
+状态：方案 A 与书面规格已获用户确认（2026-08-14）
 
 ## 1. 目的与既有决策
 
@@ -121,7 +121,7 @@ gomobile 可绑定的以下概念接口：
 ```text
 Start(bootstrapBytes, restoredStateBytes, StateSink) -> Node
 Node.OpenPairedBridge(bindingBytes) -> Channel
-Node.Path(bindingBytes) -> DIRECT | RELAY | OFFLINE | APPROVAL_REQUIRED
+Node.Path(bindingBytes) -> DIRECT | RELAY | OFFLINE
 Node.Stop()
 Channel.Send(canonicalWireBytes)
 Channel.Receive() -> canonicalWireBytes
