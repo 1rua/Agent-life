@@ -26,6 +26,7 @@ include(
     ":control-ports",
     ":policy-engine",
     ":notification-collector",
+    ":sms-collector",
     ":tailnet-core",
     ":transport",
     ":encrypted-store",

@@ -1,21 +1,31 @@
 package com.agentlife.mobile
 
+import android.Manifest
 import android.app.Activity
 import android.content.ComponentName
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
+import android.text.InputType
 import android.provider.Settings
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.CheckBox
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.RadioButton
 import android.widget.RadioGroup
 import android.widget.ScrollView
+import android.widget.Spinner
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
+import com.agentlife.capability.CapabilityAvailability
+import com.agentlife.capability.SmsHistoryPolicy
+import com.agentlife.capability.SmsSyncInterval
 import com.agentlife.core.model.AssistantHandoffDecision
 import com.agentlife.core.model.AssistantHandoffGate
 import com.agentlife.core.model.AssistantHandoffRequest
@@ -26,6 +36,8 @@ import com.agentlife.core.model.NotificationRuleMode
 import com.agentlife.core.model.PolicyRevisionRace
 import com.agentlife.notifications.AgentLifeNotificationListenerService
 import com.agentlife.policy.PolicyStateCorrupted
+import com.agentlife.sms.SmsSettingsDefaults
+import com.agentlife.sms.SmsSettingsSnapshot
 
 /** Local-only notification settings UI and the reviewed assistant handoff seam. */
 class MainActivity : Activity() {
@@ -43,6 +55,7 @@ class MainActivity : Activity() {
     private lateinit var listenerStatusText: TextView
     private lateinit var statusText: TextView
     private lateinit var application: AgentLifeApplication
+    private var showingSmsSettings = false
 
     private val metadataId = View.generateViewId()
     private val contentId = View.generateViewId()
@@ -55,13 +68,26 @@ class MainActivity : Activity() {
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
         application = getApplication() as AgentLifeApplication
+        showingSmsSettings = false
         setContentView(buildSettingsView())
         refreshFromAuthority()
     }
 
     override fun onResume() {
         super.onResume()
-        if (::application.isInitialized) refreshFromAuthority()
+        if (::application.isInitialized && !showingSmsSettings) refreshFromAuthority()
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == READ_SMS_REQUEST_CODE) {
+            showingSmsSettings = true
+            renderSmsSettings()
+        }
     }
 
     /** Source-only seam for the reviewed local handoff adapter. */
@@ -83,6 +109,14 @@ class MainActivity : Activity() {
         content.addView(TextView(this).apply {
             text = "This page controls local consent only. It does not send network requests or accept remote permission changes from an Agent."
             setPadding(0, dp(8), 0, dp(16))
+        }, matchParentWrap())
+
+        content.addView(Button(this).apply {
+            text = "Open SMS settings"
+            setOnClickListener {
+                showingSmsSettings = true
+                renderSmsSettings()
+            }
         }, matchParentWrap())
 
         listenerStatusText = TextView(this).apply { setPadding(0, 0, 0, dp(8)) }
@@ -280,4 +314,221 @@ class MainActivity : Activity() {
 
     private fun weightWrap(): LinearLayout.LayoutParams =
         LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+    private fun renderSmsSettings() {
+        val app = application as AgentLifeApplication
+        val presenter = SmsSettingsPresenter(
+            snapshotSource = app::smsSettingsSnapshot,
+            permissionAvailability = { app.smsPermissionAvailability(hasReadSmsPermission()) },
+        )
+        val state = presenter.state()
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(32, 32, 32, 32)
+        }
+        val status = TextView(this).apply { text = statusMessage(state) }
+        val grant = CheckBox(this).apply {
+            text = "Enable SMS collection"
+            isChecked = state.granted
+        }
+        val permissionButton = Button(this).apply {
+            text = "Grant SMS permission"
+            setOnClickListener {
+                if (!hasReadSmsPermission()) {
+                    requestPermissions(arrayOf(Manifest.permission.READ_SMS), READ_SMS_REQUEST_CODE)
+                } else {
+                    renderSmsSettings()
+                }
+            }
+        }
+        val startMode = spinner(SmsHistoryStartMode.entries.toList()).apply {
+            setSelection(SmsHistoryStartMode.entries.indexOf(state.historyStartMode))
+        }
+        val historyStart = EditText(this).apply {
+            hint = "History start time (milliseconds)"
+            inputType = InputType.TYPE_CLASS_NUMBER
+            setText(state.historyStartEpochMs?.toString().orEmpty())
+        }
+        val maxRecords = EditText(this).apply {
+            hint = "Maximum records"
+            inputType = InputType.TYPE_CLASS_NUMBER
+            setText(state.maxRecords.toString())
+        }
+        val interval = spinner(SmsSyncInterval.entries.toList()).apply {
+            setSelection(SmsSyncInterval.entries.indexOf(state.syncInterval))
+        }
+        val onDemand = CheckBox(this).apply {
+            text = "Allow on-demand SMS reads"
+            isChecked = state.onDemandEnabled
+        }
+        val autoSend = CheckBox(this).apply {
+            text = "Enable automatic SMS sync"
+            isChecked = state.autoSendEnabled
+        }
+        val agentRequest = CheckBox(this).apply {
+            text = "Allow Agent SMS requests"
+            isChecked = state.agentMayRequest
+        }
+        val save = Button(this).apply {
+            text = "Save SMS settings"
+            setOnClickListener {
+                val selectedStartMode = startMode.selectedItem as SmsHistoryStartMode
+                val selectedInterval = interval.selectedItem as SmsSyncInterval
+                val selectedMaxRecords = maxRecords.text.toString().toIntOrNull()
+                val selectedHistoryStart = historyStart.text.toString().toLongOrNull()
+                if (selectedMaxRecords == null ||
+                    (selectedStartMode == SmsHistoryStartMode.FROM_EPOCH && selectedHistoryStart == null)
+                ) {
+                    status.text = "Enter a valid local SMS history setting."
+                    return@setOnClickListener
+                }
+                try {
+                    val payload = presenter.savePayload(
+                        state.copy(
+                            granted = grant.isChecked,
+                            historyStartMode = selectedStartMode,
+                            historyStartEpochMs = selectedHistoryStart,
+                            maxRecords = selectedMaxRecords,
+                            syncInterval = selectedInterval,
+                            onDemandEnabled = onDemand.isChecked,
+                            autoSendEnabled = autoSend.isChecked,
+                            agentMayRequest = agentRequest.isChecked,
+                        ),
+                    )
+                    app.localSmsSettingsController().update(
+                        historyPolicy = payload.historyPolicy,
+                        syncInterval = payload.syncInterval,
+                        granted = payload.granted,
+                        onDemandEnabled = payload.onDemandEnabled,
+                        autoSendEnabled = payload.autoSendEnabled,
+                        agentMayRequest = payload.agentMayRequest,
+                    )
+                    try {
+                        app.smsJobScheduler().schedule(selectedInterval)
+                    } catch (_: Throwable) {
+                        status.text = "SMS settings were saved, but automatic scheduling failed."
+                        return@setOnClickListener
+                    }
+                    renderSmsSettings()
+                } catch (_: Throwable) {
+                    status.text = "SMS settings could not be saved."
+                }
+            }
+        }
+
+        val notificationSettings = Button(this).apply {
+            text = "Open notification settings"
+            setOnClickListener {
+                showingSmsSettings = false
+                setContentView(buildSettingsView())
+                refreshFromAuthority()
+            }
+        }
+
+        root.addView(notificationSettings)
+        root.addView(status)
+        root.addView(grant)
+        root.addView(permissionButton)
+        root.addView(label("History start mode"))
+        root.addView(startMode)
+        root.addView(historyStart)
+        root.addView(maxRecords)
+        root.addView(label("Automatic sync interval"))
+        root.addView(interval)
+        root.addView(onDemand)
+        root.addView(autoSend)
+        root.addView(agentRequest)
+        root.addView(save)
+        setContentView(ScrollView(this).apply { addView(root) })
+    }
+
+    private fun <T> spinner(values: List<T>): Spinner = Spinner(this).apply {
+        adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, values)
+    }
+
+    private fun hasReadSmsPermission(): Boolean =
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+            checkSelfPermission(Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED
+
+    private fun statusMessage(state: SmsSettingsViewState): String = when {
+        state.corrupted -> "SMS settings are unavailable because local state is corrupted."
+        state.permissionStatus == CapabilityAvailability.PERMISSION_REQUIRED -> "PERMISSION_REQUIRED"
+        state.permissionStatus == CapabilityAvailability.DISABLED -> "SMS collection is disabled."
+        else -> "SMS collection is ready."
+    }
+
+    private companion object {
+        const val READ_SMS_REQUEST_CODE = 6001
+    }
+}
+
+enum class SmsHistoryStartMode { ALL_HISTORY, FROM_EPOCH }
+
+data class SmsSettingsViewState(
+    val firstEnable: Boolean,
+    val granted: Boolean,
+    val permissionStatus: CapabilityAvailability,
+    val historyStartMode: SmsHistoryStartMode,
+    val historyStartEpochMs: Long?,
+    val maxRecords: Int,
+    val syncInterval: SmsSyncInterval,
+    val onDemandEnabled: Boolean,
+    val autoSendEnabled: Boolean,
+    val agentMayRequest: Boolean,
+    val corrupted: Boolean,
+)
+
+data class SmsSettingsSavePayload(
+    val historyPolicy: SmsHistoryPolicy,
+    val syncInterval: SmsSyncInterval,
+    val granted: Boolean,
+    val onDemandEnabled: Boolean,
+    val autoSendEnabled: Boolean,
+    val agentMayRequest: Boolean,
+)
+
+/** Read-only presenter: remote callers never receive a local mutation controller. */
+class SmsSettingsPresenter(
+    private val snapshotSource: () -> SmsSettingsSnapshot,
+    private val nowEpochMs: () -> Long = System::currentTimeMillis,
+    private val permissionAvailability: () -> CapabilityAvailability,
+) {
+    fun state(): SmsSettingsViewState {
+        val snapshot = snapshotSource()
+        val firstEnable = !snapshot.corrupted && snapshot.policyRevision == 0uL && snapshot.authorizationRevision == 0uL
+        val defaults = if (firstEnable) SmsSettingsDefaults.firstEnable(nowEpochMs()) else null
+        val historyPolicy = defaults?.historyPolicy ?: snapshot.historyPolicy
+        return SmsSettingsViewState(
+            firstEnable = firstEnable,
+            granted = snapshot.granted,
+            permissionStatus = permissionAvailability(),
+            historyStartMode = if (historyPolicy.fromEpochMs == null) {
+                SmsHistoryStartMode.ALL_HISTORY
+            } else {
+                SmsHistoryStartMode.FROM_EPOCH
+            },
+            historyStartEpochMs = historyPolicy.fromEpochMs,
+            maxRecords = historyPolicy.maxRecords,
+            syncInterval = defaults?.syncInterval ?: snapshot.syncInterval,
+            onDemandEnabled = snapshot.onDemandEnabled,
+            autoSendEnabled = snapshot.autoSendEnabled,
+            agentMayRequest = snapshot.agentMayRequest,
+            corrupted = snapshot.corrupted,
+        )
+    }
+
+    fun savePayload(state: SmsSettingsViewState): SmsSettingsSavePayload = SmsSettingsSavePayload(
+        historyPolicy = SmsHistoryPolicy(
+            fromEpochMs = if (state.historyStartMode == SmsHistoryStartMode.FROM_EPOCH) {
+                requireNotNull(state.historyStartEpochMs) { "history start time is required" }
+            } else {
+                null
+            },
+            maxRecords = state.maxRecords,
+        ),
+        syncInterval = state.syncInterval,
+        granted = state.granted,
+        onDemandEnabled = state.onDemandEnabled,
+        autoSendEnabled = state.autoSendEnabled,
+        agentMayRequest = state.agentMayRequest,
+    )
 }

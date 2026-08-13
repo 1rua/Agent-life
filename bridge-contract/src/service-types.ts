@@ -46,10 +46,35 @@ export type NotificationEventV1 = Readonly<NotificationRecordV1 & {
   binding: BridgeSessionIdentity;
 }>;
 
+export type SmsRecordV1 = Readonly<{
+  recordId: string;
+  senderAddress: string | null;
+  threadId: string | null;
+  messageAtEpochMs: bigint;
+  observedAtEpochMs: bigint;
+  read: boolean;
+  subscriptionId: number | null;
+  body: string;
+  sourceEpoch: bigint;
+  cursorProviderId: bigint;
+  captureRevision: bigint;
+  policyRevision: bigint;
+}>;
+
+export type SmsEventV1 = Readonly<{
+  eventId: string;
+  subscriptionId: string;
+  binding: BridgeSessionIdentity;
+  record: SmsRecordV1;
+}>;
+
 export type CapabilityName =
   | "mobile.notifications.query"
   | "mobile.notifications.subscribe"
   | "mobile.notifications.unsubscribe"
+  | "mobile.sms.query"
+  | "mobile.sms.subscribe"
+  | "mobile.sms.unsubscribe"
   | "assistant.chat";
 
 export type AuthorizationRequest = Readonly<{

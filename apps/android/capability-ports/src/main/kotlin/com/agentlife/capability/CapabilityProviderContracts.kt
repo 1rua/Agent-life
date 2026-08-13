@@ -66,22 +66,47 @@ fun AuthorizedAutoSendSubscription.requireAutoSendScope(
     )
 }
 
-private fun CapabilityFilter.allowsContentDisclosure(): Boolean =
-    this is CapabilityFilter.Notifications && fieldAccess == NotificationFieldAccess.CONTENT
+private fun CapabilityFilter.allowsContentDisclosure(): Boolean = when (this) {
+    CapabilityFilter.Sms -> true
+    is CapabilityFilter.Notifications -> fieldAccess == NotificationFieldAccess.CONTENT
+    else -> false
+}
 
 /**
- * The only normalizer that may release raw provider content.  The current
- * non-notification filters have no content selection, so all of their content
- * is withheld until a reviewed sealed filter explicitly adds that selection.
+ * The only normalizer that may release raw provider content. SMS and
+ * notification content access are the reviewed filters that may release it;
+ * all other sealed filters remain withheld by default.
  */
-fun <T> normalizeContent(rawContent: T?, scope: AuthorizedReadScope): NormalizedContent<T> =
+@JvmName("normalizeStringContentRead")
+fun normalizeContent(rawContent: String?, scope: AuthorizedReadScope): NormalizedContent<String> = when {
+    !scope.contentDisclosureAllowed -> NormalizedContent.Withheld
+    rawContent != null -> NormalizedContent.Released(rawContent)
+    scope.capability == MobileDataCapability.SMS -> NormalizedContent.Released("")
+    else -> NormalizedContent.Withheld
+}
+
+@JvmName("normalizeStringContentAutoSend")
+fun normalizeContent(rawContent: String?, scope: AuthorizedAutoSendScope): NormalizedContent<String> = when {
+    !scope.contentDisclosureAllowed -> NormalizedContent.Withheld
+    rawContent != null -> NormalizedContent.Released(rawContent)
+    scope.capability == MobileDataCapability.SMS -> NormalizedContent.Released("")
+    else -> NormalizedContent.Withheld
+}
+
+fun <T> normalizeContent(
+    rawContent: T?,
+    scope: AuthorizedReadScope,
+): NormalizedContent<T> =
     if (rawContent != null && scope.contentDisclosureAllowed) {
         NormalizedContent.Released(rawContent)
     } else {
         NormalizedContent.Withheld
     }
 
-fun <T> normalizeContent(rawContent: T?, scope: AuthorizedAutoSendScope): NormalizedContent<T> =
+fun <T> normalizeContent(
+    rawContent: T?,
+    scope: AuthorizedAutoSendScope,
+): NormalizedContent<T> =
     if (rawContent != null && scope.contentDisclosureAllowed) {
         NormalizedContent.Released(rawContent)
     } else {
@@ -94,16 +119,9 @@ sealed interface CapabilityMetadata {
     val observedAtEpochMs: Long
 }
 
-private fun requireMetadata(recordId: String, observedAtEpochMs: Long) {
+internal fun requireMetadata(recordId: String, observedAtEpochMs: Long) {
     require(recordId.isNotBlank()) { "record ID must not be blank" }
     require(observedAtEpochMs >= 0) { "observed time must not be negative" }
-}
-
-data class SmsMetadata(
-    override val recordId: String,
-    override val observedAtEpochMs: Long,
-) : CapabilityMetadata {
-    init { requireMetadata(recordId, observedAtEpochMs) }
 }
 
 data class CallsMetadata(

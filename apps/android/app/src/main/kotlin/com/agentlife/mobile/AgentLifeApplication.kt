@@ -9,8 +9,8 @@ import com.agentlife.core.model.PairedBridgeTransport
 import com.agentlife.core.model.TransportCloseReason
 import com.agentlife.core.model.VerifiedPairingTransportBinding
 import com.agentlife.encrypted.store.AndroidKeystoreOutboxKeyProvider
+import com.agentlife.encrypted.store.CapabilityOutboxStore
 import com.agentlife.encrypted.store.EventAckVerifier
-import com.agentlife.encrypted.store.FileEncryptedOutboxPersistence
 import com.agentlife.encrypted.store.NotificationOutboxStore
 import com.agentlife.notifications.AndroidNotificationCollector
 import com.agentlife.notifications.NotificationBridgeDispatcher
@@ -23,6 +23,26 @@ import com.agentlife.policy.FileNotificationPolicyPersistence
 import com.agentlife.policy.LocalNotificationPolicyController
 import com.agentlife.policy.NotificationAuthoritySnapshot
 import com.agentlife.policy.PersistentNotificationPolicyAuthority
+import com.agentlife.capability.CapabilityAvailability
+import com.agentlife.encrypted.store.FileEncryptedOutboxPersistence
+import com.agentlife.sms.AndroidSmsCapabilityProvider
+import com.agentlife.sms.AndroidSmsInboxReader
+import com.agentlife.sms.AndroidSmsSyncScheduler
+import com.agentlife.sms.FileSmsCursorStore
+import com.agentlife.sms.InMemorySmsSettingsPersistence
+import com.agentlife.sms.LocalSmsSettingsController
+import com.agentlife.sms.PersistentSmsSettingsAuthority
+import com.agentlife.sms.SmsAutoSendEgressGate
+import com.agentlife.sms.SmsAutoSyncCoordinator
+import com.agentlife.sms.SmsAutoSyncRunner
+import com.agentlife.sms.SmsJobScheduler
+import com.agentlife.sms.SmsPairedBridgeBindingSource
+import com.agentlife.sms.SmsRuntime
+import com.agentlife.sms.SmsRuntimeFactory
+import com.agentlife.sms.SmsRuntimeFactoryRegistry
+import com.agentlife.sms.SmsSettingsPersistence
+import com.agentlife.sms.SmsSettingsSnapshot
+import com.agentlife.sms.SmsWireCodec
 import java.io.File
 
 /**
@@ -59,6 +79,8 @@ object PairedNotificationBridgeRegistry {
 class AgentLifeApplication : Application() {
     private lateinit var notificationAuthority: PersistentNotificationPolicyAuthority
     private lateinit var notificationOutbox: NotificationOutbox
+    private lateinit var smsAuthority: PersistentSmsSettingsAuthority
+    private lateinit var smsScheduler: SmsJobScheduler
 
     override fun onCreate() {
         super.onCreate()
@@ -68,6 +90,11 @@ class AgentLifeApplication : Application() {
             ),
         )
         notificationOutbox = createOutboxFailClosed()
+
+        smsAuthority = createSmsAuthorityFailClosed()
+        smsScheduler = createSmsSchedulerFailClosed()
+        val smsRuntime = createSmsRuntimeFailClosed()
+        SmsRuntimeFactoryRegistry.install(SmsRuntimeFactory { smsRuntime })
 
         NotificationRuntimeFactoryRegistry.install(NotificationRuntimeFactory { scope ->
             val collector = AndroidNotificationCollector(authorization = notificationAuthority)
@@ -99,6 +126,22 @@ class AgentLifeApplication : Application() {
     fun localNotificationAuthoritySnapshot(): NotificationAuthoritySnapshot =
         notificationAuthority.snapshot()
 
+    /** The SMS local-settings screen is the only caller handed this mutating capability. */
+    fun localSmsSettingsController(): LocalSmsSettingsController = smsAuthority.localController()
+
+    fun smsSettingsSnapshot(): SmsSettingsSnapshot = smsAuthority.snapshot()
+
+    fun smsPermissionAvailability(readSmsPermissionGranted: Boolean): CapabilityAvailability {
+        val snapshot = smsAuthority.snapshot()
+        return when {
+            snapshot.corrupted || !snapshot.granted -> CapabilityAvailability.DISABLED
+            !readSmsPermissionGranted -> CapabilityAvailability.PERMISSION_REQUIRED
+            else -> CapabilityAvailability.READY
+        }
+    }
+
+    fun smsJobScheduler(): SmsJobScheduler = smsScheduler
+
     private fun createOutboxFailClosed(): NotificationOutbox = try {
         NotificationOutboxStore(
             persistence = FileEncryptedOutboxPersistence(
@@ -115,6 +158,65 @@ class AgentLifeApplication : Application() {
         // Preserve corrupt ciphertext/key evidence. The listener still starts,
         // but every storage/dispatch operation fails closed and emits no data.
         FailClosedNotificationOutbox(failure)
+    }
+
+    private fun createSmsAuthorityFailClosed(): PersistentSmsSettingsAuthority = try {
+        PersistentSmsSettingsAuthority(
+            FileSmsSettingsPersistence(File(noBackupFilesDir, SMS_SETTINGS_FILE)),
+        )
+    } catch (_: Throwable) {
+        PersistentSmsSettingsAuthority(InMemorySmsSettingsPersistence(byteArrayOf(0)))
+    }
+
+    private fun createSmsSchedulerFailClosed(): SmsJobScheduler = try {
+        AndroidSmsSyncScheduler(this)
+    } catch (_: Throwable) {
+        object : SmsJobScheduler {
+            override fun schedule(interval: com.agentlife.capability.SmsSyncInterval) = Unit
+            override fun cancel() = Unit
+        }
+    }
+
+    private fun createSmsRuntimeFailClosed(): SmsRuntime = try {
+        val cursorStore = FileSmsCursorStore.fromContext(this)
+        val provider = AndroidSmsCapabilityProvider(
+            reader = AndroidSmsInboxReader(contentResolver),
+            historyPolicySource = smsAuthority,
+            cursorSource = cursorStore,
+        )
+        val outbox = CapabilityOutboxStore(
+            persistence = FileEncryptedOutboxPersistence(File(noBackupFilesDir, SMS_OUTBOX_FILE)),
+            encryptionKey = AndroidKeystoreOutboxKeyProvider(SMS_OUTBOX_KEY_ALIAS).getOrCreate(),
+            ackVerifier = EventAckVerifier { eventId, ackWire ->
+                PairedNotificationBridgeRegistry.current()
+                    ?.ackVerifier
+                    ?.verify(eventId, ackWire) == true
+            },
+        )
+        val coordinator = SmsAutoSyncCoordinator(
+            provider = provider,
+            outbox = outbox,
+            cursorStore = cursorStore,
+            eventEncoder = SmsWireCodec(),
+            transport = RegistryPairedBridgeTransport,
+            bindingSource = SmsPairedBridgeBindingSource {
+                PairedNotificationBridgeRegistry.current()?.binding
+            },
+            egressGate = SmsAutoSendEgressGate { event ->
+                val settings = smsAuthority.snapshot()
+                !settings.corrupted && settings.granted && settings.autoSendEnabled &&
+                    event.policyRevision == settings.policyRevision
+            },
+        )
+        SmsRuntime(smsAuthority, SmsAutoSyncRunner { subscription -> coordinator.runOnce(subscription) })
+    } catch (_: Throwable) {
+        SmsRuntime.denyFirst()
+    }
+
+    private companion object {
+        const val SMS_SETTINGS_FILE = "sms-settings-v1.bin"
+        const val SMS_OUTBOX_FILE = "sms-outbox-v1.aesgcm"
+        const val SMS_OUTBOX_KEY_ALIAS = "agent_life_sms_outbox_v1"
     }
 }
 
@@ -153,4 +255,17 @@ private class FailClosedNotificationOutbox(
     override suspend fun recoverUnacknowledged(): List<DurableEvent> = unavailable()
 
     private fun <T> unavailable(): T = throw IllegalStateException("notification outbox unavailable", failure)
+}
+
+/** App-private SMS consent evidence; the file contains no SMS body text. */
+private class FileSmsSettingsPersistence(private val file: File) : SmsSettingsPersistence {
+    override fun read(): ByteArray? = if (file.isFile) file.readBytes() else null
+
+    override fun write(value: ByteArray) {
+        file.parentFile?.mkdirs()
+        val parent = file.parentFile ?: file.absoluteFile.parentFile ?: error("SMS settings file has no parent")
+        val temporary = File(parent, "${file.name}.tmp")
+        temporary.writeBytes(value)
+        check(temporary.renameTo(file)) { "unable to atomically persist SMS settings" }
+    }
 }
