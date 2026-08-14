@@ -1,6 +1,5 @@
 package com.agentlife.sync
 
-import com.agentlife.core.model.BridgeSession
 import com.agentlife.core.model.CapabilityDurableEvent
 import com.agentlife.core.model.CapabilityOutbox
 import com.agentlife.core.model.CapabilityOutboxAckRejected
@@ -8,6 +7,8 @@ import com.agentlife.core.model.PairedBridgeTransport
 import com.agentlife.core.model.TransportCloseReason
 import com.agentlife.core.model.VerifiedPairingTransportBinding
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 
 fun interface CapabilityPairedBridgeBindingSource {
     fun currentBinding(): VerifiedPairingTransportBinding?
@@ -61,8 +62,10 @@ class CapabilityOutboxDispatcher(
     override suspend fun dispatchPending(blockedEventIds: Set<String>): CapabilityDispatchResult {
         val pending = try {
             outbox.recoverUnacknowledged()
-        } catch (failure: CancellationException) {
-            throw failure
+        } catch (_: CancellationException) {
+            // Recovery did not return an insertion-ordered snapshot, so this
+            // result deliberately reports no acknowledged or enumerated entries.
+            return CapabilityDispatchResult(0, 0, CapabilityDispatchFailure.CANCELLED)
         } catch (_: Exception) {
             return CapabilityDispatchResult(0, 0, CapabilityDispatchFailure.OUTBOX_FAILURE)
         }
@@ -80,12 +83,6 @@ class CapabilityOutboxDispatcher(
                 retained += 1
                 break
             }
-            if (!egressGate.allows(event)) {
-                retained += 1
-                failure = failure ?: CapabilityDispatchFailure.POLICY_REVOKED
-                break
-            }
-
             val delivered = deliver(event) { dispatchFailure ->
                 failure = failure ?: dispatchFailure
             }
@@ -112,6 +109,12 @@ class CapabilityOutboxDispatcher(
         onFailure: (CapabilityDispatchFailure) -> Unit,
     ): DeliveryOutcome {
         for (attempt in 1..maxAttempts) {
+            // Each attempt owns its own pre-open fence. A prior recoverable
+            // failure must not let the next open race a local revocation.
+            if (!egressGate.allows(event)) {
+                onFailure(CapabilityDispatchFailure.POLICY_REVOKED)
+                return DeliveryOutcome.RETAINED
+            }
             val binding = bindingSource.currentBinding()
             if (binding == null) {
                 onFailure(CapabilityDispatchFailure.PAIRING_UNAVAILABLE)
@@ -120,60 +123,66 @@ class CapabilityOutboxDispatcher(
             val session = try {
                 transport.open(binding)
             } catch (_: CancellationException) {
+                cleanup(TransportCloseReason.PROCESS_STOPPED)
                 return DeliveryOutcome.CANCELLED
             } catch (_: Exception) {
                 onFailure(CapabilityDispatchFailure.TRANSPORT_FAILURE)
+                cleanup(TransportCloseReason.FAILURE)
                 continue
             }
             // `open` suspends; a local revoke may race the first fence.
             if (!egressGate.allows(event)) {
                 onFailure(CapabilityDispatchFailure.POLICY_REVOKED)
-                close(session, TransportCloseReason.POLICY_REVOKED)
+                cleanup(TransportCloseReason.POLICY_REVOKED)
                 return DeliveryOutcome.RETAINED
             }
             // Keep a distinct final fence immediately before bytes leave the device.
             if (!egressGate.allows(event)) {
                 onFailure(CapabilityDispatchFailure.POLICY_REVOKED)
-                close(session, TransportCloseReason.POLICY_REVOKED)
+                cleanup(TransportCloseReason.POLICY_REVOKED)
                 return DeliveryOutcome.RETAINED
             }
             val ackWire = try {
                 session.sendControl(event.eventWire)
                 session.receiveControl()
             } catch (_: CancellationException) {
-                close(session, TransportCloseReason.PROCESS_STOPPED)
+                cleanup(TransportCloseReason.PROCESS_STOPPED)
                 return DeliveryOutcome.CANCELLED
             } catch (_: Exception) {
                 onFailure(CapabilityDispatchFailure.TRANSPORT_FAILURE)
-                close(session, TransportCloseReason.FAILURE)
+                cleanup(TransportCloseReason.FAILURE)
                 continue
             }
-            try {
+            val acknowledged = try {
                 outbox.acknowledge(event.eventId, ackWire)
-                close(session, TransportCloseReason.PROCESS_STOPPED)
-                return DeliveryOutcome.DELIVERED
+                true
             } catch (_: CancellationException) {
-                close(session, TransportCloseReason.PROCESS_STOPPED)
+                cleanup(TransportCloseReason.PROCESS_STOPPED)
                 return DeliveryOutcome.CANCELLED
             } catch (_: CapabilityOutboxAckRejected) {
                 onFailure(CapabilityDispatchFailure.ACK_REJECTED)
-                close(session, TransportCloseReason.FAILURE)
+                cleanup(TransportCloseReason.FAILURE)
+                false
             } catch (_: Exception) {
                 onFailure(CapabilityDispatchFailure.OUTBOX_FAILURE)
-                close(session, TransportCloseReason.FAILURE)
+                cleanup(TransportCloseReason.FAILURE)
+                false
+            }
+            if (acknowledged) {
+                cleanup(TransportCloseReason.PROCESS_STOPPED)
+                return DeliveryOutcome.DELIVERED
             }
         }
         return DeliveryOutcome.RETAINED
     }
 
-    private suspend fun close(session: BridgeSession?, reason: TransportCloseReason) {
-        if (session == null) return
+    private suspend fun cleanup(reason: TransportCloseReason) = withContext(NonCancellable) {
         try {
             transport.close(reason)
-        } catch (failure: CancellationException) {
-            throw failure
+        } catch (_: CancellationException) {
+            // Cleanup cancellation cannot alter the ACK or retention outcome.
         } catch (_: Exception) {
-            // No ACK removed the event, so close failure cannot alter retention.
+            // Cleanup failure cannot alter the ACK or retention outcome.
         }
     }
 
