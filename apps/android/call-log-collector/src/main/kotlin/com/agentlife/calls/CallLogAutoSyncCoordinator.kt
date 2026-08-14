@@ -134,6 +134,8 @@ class CallLogAutoSyncCoordinator(
             }
             val allowed = try {
                 currentPolicyGate.allows(durable)
+            } catch (_: CancellationException) {
+                return@withLock terminal(0, pending.size, CallLogSyncFailure.CANCELLED)
             } catch (_: Exception) {
                 false
             }
@@ -167,7 +169,7 @@ class CallLogAutoSyncCoordinator(
                 return@withLock terminal(
                     dispatch.acknowledged,
                     dispatch.retained,
-                    CallLogSyncFailure.CURSOR_NOT_DURABLE,
+                    selectTerminalFailure(CallLogSyncFailure.CURSOR_NOT_DURABLE, dispatch.failure),
                 )
             }
         }
@@ -195,7 +197,18 @@ class CallLogAutoSyncCoordinator(
                             state.sourceEpoch,
                             scope.policyRevision,
                         ),
-                    )
+                    ).also { encoded ->
+                        val decoded = codec.decode(encoded.eventWire)
+                        require(encoded.capability == CALL_LOG_CAPABILITY)
+                        require(encoded.eventId == eventId)
+                        require(encoded.recordId == decoded.recordId)
+                        require(decoded.recordId == "call:${cursor.providerId}")
+                        require(decoded.cursor == cursor)
+                        require(decoded.sourceEpoch == state.sourceEpoch)
+                        require(decoded.captureRevision == scope.policyRevision)
+                        require(decoded.policyRevision == scope.policyRevision)
+                        require(encoded.policyRevision == decoded.policyRevision)
+                    }
                 } catch (failure: CancellationException) {
                     throw failure
                 } catch (_: Exception) {
@@ -205,6 +218,8 @@ class CallLogAutoSyncCoordinator(
 
                 val allowed = try {
                     currentPolicyGate.allows(durable)
+                } catch (failure: CancellationException) {
+                    throw failure
                 } catch (_: Exception) {
                     false
                 }
@@ -268,7 +283,7 @@ class CallLogAutoSyncCoordinator(
         terminal(
             acknowledged = dispatch.acknowledged,
             retained = dispatch.retained,
-            failure = collectionFailure ?: dispatch.failure?.toCallLogSyncFailure(),
+            failure = selectTerminalFailure(collectionFailure, dispatch.failure),
         )
     }
 
@@ -286,17 +301,18 @@ class CallLogAutoSyncCoordinator(
         failure: CallLogSyncFailure?,
     ): CallLogSyncRunResult {
         val result = CallLogSyncRunResult(captured, enqueued, acknowledged, retained, failure)
-        val audit = CallLogAuditEvent(
-            policyRevision = revision,
-            resultCode = failure.toAuditResult(),
-            readCount = captured,
-            acceptedCount = enqueued,
-            acknowledgedCount = acknowledged,
-            latencyBucket = callLogLatencyBucket((elapsedRealtimeMs() - started).coerceAtLeast(0L)),
-        )
         try {
-            auditSink.record(audit)
-        } catch (_: Throwable) {
+            auditSink.record(
+                CallLogAuditEvent(
+                    policyRevision = revision,
+                    resultCode = failure.toAuditResult(),
+                    readCount = captured,
+                    acceptedCount = enqueued,
+                    acknowledgedCount = acknowledged,
+                    latencyBucket = callLogLatencyBucket((elapsedRealtimeMs() - started).coerceAtLeast(0L)),
+                ),
+            )
+        } catch (_: Exception) {
             // The fixed-field audit record is best effort and cannot change durable state.
         }
         return result
@@ -320,6 +336,18 @@ private fun CapabilityDispatchFailure.toCallLogSyncFailure(): CallLogSyncFailure
     CapabilityDispatchFailure.OUTBOX_FAILURE -> CallLogSyncFailure.OUTBOX_CORRUPTED
     CapabilityDispatchFailure.TRANSPORT_FAILURE -> CallLogSyncFailure.TRANSPORT_FAILURE
     CapabilityDispatchFailure.CANCELLED -> CallLogSyncFailure.CANCELLED
+}
+
+private fun selectTerminalFailure(
+    collectionFailure: CallLogSyncFailure?,
+    dispatchFailure: CapabilityDispatchFailure?,
+): CallLogSyncFailure? {
+    val mappedDispatch = dispatchFailure?.toCallLogSyncFailure()
+    return when (mappedDispatch) {
+        CallLogSyncFailure.CANCELLED -> CallLogSyncFailure.CANCELLED
+        CallLogSyncFailure.OUTBOX_CORRUPTED -> CallLogSyncFailure.OUTBOX_CORRUPTED
+        else -> collectionFailure ?: mappedDispatch
+    }
 }
 
 private fun CallLogSyncFailure?.toAuditResult(): CallLogAuditResultCode = when (this) {

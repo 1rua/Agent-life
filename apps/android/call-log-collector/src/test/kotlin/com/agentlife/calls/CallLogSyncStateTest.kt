@@ -11,6 +11,7 @@ import javax.crypto.Cipher
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
+import kotlinx.coroutines.CancellationException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -66,6 +67,21 @@ class CallLogSyncStateTest {
         }
         assertEquals("CALL_LOG_SYNC_STATE_CORRUPTED", failure.message)
         assertNull(failure.cause)
+    }
+
+    @Test
+    fun encrypted_state_loading_preserves_key_provider_cancellation() {
+        val persistence = InMemoryOutboxPersistence().also { it.write(byteArrayOf(1)) }
+        val keys = object : AesGcmKeyProvider {
+            override fun getOrCreate(): SecretKey = throw CancellationException("key private")
+            override fun delete() = Unit
+        }
+
+        val failure = assertThrows(CancellationException::class.java) {
+            EncryptedCallLogSyncStateStore(persistence, keys).snapshot()
+        }
+
+        assertEquals("key private", failure.message)
     }
 
     @Test

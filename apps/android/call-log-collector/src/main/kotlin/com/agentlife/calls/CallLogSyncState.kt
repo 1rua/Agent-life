@@ -8,6 +8,7 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
 import java.io.DataOutputStream
+import kotlinx.coroutines.CancellationException
 
 data class CallLogSyncState(
     val sourceEpoch: ULong,
@@ -108,6 +109,8 @@ class EncryptedCallLogSyncStateStore(
                 .readPlaintext()
                 ?.let(::decode)
                 ?: throw CallLogSyncStateCorrupted()
+        } catch (failure: CancellationException) {
+            throw failure
         } catch (_: EncryptedBlobCorrupted) {
             throw CallLogSyncStateCorrupted()
         } catch (_: CallLogSyncStateCorrupted) {

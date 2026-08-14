@@ -14,6 +14,8 @@ import com.agentlife.capability.NormalizedContent
 import com.agentlife.core.model.CapabilityDurableEvent
 import com.agentlife.core.model.CapabilityOutbox
 import com.agentlife.core.model.CapabilityOutboxFull
+import com.agentlife.encrypted.store.AesGcmKeyProvider
+import com.agentlife.encrypted.store.InMemoryOutboxPersistence
 import com.agentlife.sync.CapabilityDispatchFailure
 import com.agentlife.sync.CapabilityDispatchResult
 import com.agentlife.sync.CapabilityEventEgressGate
@@ -27,8 +29,10 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.yield
+import javax.crypto.SecretKey
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -117,6 +121,38 @@ class CallLogAutoSyncCoordinatorTest {
             assertFalse(label, captured)
             assertEquals(label, 0, dispatcher.calls)
         }
+    }
+
+    @Test
+    fun `pending policy gate cancellation stays cancelled and skips capture and dispatch`() = runBlocking {
+        var captured = false
+        val dispatcher = RecordingDispatcher()
+        val result = coordinator(
+            provider = provider(flow { captured = true }),
+            outbox = RecordingOutbox(initial = listOf(durable(42, 1_700))),
+            dispatcher = dispatcher,
+            gate = CapabilityEventEgressGate { throw CancellationException("pending gate private") },
+        ).runOnce(subscription())
+
+        assertEquals(CallLogSyncRunResult(0, 0, 0, 1, CallLogSyncFailure.CANCELLED), result)
+        assertFalse(captured)
+        assertEquals(0, dispatcher.calls)
+    }
+
+    @Test
+    fun `pre-enqueue policy gate cancellation stays cancelled without new egress`() = runBlocking {
+        val outbox = RecordingOutbox()
+        val dispatcher = RecordingDispatcher()
+        val result = coordinator(
+            provider = provider(flowOf(event(42, 1_700))),
+            outbox = outbox,
+            dispatcher = dispatcher,
+            gate = CapabilityEventEgressGate { throw CancellationException("new gate private") },
+        ).runOnce(subscription())
+
+        assertEquals(CallLogSyncRunResult(1, 0, 0, 0, CallLogSyncFailure.CANCELLED), result)
+        assertTrue(outbox.entries().isEmpty())
+        assertEquals(0, dispatcher.calls)
     }
 
     @Test
@@ -225,6 +261,46 @@ class CallLogAutoSyncCoordinatorTest {
     }
 
     @Test
+    fun `dispatcher cancellation and corruption outrank an independent capture failure`() = runBlocking {
+        listOf(
+            CapabilityDispatchFailure.CANCELLED to CallLogSyncFailure.CANCELLED,
+            CapabilityDispatchFailure.OUTBOX_FAILURE to CallLogSyncFailure.OUTBOX_CORRUPTED,
+        ).forEach { (dispatchFailure, expected) ->
+            val result = coordinator(
+                provider = provider(flow { throw CallLogProviderException(CallLogProviderFailure.QUERY_FAILED) }),
+                dispatcher = RecordingDispatcher(result = CapabilityDispatchResult(2, 3, dispatchFailure)),
+            ).runOnce(subscription())
+
+            assertEquals(dispatchFailure.name, expected, result.failure)
+            assertEquals(dispatchFailure.name, 2, result.acknowledged)
+            assertEquals(dispatchFailure.name, 3, result.retained)
+        }
+    }
+
+    @Test
+    fun `repair failure keeps durable prefix dispatchable while dispatcher cancellation or corruption wins`() = runBlocking {
+        listOf(
+            CapabilityDispatchFailure.CANCELLED to CallLogSyncFailure.CANCELLED,
+            CapabilityDispatchFailure.OUTBOX_FAILURE to CallLogSyncFailure.OUTBOX_CORRUPTED,
+        ).forEach { (dispatchFailure, expected) ->
+            val dispatcher = RecordingDispatcher(result = CapabilityDispatchResult(1, 1, dispatchFailure))
+            val result = coordinator(
+                outbox = RecordingOutbox(initial = listOf(durable(41, 1_400), durable(42, 1_700))),
+                state = RecordingState(
+                    initial = CallLogSyncState(3u, CallLogCursor(1_500, 1), 7u),
+                    advanceReturns = false,
+                ),
+                dispatcher = dispatcher,
+            ).runOnce(subscription())
+
+            assertEquals(dispatchFailure.name, expected, result.failure)
+            assertEquals(dispatchFailure.name, 1, result.acknowledged)
+            assertEquals(dispatchFailure.name, 1, result.retained)
+            assertEquals(dispatchFailure.name, setOf("call:3:42"), dispatcher.blocked.single())
+        }
+    }
+
+    @Test
     fun `provider failures map exhaustively and cancellation is closed`() = runBlocking {
         val cases = mapOf(
             CallLogProviderFailure.SOURCE_DISABLED to CallLogSyncFailure.SOURCE_DISABLED,
@@ -263,6 +339,78 @@ class CallLogAutoSyncCoordinatorTest {
         ).runOnce(subscription())
         assertEquals(CallLogSyncFailure.OUTBOX_CORRUPTED, recoveryFailure.failure)
         assertEquals(0, recoveryDispatcher.calls)
+    }
+
+    @Test
+    fun `real encrypted state key cancellation reaches coordinator as cancelled`() = runBlocking {
+        val persistence = InMemoryOutboxPersistence().also { it.write(byteArrayOf(1)) }
+        val cancellingKeys = object : AesGcmKeyProvider {
+            override fun getOrCreate(): SecretKey = throw CancellationException("key private")
+            override fun delete() = Unit
+        }
+        val dispatcher = RecordingDispatcher()
+
+        val result = coordinator(
+            state = EncryptedCallLogSyncStateStore(persistence, cancellingKeys),
+            dispatcher = dispatcher,
+        ).runOnce(subscription())
+
+        assertEquals(CallLogSyncFailure.CANCELLED, result.failure)
+        assertEquals(0, dispatcher.calls)
+    }
+
+    @Test
+    fun `new encoded wire is strictly decoded and bound before durable acceptance`() = runBlocking {
+        val expected = DecodedCallLogRecord("call:42", 3u, CallLogCursor(1_700, 42), 7u, 7u)
+        val cases = listOf(
+            "malformed" to codecOverride(encodedWire = byteArrayOf(1)),
+            "epoch" to codecOverride(decoded = expected.copy(sourceEpoch = 4u)),
+            "cursor" to codecOverride(decoded = expected.copy(recordId = "call:43", cursor = CallLogCursor(1_700, 43))),
+            "revision" to codecOverride(decoded = expected.copy(captureRevision = 8u, policyRevision = 8u)),
+        )
+
+        cases.forEach { (label, injectedCodec) ->
+            val outbox = RecordingOutbox()
+            val state = RecordingState()
+            val dispatcher = RecordingDispatcher(result = CapabilityDispatchResult(0, 0, null))
+            val result = coordinator(
+                provider = provider(flowOf(event(42, 1_700))),
+                outbox = outbox,
+                state = state,
+                dispatcher = dispatcher,
+                eventCodec = injectedCodec,
+            ).runOnce(subscription())
+
+            assertEquals(label, CallLogSyncFailure.CAPTURE_FAILURE, result.failure)
+            assertEquals(label, 1, result.captured)
+            assertEquals(label, 0, result.enqueued)
+            assertTrue(label, outbox.entries().isEmpty())
+            assertEquals(label, null, state.snapshot()!!.cursor)
+        }
+    }
+
+    @Test
+    fun `new wire verification cancellation stays cancelled before enqueue or dispatch`() = runBlocking {
+        val outbox = RecordingOutbox()
+        val dispatcher = RecordingDispatcher()
+        val cancellingCodec = object : CallLogEventCodec {
+            override fun encode(eventId: String, record: CallsPayload, sourceEpoch: ULong, policyRevision: ULong): ByteArray =
+                codec.encode(eventId, record, sourceEpoch, policyRevision)
+
+            override fun decode(wire: ByteArray): DecodedCallLogRecord =
+                throw CancellationException("codec private")
+        }
+
+        val result = coordinator(
+            provider = provider(flowOf(event(42, 1_700))),
+            outbox = outbox,
+            dispatcher = dispatcher,
+            eventCodec = cancellingCodec,
+        ).runOnce(subscription())
+
+        assertEquals(CallLogSyncFailure.CANCELLED, result.failure)
+        assertTrue(outbox.entries().isEmpty())
+        assertEquals(0, dispatcher.calls)
     }
 
     @Test
@@ -311,6 +459,17 @@ class CallLogAutoSyncCoordinatorTest {
     }
 
     @Test
+    fun `coordinator audit errors remain fatal`() {
+        val coordinator = coordinator(
+            auditSink = CallLogAuditSink { throw AssertionError("fatal audit") },
+        )
+
+        assertThrows(AssertionError::class.java) {
+            runBlocking { coordinator.runOnce(subscription()) }
+        }
+    }
+
+    @Test
     fun `quiescence and run share one mutex in both directions`() = runBlocking {
         val captureEntered = CompletableDeferred<Unit>()
         val releaseCapture = CompletableDeferred<Unit>()
@@ -354,16 +513,17 @@ class CallLogAutoSyncCoordinatorTest {
     private fun coordinator(
         provider: CallsCapabilityProvider = provider(emptyFlow()),
         outbox: RecordingOutbox = RecordingOutbox(),
-        state: RecordingState = RecordingState(),
+        state: CallLogSyncStateStore = RecordingState(),
         dispatcher: RecordingDispatcher = RecordingDispatcher(),
         gate: CapabilityEventEgressGate = CapabilityEventEgressGate { true },
+        eventCodec: CallLogEventCodec = codec,
         auditSink: CallLogAuditSink = CallLogAuditSink {},
         clock: () -> Long = { 0L },
     ) = CallLogAutoSyncCoordinator(
         provider = provider,
         outbox = outbox,
         stateStore = state,
-        codec = codec,
+        codec = eventCodec,
         dispatcher = dispatcher,
         currentPolicyGate = gate,
         auditSink = auditSink,
@@ -418,6 +578,17 @@ class CallLogAutoSyncCoordinatorTest {
         policyRevision: ULong = event.policyRevision,
         wire: ByteArray = event.eventWire,
     ) = CapabilityDurableEvent(eventId, capability, recordId, policyRevision, wire)
+
+    private fun codecOverride(
+        encodedWire: ByteArray? = null,
+        decoded: DecodedCallLogRecord? = null,
+    ) = object : CallLogEventCodec {
+        override fun encode(eventId: String, record: CallsPayload, sourceEpoch: ULong, policyRevision: ULong): ByteArray =
+            encodedWire?.copyOf() ?: codec.encode(eventId, record, sourceEpoch, policyRevision)
+
+        override fun decode(wire: ByteArray): DecodedCallLogRecord =
+            decoded ?: codec.decode(wire)
+    }
 
     private fun subscription(): AuthorizedAutoSendSubscription {
         val policy = CallLogTestFixtures.policy()

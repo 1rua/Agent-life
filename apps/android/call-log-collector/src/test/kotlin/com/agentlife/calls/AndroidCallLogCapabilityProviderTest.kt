@@ -11,6 +11,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -150,6 +151,55 @@ class AndroidCallLogCapabilityProviderTest {
     }
 
     @Test
+    fun `auto-send cancellation survives recoverable audit clock and sink failures`() {
+        val policy = CallLogTestFixtures.policy()
+        val cases = listOf(
+            "clock" to Pair<() -> Long, CallLogAuditSink>(
+                cancellingCompletionClock(),
+                CallLogAuditSink {},
+            ),
+            "sink" to Pair(
+                { 0L },
+                CallLogAuditSink { throw CancellationException("audit sink private") },
+            ),
+        )
+
+        cases.forEach { (label, auditDependencies) ->
+            val sourceCancellation = CancellationException("source cancellation")
+            val provider = AndroidCallLogCapabilityProvider(
+                reader = CallLogTestFixtures.reader { throw sourceCancellation },
+                settings = CallLogTestFixtures.authority(policy),
+                availability = CallLogAvailabilitySource { CapabilityAvailability.READY },
+                syncState = RecordingSyncState(CallLogSyncState(3u, null, policy.policyRevision)),
+                elapsedRealtimeMs = auditDependencies.first,
+                auditSink = auditDependencies.second,
+            )
+
+            val thrown = assertThrows(CancellationException::class.java) {
+                runBlocking { provider.observeAutoSend(CallLogTestFixtures.autoScope(policy)).toList() }
+            }
+
+            assertSame(label, sourceCancellation, thrown)
+        }
+    }
+
+    @Test
+    fun `audit errors remain fatal`() {
+        val policy = CallLogTestFixtures.policy()
+        val provider = AndroidCallLogCapabilityProvider(
+            reader = CallLogTestFixtures.reader { emptyList() },
+            settings = CallLogTestFixtures.authority(policy),
+            availability = CallLogAvailabilitySource { CapabilityAvailability.READY },
+            syncState = RecordingSyncState(CallLogSyncState(3u, null, policy.policyRevision)),
+            auditSink = CallLogAuditSink { throw AssertionError("fatal audit") },
+        )
+
+        assertThrows(AssertionError::class.java) {
+            runBlocking { provider.observeAutoSend(CallLogTestFixtures.autoScope(policy)).toList() }
+        }
+    }
+
+    @Test
     fun `audit uses fixed safe fields and monotonic latency buckets`() = runBlocking {
         val audit = mutableListOf<CallLogAuditEvent>()
         val policy = CallLogTestFixtures.policy()
@@ -186,6 +236,13 @@ class AndroidCallLogCapabilityProviderTest {
         syncState = sync,
         nowEpochMs = { 1_000L },
     )
+
+    private fun cancellingCompletionClock(): () -> Long {
+        var calls = 0
+        return {
+            if (calls++ == 0) 0L else throw CancellationException("audit clock private")
+        }
+    }
 
     private class RecordingSyncState(private val state: CallLogSyncState?) : CallLogSyncStateStore {
         var mutations = 0

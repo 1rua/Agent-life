@@ -227,16 +227,20 @@ class AndroidCallLogCapabilityProvider(
         acknowledgedCount: Int,
         started: Long,
     ) {
-        auditSink.record(
-            CallLogAuditEvent(
-                policyRevision = revision,
-                resultCode = result,
-                readCount = readCount,
-                acceptedCount = acceptedCount,
-                acknowledgedCount = acknowledgedCount,
-                latencyBucket = callLogLatencyBucket((elapsedRealtimeMs() - started).coerceAtLeast(0L)),
-            ),
-        )
+        try {
+            auditSink.record(
+                CallLogAuditEvent(
+                    policyRevision = revision,
+                    resultCode = result,
+                    readCount = readCount,
+                    acceptedCount = acceptedCount,
+                    acknowledgedCount = acknowledgedCount,
+                    latencyBucket = callLogLatencyBucket((elapsedRealtimeMs() - started).coerceAtLeast(0L)),
+                ),
+            )
+        } catch (_: Exception) {
+            // Fixed allowlisted audit fields are best effort; fatal Errors still propagate.
+        }
     }
 
     private data class PolicyFence(
