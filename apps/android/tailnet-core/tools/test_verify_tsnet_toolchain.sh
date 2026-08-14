@@ -37,6 +37,8 @@ cp "$bootstrap_source" "$tools_dir/bootstrap-tsnet-toolchain.sh"
 
 printf 'fixture go archive\n' >"$downloads/go1.26.5.linux-amd64.tar.gz"
 printf 'fixture ndk archive\n' >"$downloads/android-ndk-r27c-linux.zip"
+fixture_go_archive_sha="$(sha256sum "$downloads/go1.26.5.linux-amd64.tar.gz" | awk '{print $1}')"
+fixture_ndk_archive_sha="$(sha256sum "$downloads/android-ndk-r27c-linux.zip" | awk '{print $1}')"
 printf 'android api 34\n' >"$sdk_root/platforms/android-34/package.xml"
 printf 'Pkg.Revision=1\nAndroidVersion.ApiLevel=34\n' >"$sdk_root/platforms/android-34/source.properties"
 printf 'android api 35\n' >"$sdk_root/platforms/android-35/package.xml"
@@ -128,7 +130,7 @@ data = {
   "toolchain": {
     "go": {"archive": "go1.26.5.linux-amd64.tar.gz", "sha256": go_archive},
     "gomobile": {"module": "golang.org/x/mobile", "tools": ["gomobile", "gobind"]},
-    "androidNdk": {"archive": "android-ndk-r27c-linux.zip", "revision": "27.2.12479018", "sha256": ndk_archive, "provisionalDigest": True},
+    "androidNdk": {"archive": "android-ndk-r27c-linux.zip", "revision": "27.2.12479018", "sha256": ndk_archive, "provisionalDigest": False},
     "jdk": {"distribution": "Temurin", "version": "17.0.20+8"},
     "androidSdk": {"gomobileApi": 34, "compileSdk": 35},
     "gradle": {"agp": "8.9.2", "gradle": "8.12", "kotlin": "2.1.20"}},
@@ -150,6 +152,12 @@ PY
 
 write_lock "$lock_file"
 
+git init -q "$fixture_root"
+git -C "$fixture_root" config user.name 'Tsnet Toolchain Test'
+git -C "$fixture_root" config user.email 'tsnet-toolchain@example.invalid'
+git -C "$fixture_root" add apps
+git -C "$fixture_root" commit -q -m fixture
+
 pass_count=0
 pass() {
   pass_count=$((pass_count + 1))
@@ -160,7 +168,9 @@ run_verify() {
   local output="$1"
   local env_file="$2"
   shift 2
-  env -i PATH="${PATH:-/usr/bin:/bin}" "$@" bash "$tools_dir/verify-tsnet-toolchain.sh" \
+  env -i PATH="${PATH:-/usr/bin:/bin}" "$@" \
+    bash -c 'source "$1"; shift; verify_tsnet_toolchain "$@"' bash \
+    "$tools_dir/verify-tsnet-toolchain.sh" "$fixture_root" "$fixture_go_archive_sha" "$fixture_ndk_archive_sha" \
     --lock "$lock_file" --emit-env "$env_file" >"$output" 2>&1
 }
 
@@ -205,21 +215,35 @@ assert seen == allowed
 PY
 pass 'locked fixture verifies offline and emits only absolute nonsecret paths'
 
-git init -q "$fixture_root"
-git -C "$fixture_root" config user.name 'Tsnet Toolchain Test'
-git -C "$fixture_root" config user.email 'tsnet-toolchain@example.invalid'
-git -C "$fixture_root" add apps
-git -C "$fixture_root" commit -q -m fixture
 linked_root="$tmp_root/linked-worktree"
 git -C "$fixture_root" worktree add -q -b linked-fixture "$linked_root"
 linked_output="$tmp_root/linked-output.txt"
 linked_env="$tmp_root/linked-env.sh"
-env -i PATH="${PATH:-/usr/bin:/bin}" bash "$linked_root/apps/android/tailnet-core/tools/verify-tsnet-toolchain.sh" \
+env -i PATH="${PATH:-/usr/bin:/bin}" \
+  bash -c 'source "$1"; shift; verify_tsnet_toolchain "$@"' bash \
+  "$linked_root/apps/android/tailnet-core/tools/verify-tsnet-toolchain.sh" \
+  "$linked_root" "$fixture_go_archive_sha" "$fixture_ndk_archive_sha" \
   --lock "$linked_root/apps/android/tailnet-core/native/tsnetbridge/tsnet-aar.lock.json" \
   --emit-env "$linked_env" >"$linked_output" 2>&1
 grep -Fx 'TSNET_TOOLCHAIN_READY' "$linked_output" >/dev/null
 grep -F "$(printf '%q' "$fixture_root/.toolchains/go-1.26.5")" "$linked_env" >/dev/null
 pass 'linked worktrees resolve the shared git-common-dir toolchain root'
+
+hostile_git="$tmp_root/hostile-git"
+git init -q "$hostile_git"
+hostile_output="$tmp_root/hostile-output.txt"
+hostile_env="$tmp_root/hostile-env.sh"
+env -i PATH="${PATH:-/usr/bin:/bin}" \
+  GIT_DIR="$hostile_git/.git" GIT_COMMON_DIR="$hostile_git/.git" \
+  GIT_WORK_TREE="$hostile_git" GIT_CEILING_DIRECTORIES="$tmp_root" \
+  bash -c 'source "$1"; shift; verify_tsnet_toolchain "$@"' bash \
+  "$linked_root/apps/android/tailnet-core/tools/verify-tsnet-toolchain.sh" \
+  "$linked_root" "$fixture_go_archive_sha" "$fixture_ndk_archive_sha" \
+  --lock "$linked_root/apps/android/tailnet-core/native/tsnetbridge/tsnet-aar.lock.json" \
+  --emit-env "$hostile_env" >"$hostile_output" 2>&1
+grep -Fx 'TSNET_TOOLCHAIN_READY' "$hostile_output" >/dev/null
+grep -F "$(printf '%q' "$fixture_root/.toolchains/go-1.26.5")" "$hostile_env" >/dev/null
+pass 'hostile ambient Git variables cannot redirect the shared toolchain root'
 
 rmdir "$go_cache"
 expect_blocked 'offline verifier rejects a missing cache without creating it' 'locked cache directory is missing'
@@ -233,6 +257,96 @@ printf 'Pkg.Revision=1\nAndroidVersion.ApiLevel=34\n' >"$sdk_root/platforms/andr
 write_lock "$lock_file"
 
 cp "$lock_file" "$tmp_root/good.lock"
+
+poison_marker="$tmp_root/poison-marker"
+cp "$go_root/bin/go" "$tmp_root/good-go"
+poison_go() {
+  cat >"$go_root/bin/go" <<EOF
+#!/usr/bin/env bash
+printf 'executed poisoned Go\n' >>'$poison_marker'
+if [[ "\${1:-}" == version && "\${2:-}" == -m ]]; then
+  printf '%s\n' 'path golang.org/x/mobile/cmd/tool' 'mod golang.org/x/mobile v0.0.0-20240806205939-81131f6468ab h1:KONOFF8Uy3b60HEzOsGnNghORNhY4ImyOx0PGm73K9k='
+else
+  printf 'go version go1.26.5 linux/amd64\n'
+fi
+EOF
+  chmod 0755 "$go_root/bin/go"
+}
+
+poison_go
+expect_blocked 'Go digest mismatch blocks before executing poisoned Go' 'Go binary digest does not match resolved lock'
+[[ ! -e "$poison_marker" ]] || { echo 'verifier executed poisoned Go before digest admission' >&2; exit 1; }
+cp "$tmp_root/good-go" "$go_root/bin/go"
+
+cp "$jdk_root/bin/java" "$tmp_root/good-java"
+cat >"$jdk_root/bin/java" <<EOF
+#!/usr/bin/env bash
+printf 'executed poisoned Java\n' >>'$poison_marker'
+printf 'openjdk version "17.0.20"; OpenJDK Runtime Environment Temurin-17.0.20+8\n' >&2
+EOF
+chmod 0755 "$jdk_root/bin/java"
+expect_blocked 'Java digest mismatch blocks before executing poisoned Java' 'Java binary digest does not match resolved lock'
+[[ ! -e "$poison_marker" ]] || { echo 'verifier executed poisoned Java before digest admission' >&2; exit 1; }
+cp "$tmp_root/good-java" "$jdk_root/bin/java"
+
+cp "$tmp_root/good.lock" "$lock_file"
+python3 - "$lock_file" <<'PY'
+import json, pathlib, sys
+path = pathlib.Path(sys.argv[1])
+data = json.loads(path.read_text())
+data["toolchain"]["androidNdk"]["provisionalDigest"] = True
+data.pop("resolvedDigests")
+path.write_text(json.dumps(data, indent=2) + "\n")
+PY
+poison_go
+expect_blocked 'missing resolved digests block before executing any locked tool' 'lock missing keys: resolvedDigests'
+[[ ! -e "$poison_marker" ]] || { echo 'unresolved verifier lock executed a tool' >&2; exit 1; }
+cp "$tmp_root/good-go" "$go_root/bin/go"
+
+cp "$tmp_root/good.lock" "$lock_file"
+python3 - "$lock_file" <<'PY'
+import json, pathlib, sys
+path = pathlib.Path(sys.argv[1])
+data = json.loads(path.read_text())
+data["toolchain"]["androidNdk"]["provisionalDigest"] = True
+path.write_text(json.dumps(data, indent=2) + "\n")
+PY
+poison_go
+expect_blocked 'a complete resolved section remains blocked while NDK digest is provisional' 'toolchain.androidNdk.provisionalDigest'
+[[ ! -e "$poison_marker" ]] || { echo 'provisional lock executed a tool' >&2; exit 1; }
+cp "$tmp_root/good-go" "$go_root/bin/go"
+
+cp "$tmp_root/good.lock" "$lock_file"
+python3 - "$lock_file" <<'PY'
+import json, pathlib, sys
+path = pathlib.Path(sys.argv[1])
+data = json.loads(path.read_text())
+replacement = "a" * 64
+data["toolchain"]["go"]["sha256"] = replacement
+data["resolvedDigests"]["go"]["archiveSha256"] = replacement
+path.write_text(json.dumps(data, indent=2) + "\n")
+PY
+poison_go
+expect_blocked 'coordinated Go archive SHA replacement is rejected canonically' 'toolchain.go.sha256 does not match the canonical value'
+[[ ! -e "$poison_marker" ]] || { echo 'coordinated Go SHA lock executed a tool' >&2; exit 1; }
+cp "$tmp_root/good-go" "$go_root/bin/go"
+
+cp "$tmp_root/good.lock" "$lock_file"
+python3 - "$lock_file" <<'PY'
+import json, pathlib, sys
+path = pathlib.Path(sys.argv[1])
+data = json.loads(path.read_text())
+replacement = "b" * 64
+data["toolchain"]["androidNdk"]["sha256"] = replacement
+data["resolvedDigests"]["androidNdk"]["archiveSha256"] = replacement
+path.write_text(json.dumps(data, indent=2) + "\n")
+PY
+poison_go
+expect_blocked 'coordinated NDK archive SHA replacement is rejected canonically' 'toolchain.androidNdk.sha256 does not match the canonical value'
+[[ ! -e "$poison_marker" ]] || { echo 'coordinated NDK SHA lock executed a tool' >&2; exit 1; }
+cp "$tmp_root/good-go" "$go_root/bin/go"
+
+cp "$tmp_root/good.lock" "$lock_file"
 write_go 'go version go1.26.5-X:nodwarf5 linux/amd64'
 write_lock "$lock_file"
 expect_blocked 'custom Go version suffix is rejected' 'stock go1.26.5'
@@ -291,6 +405,7 @@ path = pathlib.Path(sys.argv[1])
 data = json.loads(path.read_text())
 data["toolchain"]["go"]["sha256"] = "5c2c3b16caefa1d968a94c1daca04a7ca301a496d9b086e17ad77bb81393f053"
 data["toolchain"]["androidNdk"]["sha256"] = "59c2f6dc96743b5daf5d1626684640b20a6bd2b1d85b13156b90333741bad5cc"
+data["toolchain"]["androidNdk"]["provisionalDigest"] = True
 data.pop("resolvedDigests", None)
 path.write_text(json.dumps(data, indent=2) + "\n")
 PY
@@ -346,5 +461,73 @@ grep -F 'android-34' "$tmp_root/bootstrap-prerequisite-output.txt" >/dev/null
 }
 mv "$tmp_root/bootstrap-missing-android-34" "$sdk_root/platforms/android-34"
 pass 'bootstrap validates controller-provided SDK packages before downloading'
+
+run_bootstrap_fixture() {
+  local output="$1"
+  shift
+  env -i PATH="${PATH:-/usr/bin:/bin}" "$@" \
+    bash -c 'source "$1"; shift; bootstrap_tsnet_toolchain "$@"' bash \
+    "$tools_dir/bootstrap-tsnet-toolchain.sh" "$fixture_root" "$fixture_go_archive_sha" "$fixture_ndk_archive_sha" \
+    >"$output" 2>&1
+}
+
+write_go 'go version go1.26.5 linux/amd64'
+write_java 'openjdk version "17.0.20" 2026-07-14 LTS; OpenJDK Runtime Environment Temurin-17.0.20+8 (build 17.0.20+8)'
+printf 'fixture go archive\n' >"$downloads/go1.26.5.linux-amd64.tar.gz"
+write_lock "$lock_file"
+python3 - "$lock_file" <<'PY'
+import json, pathlib, sys
+path = pathlib.Path(sys.argv[1])
+data = json.loads(path.read_text())
+data["toolchain"]["androidNdk"]["provisionalDigest"] = True
+data.pop("resolvedDigests")
+path.write_text(json.dumps(data, indent=2) + "\n")
+PY
+cp "$lock_file" "$tmp_root/bootstrap-unresolved.lock"
+cat >"$go_root/bin/go" <<EOF
+#!/usr/bin/env bash
+printf 'bootstrap executed poisoned pre-existing Go\n' >>'$poison_marker'
+printf 'go version go1.26.5 linux/amd64\n'
+EOF
+chmod 0755 "$go_root/bin/go"
+status=0
+run_bootstrap_fixture "$tmp_root/bootstrap-preexisting-go.out" || status=$?
+[[ "$status" -eq 2 ]] || { cat "$tmp_root/bootstrap-preexisting-go.out" >&2; exit 1; }
+grep -F 'unverified pre-existing Go install' "$tmp_root/bootstrap-preexisting-go.out" >/dev/null
+[[ ! -e "$poison_marker" ]] || { echo 'bootstrap executed an unverified pre-existing Go install' >&2; exit 1; }
+cmp -s "$lock_file" "$tmp_root/bootstrap-unresolved.lock"
+pass 'bootstrap rejects an unverified pre-existing Go install without executing it or writing the lock'
+
+mv "$go_root" "$tmp_root/absent-go-root"
+status=0
+run_bootstrap_fixture "$tmp_root/bootstrap-preexisting-ndk.out" || status=$?
+[[ "$status" -eq 2 ]] || { cat "$tmp_root/bootstrap-preexisting-ndk.out" >&2; exit 1; }
+grep -F 'unverified pre-existing NDK install' "$tmp_root/bootstrap-preexisting-ndk.out" >/dev/null
+cmp -s "$lock_file" "$tmp_root/bootstrap-unresolved.lock"
+mv "$tmp_root/absent-go-root" "$go_root"
+pass 'bootstrap rejects an unverified pre-existing correctly named NDK without writing the lock'
+
+write_go 'go version go1.26.5 linux/amd64'
+write_lock "$lock_file"
+cp "$lock_file" "$tmp_root/bootstrap-resolved.lock"
+printf 'tampered Go bytes\n' >>"$go_root/bin/go"
+status=0
+run_bootstrap_fixture "$tmp_root/bootstrap-resolved-go.out" || status=$?
+[[ "$status" -eq 2 ]] || { cat "$tmp_root/bootstrap-resolved-go.out" >&2; exit 1; }
+grep -F 'pre-existing Go install digest does not match resolved lock' "$tmp_root/bootstrap-resolved-go.out" >/dev/null
+[[ ! -e "$poison_marker" ]] || { echo 'bootstrap executed a mismatched pre-existing Go install' >&2; exit 1; }
+cmp -s "$lock_file" "$tmp_root/bootstrap-resolved.lock"
+pass 'bootstrap rejects changed pre-existing Go against old resolved digests'
+
+cp "$tmp_root/good-go" "$go_root/bin/go"
+write_lock "$lock_file"
+cp "$lock_file" "$tmp_root/bootstrap-resolved-ndk.lock"
+printf 'tampered NDK bytes\n' >>"$ndk_root/NOTICE"
+status=0
+run_bootstrap_fixture "$tmp_root/bootstrap-resolved-ndk.out" || status=$?
+[[ "$status" -eq 2 ]] || { cat "$tmp_root/bootstrap-resolved-ndk.out" >&2; exit 1; }
+grep -F 'pre-existing NDK install digest does not match resolved lock' "$tmp_root/bootstrap-resolved-ndk.out" >/dev/null
+cmp -s "$lock_file" "$tmp_root/bootstrap-resolved-ndk.lock"
+pass 'bootstrap rejects changed pre-existing NDK against old resolved digests'
 
 printf '1..%d\n' "$pass_count"

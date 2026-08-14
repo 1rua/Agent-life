@@ -19,15 +19,15 @@ fail() {
   exit 2
 }
 
-[[ "${1:-}" == '--download' && $# -eq 1 ]] \
-  || fail 'controller-only bootstrap requires exactly --download'
+bootstrap_tsnet_toolchain() (
+repo_root="$1"
+expected_go_archive_sha="$2"
+expected_ndk_archive_sha="$3"
 
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
-toolchain_owner="$repo_root"
-if common_git_dir="$(git -C "$repo_root" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" \
-  && [[ "$(basename "$common_git_dir")" == '.git' ]]; then
-  toolchain_owner="$(dirname "$common_git_dir")"
-fi
+verifier="$repo_root/apps/android/tailnet-core/tools/verify-tsnet-toolchain.sh"
+[[ -x "$verifier" && ! -L "$verifier" ]] || fail "offline verifier is missing or is not executable: $verifier"
+source "$verifier"
+toolchain_owner="$(resolve_toolchain_owner "$repo_root")"
 toolchains="$toolchain_owner/.toolchains"
 downloads="$toolchains/downloads"
 go_root="$toolchains/go-1.26.5"
@@ -40,15 +40,15 @@ go_cache="$toolchains/go-build-cache"
 go_path="$toolchains/go-workspace"
 source_checkout="$repo_root/third_party/tailscale"
 lock_file="$repo_root/apps/android/tailnet-core/native/tsnetbridge/tsnet-aar.lock.json"
-verifier="$repo_root/apps/android/tailnet-core/tools/verify-tsnet-toolchain.sh"
 
 for utility in curl sha256sum tar unzip python3 git mktemp; do
   command -v "$utility" >/dev/null 2>&1 || fail "$utility is required by the controller-only bootstrap"
 done
 [[ -f "$lock_file" && ! -L "$lock_file" ]] || fail "lock file is missing or is a symlink: $lock_file"
-[[ -x "$verifier" && ! -L "$verifier" ]] || fail "offline verifier is missing or is not executable: $verifier"
 
-if ! python3 - "$lock_file" "$GO_ARCHIVE_SHA256" "$NDK_ARCHIVE_SHA256" <<'PY'
+lock_state_file="$(mktemp)"
+trap 'rm -f -- "$lock_state_file"' EXIT
+if ! python3 - "$lock_file" "$expected_go_archive_sha" "$expected_ndk_archive_sha" >"$lock_state_file" <<'PY'
 import json, pathlib, sys
 path, go_sha, ndk_sha = sys.argv[1:]
 try:
@@ -57,16 +57,40 @@ try:
     assert data["toolchain"]["androidNdk"]["archive"] == "android-ndk-r27c-linux.zip"
     assert data["toolchain"]["androidNdk"]["revision"] == "27.2.12479018"
     assert data["toolchain"]["androidNdk"]["sha256"] == ndk_sha
-    assert isinstance(data["toolchain"]["androidNdk"]["provisionalDigest"], bool)
     assert data["toolchain"]["jdk"] == {"distribution": "Temurin", "version": "17.0.20+8"}
     assert data["toolchain"]["androidSdk"] == {"gomobileApi": 34, "compileSdk": 35}
     assert data["dependencies"]["golang.org/x/mobile"] == {"version": "v0.0.0-20240806205939-81131f6468ab", "sum": "h1:KONOFF8Uy3b60HEzOsGnNghORNhY4ImyOx0PGm73K9k="}
+    resolved = data.get("resolvedDigests")
+    provisional = data["toolchain"]["androidNdk"]["provisionalDigest"]
+    if resolved is None:
+        assert provisional is True
+        print("unresolved")
+    else:
+        assert provisional is False
+        assert resolved["go"]["archiveSha256"] == go_sha
+        assert resolved["androidNdk"]["archiveSha256"] == ndk_sha
+        assert resolved["gomobile"]["moduleSum"] == "h1:KONOFF8Uy3b60HEzOsGnNghORNhY4ImyOx0PGm73K9k="
+        print("resolved")
+        print(resolved["go"]["binarySha256"])
+        print(resolved["go"]["directoryManifestSha256"])
+        print(resolved["gomobile"]["gomobileBinarySha256"])
+        print(resolved["gomobile"]["gobindBinarySha256"])
+        print(resolved["gomobile"]["directoryManifestSha256"])
+        print(resolved["androidNdk"]["directoryManifestSha256"])
+        print(resolved["androidSdk"]["api34DirectoryManifestSha256"])
+        print(resolved["androidSdk"]["api35DirectoryManifestSha256"])
+        print(resolved["jdk"]["javaBinarySha256"])
+        print(resolved["jdk"]["directoryManifestSha256"])
 except (AssertionError, KeyError, OSError, json.JSONDecodeError, TypeError):
     raise SystemExit(1)
 PY
 then
   fail 'lock does not contain the immutable controller toolchain values'
 fi
+mapfile -t lock_state <"$lock_state_file"
+[[ "${#lock_state[@]}" -eq 1 || "${#lock_state[@]}" -eq 11 ]] \
+  || fail 'lock resolved digest state is incomplete'
+resolution_state="${lock_state[0]}"
 
 mkdir -p -- "$downloads" "$sdk_root/ndk" "$module_cache" "$go_cache" "$go_path"
 
@@ -81,9 +105,6 @@ for platform_spec in android-34:34 android-35:35; do
 done
 [[ -d "$jdk_root" && ! -L "$jdk_root" && -x "$jdk_root/bin/java" && ! -L "$jdk_root/bin/java" ]] \
   || fail "controller-provided Temurin JDK is missing or unsafe: $jdk_root"
-java_output="$("$jdk_root/bin/java" -version 2>&1)" || fail 'controller-provided JDK cannot report its version'
-[[ "$java_output" == *'openjdk version "17.0.20"'* && "$java_output" == *'Temurin-17.0.20+8'* ]] \
-  || fail 'controller-provided JDK must be Temurin 17.0.20+8'
 
 download_verified() {
   local name="$1"
@@ -117,17 +138,43 @@ download_verified() {
   mv -f -- "$candidate" "$destination"
 }
 
-download_verified "$GO_ARCHIVE" "$GO_URL" "$GO_ARCHIVE_SHA256"
-download_verified "$NDK_ARCHIVE" "$NDK_URL" "$NDK_ARCHIVE_SHA256"
+download_verified "$GO_ARCHIVE" "$GO_URL" "$expected_go_archive_sha"
+download_verified "$NDK_ARCHIVE" "$NDK_URL" "$expected_ndk_archive_sha"
+
+if [[ "$resolution_state" == 'unresolved' ]]; then
+  [[ ! -e "$go_root" ]] || fail "unverified pre-existing Go install requires controller review: $go_root"
+  [[ ! -e "$ndk_root" ]] || fail "unverified pre-existing NDK install requires controller review: $ndk_root"
+  [[ ! -e "$mobile_root" ]] || fail "unverified pre-existing gomobile install requires controller review: $mobile_root"
+else
+  [[ -d "$go_root" && ! -L "$go_root" && -x "$go_root/bin/go" && ! -L "$go_root/bin/go" ]] \
+    || fail "resolved pre-existing Go install is missing or unsafe: $go_root"
+  [[ "$(sha256sum -- "$go_root/bin/go" | awk '{print $1}')" == "${lock_state[1]}" \
+    && "$(directory_manifest_sha256 "$go_root")" == "${lock_state[2]}" ]] \
+    || fail 'pre-existing Go install digest does not match resolved lock'
+  [[ -d "$mobile_root" && ! -L "$mobile_root" ]] \
+    || fail "resolved pre-existing gomobile install is missing or unsafe: $mobile_root"
+  [[ "$(sha256sum -- "$mobile_root/bin/gomobile" | awk '{print $1}')" == "${lock_state[3]}" \
+    && "$(sha256sum -- "$mobile_root/bin/gobind" | awk '{print $1}')" == "${lock_state[4]}" \
+    && "$(directory_manifest_sha256 "$mobile_root")" == "${lock_state[5]}" ]] \
+    || fail 'pre-existing gomobile install digest does not match resolved lock'
+  [[ -d "$ndk_root" && ! -L "$ndk_root" \
+    && "$(directory_manifest_sha256 "$ndk_root")" == "${lock_state[6]}" ]] \
+    || fail 'pre-existing NDK install digest does not match resolved lock'
+  [[ "$(directory_manifest_sha256 "$sdk_root/platforms/android-34")" == "${lock_state[7]}" \
+    && "$(directory_manifest_sha256 "$sdk_root/platforms/android-35")" == "${lock_state[8]}" ]] \
+    || fail 'controller-provided Android SDK digest does not match resolved lock'
+  [[ "$(sha256sum -- "$jdk_root/bin/java" | awk '{print $1}')" == "${lock_state[9]}" \
+    && "$(directory_manifest_sha256 "$jdk_root")" == "${lock_state[10]}" ]] \
+    || fail 'controller-provided JDK digest does not match resolved lock'
+fi
+
+java_output="$("$jdk_root/bin/java" -version 2>&1)" || fail 'controller-provided JDK cannot report its version'
+[[ "$java_output" == *'openjdk version "17.0.20"'* && "$java_output" == *'Temurin-17.0.20+8'* ]] \
+  || fail 'controller-provided JDK must be Temurin 17.0.20+8'
 
 install_go() {
   local version_output=''
   if [[ -e "$go_root" ]]; then
-    [[ -d "$go_root" && ! -L "$go_root" && -x "$go_root/bin/go" && ! -L "$go_root/bin/go" ]] \
-      || fail "existing locked Go install is incomplete or unsafe: $go_root"
-    version_output="$("$go_root/bin/go" version 2>/dev/null)" || fail 'existing locked Go cannot report its version'
-    [[ "$version_output" == 'go version go1.26.5 linux/amd64' ]] \
-      || fail "existing locked Go is not stock go1.26.5: $version_output"
     return
   fi
 
@@ -158,9 +205,6 @@ install_ndk() {
   local extract_root=''
   local extracted=''
   if [[ -e "$ndk_root" ]]; then
-    [[ -d "$ndk_root" && ! -L "$ndk_root" ]] || fail "existing NDK install is not a real directory: $ndk_root"
-    grep -Eq '^[[:space:]]*Pkg\.Revision[[:space:]]*=[[:space:]]*27\.2\.12479018[[:space:]]*$' "$ndk_root/source.properties" \
-      || fail "existing NDK does not report revision $NDK_REVISION"
     return
   fi
 
@@ -248,30 +292,8 @@ fi
 rm -rf -- "$module_workspace"
 trap - EXIT
 
-directory_manifest_sha256() {
-  python3 - "$1" <<'PY'
-import hashlib, os, pathlib, stat, sys
-root = pathlib.Path(sys.argv[1])
-rows = []
-for path in sorted(root.rglob("*"), key=lambda p: os.fsencode(p.relative_to(root).as_posix())):
-    relative = path.relative_to(root).as_posix()
-    info = path.lstat()
-    mode = stat.S_IMODE(info.st_mode)
-    if path.is_symlink():
-        kind, payload = "l", os.fsencode(os.readlink(path))
-    elif path.is_file():
-        kind, payload = "f", path.read_bytes()
-    elif path.is_dir():
-        kind, payload = "d", b""
-    else:
-        raise SystemExit(f"unsupported manifest entry: {relative}")
-    rows.append(f"{kind}\t{mode:04o}\t{len(payload)}\t{hashlib.sha256(payload).hexdigest()}\t{relative}\n".encode())
-print(hashlib.sha256(b"".join(rows)).hexdigest())
-PY
-}
-
 candidate_lock="$(mktemp "$(dirname "$lock_file")/.tsnet-aar.lock.candidate.XXXXXXXXXX")"
-python3 - "$lock_file" "$candidate_lock" \
+python3 - "$lock_file" "$candidate_lock" "$expected_go_archive_sha" "$expected_ndk_archive_sha" \
   "$(sha256sum -- "$go_binary" | awk '{print $1}')" "$(directory_manifest_sha256 "$go_root")" \
   "$(sha256sum -- "$mobile_root/bin/gomobile" | awk '{print $1}')" \
   "$(sha256sum -- "$mobile_root/bin/gobind" | awk '{print $1}')" "$(directory_manifest_sha256 "$mobile_root")" \
@@ -280,14 +302,14 @@ python3 - "$lock_file" "$candidate_lock" \
   "$(directory_manifest_sha256 "$sdk_root/platforms/android-35")" \
   "$(sha256sum -- "$jdk_root/bin/java" | awk '{print $1}')" "$(directory_manifest_sha256 "$jdk_root")" <<'PY'
 import json, pathlib, sys
-(source, target, go_binary, go_dir, gomobile_binary, gobind_binary, gomobile_dir,
+(source, target, go_archive, ndk_archive, go_binary, go_dir, gomobile_binary, gobind_binary, gomobile_dir,
  ndk_dir, api34_dir, api35_dir, java_binary, jdk_dir) = sys.argv[1:]
 data = json.loads(pathlib.Path(source).read_text())
 data["toolchain"]["androidNdk"]["provisionalDigest"] = False
 data["resolvedDigests"] = {
-    "go": {"archiveSha256": "5c2c3b16caefa1d968a94c1daca04a7ca301a496d9b086e17ad77bb81393f053", "binarySha256": go_binary, "directoryManifestSha256": go_dir},
+    "go": {"archiveSha256": go_archive, "binarySha256": go_binary, "directoryManifestSha256": go_dir},
     "gomobile": {"moduleSum": "h1:KONOFF8Uy3b60HEzOsGnNghORNhY4ImyOx0PGm73K9k=", "gomobileBinarySha256": gomobile_binary, "gobindBinarySha256": gobind_binary, "directoryManifestSha256": gomobile_dir},
-    "androidNdk": {"archiveSha256": "59c2f6dc96743b5daf5d1626684640b20a6bd2b1d85b13156b90333741bad5cc", "directoryManifestSha256": ndk_dir},
+    "androidNdk": {"archiveSha256": ndk_archive, "directoryManifestSha256": ndk_dir},
     "androidSdk": {"api34DirectoryManifestSha256": api34_dir, "api35DirectoryManifestSha256": api35_dir},
     "jdk": {"javaBinarySha256": java_binary, "directoryManifestSha256": jdk_dir},
 }
@@ -295,7 +317,8 @@ pathlib.Path(target).write_text(json.dumps(data, indent=2) + "\n")
 PY
 
 candidate_env="$(mktemp)"
-if ! bash "$verifier" --lock "$candidate_lock" --emit-env "$candidate_env"; then
+if ! verify_tsnet_toolchain "$repo_root" "$expected_go_archive_sha" "$expected_ndk_archive_sha" \
+  --lock "$candidate_lock" --emit-env "$candidate_env"; then
   rm -f -- "$candidate_lock" "$candidate_env"
   fail 'offline verifier rejected the independently recomputed candidate lock'
 fi
@@ -303,3 +326,11 @@ rm -f -- "$candidate_env"
 chmod --reference="$lock_file" "$candidate_lock"
 mv -f -- "$candidate_lock" "$lock_file"
 printf 'TSNET_TOOLCHAIN_BOOTSTRAPPED\n'
+)
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  [[ "${1:-}" == '--download' && $# -eq 1 ]] \
+    || fail 'controller-only bootstrap requires exactly --download'
+  repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
+  bootstrap_tsnet_toolchain "$repo_root" "$GO_ARCHIVE_SHA256" "$NDK_ARCHIVE_SHA256"
+fi

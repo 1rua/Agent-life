@@ -2,11 +2,13 @@
 set -euo pipefail
 
 readonly TSNET_GO_ARCHIVE='go1.26.5.linux-amd64.tar.gz'
+readonly TSNET_GO_ARCHIVE_SHA256='5c2c3b16caefa1d968a94c1daca04a7ca301a496d9b086e17ad77bb81393f053'
 readonly TSNET_GO_VERSION='1.26.5'
 readonly TSNET_GOMOBILE_MODULE='golang.org/x/mobile'
 readonly TSNET_GOMOBILE_VERSION='v0.0.0-20240806205939-81131f6468ab'
 readonly TSNET_GOMOBILE_SUM='h1:KONOFF8Uy3b60HEzOsGnNghORNhY4ImyOx0PGm73K9k='
 readonly TSNET_NDK_ARCHIVE='android-ndk-r27c-linux.zip'
+readonly TSNET_NDK_ARCHIVE_SHA256='59c2f6dc96743b5daf5d1626684640b20a6bd2b1d85b13156b90333741bad5cc'
 readonly TSNET_NDK_REVISION='27.2.12479018'
 readonly TSNET_JDK_VERSION='17.0.20+8'
 
@@ -55,9 +57,49 @@ print(hashlib.sha256(b"".join(rows)).hexdigest())
 PY
 }
 
+resolve_toolchain_owner() {
+  local checkout_root="$1"
+  local common_git_dir=''
+  local common_real=''
+  local checkout_git_real=''
+  local linked_git_dir=''
+  local linked_git_real=''
+
+  common_git_dir="$(env -u GIT_DIR -u GIT_COMMON_DIR -u GIT_WORK_TREE -u GIT_CEILING_DIRECTORIES \
+    git -C "$checkout_root" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" \
+    || fail "cannot resolve the checkout Git common directory: $checkout_root"
+  common_real="$(realpath -e "$common_git_dir")" \
+    || fail "cannot canonicalize the Git common directory: $common_git_dir"
+  [[ "$(basename "$common_real")" == '.git' ]] \
+    || fail "Git common directory is not a canonical project .git directory: $common_real"
+
+  if [[ -d "$checkout_root/.git" && ! -L "$checkout_root/.git" ]]; then
+    checkout_git_real="$(realpath -e "$checkout_root/.git")" \
+      || fail 'cannot canonicalize checkout .git directory'
+    [[ "$checkout_git_real" == "$common_real" ]] \
+      || fail 'standalone checkout .git does not match its Git common directory'
+  elif [[ -f "$checkout_root/.git" && ! -L "$checkout_root/.git" ]]; then
+    linked_git_dir="$(env -u GIT_DIR -u GIT_COMMON_DIR -u GIT_WORK_TREE -u GIT_CEILING_DIRECTORIES \
+      git -C "$checkout_root" rev-parse --path-format=absolute --git-dir 2>/dev/null)" \
+      || fail 'cannot resolve linked-worktree Git directory'
+    linked_git_real="$(realpath -e "$linked_git_dir")" \
+      || fail "cannot canonicalize linked-worktree Git directory: $linked_git_dir"
+    case "$linked_git_real" in
+      "$common_real"/worktrees/*) ;;
+      *) fail "linked-worktree Git directory is outside the common worktrees directory: $linked_git_real" ;;
+    esac
+  else
+    fail "checkout .git boundary is missing or is a symlink: $checkout_root/.git"
+  fi
+
+  dirname "$common_real"
+}
+
 verify_tsnet_toolchain() (
 repo_root="$1"
-shift
+expected_go_archive_sha="$2"
+expected_ndk_archive_sha="$3"
+shift 3
 
 lock_file=''
 emit_env=''
@@ -93,10 +135,13 @@ cleanup() {
 }
 trap cleanup EXIT
 
-if ! python3 - "$lock_file" >"$values_file" <<'PY'
+if ! python3 - "$lock_file" "$expected_go_archive_sha" "$expected_ndk_archive_sha" >"$values_file" <<'PY'
 import json
 import pathlib
 import sys
+
+expected_go_archive_sha = sys.argv[2]
+expected_ndk_archive_sha = sys.argv[3]
 
 def exact_keys(value, expected, path):
     if not isinstance(value, dict):
@@ -131,10 +176,13 @@ try:
     expected = {
         "schemaVersion": (data["schemaVersion"], 1),
         "toolchain.go.archive": (data["toolchain"]["go"]["archive"], "go1.26.5.linux-amd64.tar.gz"),
+        "toolchain.go.sha256": (data["toolchain"]["go"]["sha256"], expected_go_archive_sha),
         "toolchain.gomobile.module": (data["toolchain"]["gomobile"]["module"], "golang.org/x/mobile"),
         "toolchain.gomobile.tools": (data["toolchain"]["gomobile"]["tools"], ["gomobile", "gobind"]),
         "toolchain.androidNdk.archive": (data["toolchain"]["androidNdk"]["archive"], "android-ndk-r27c-linux.zip"),
         "toolchain.androidNdk.revision": (data["toolchain"]["androidNdk"]["revision"], "27.2.12479018"),
+        "toolchain.androidNdk.sha256": (data["toolchain"]["androidNdk"]["sha256"], expected_ndk_archive_sha),
+        "toolchain.androidNdk.provisionalDigest": (data["toolchain"]["androidNdk"]["provisionalDigest"], False),
         "toolchain.jdk.distribution": (data["toolchain"]["jdk"]["distribution"], "Temurin"),
         "toolchain.jdk.version": (data["toolchain"]["jdk"]["version"], "17.0.20+8"),
         "toolchain.androidSdk.gomobileApi": (data["toolchain"]["androidSdk"]["gomobileApi"], 34),
@@ -142,6 +190,8 @@ try:
         "toolchain.gradle": (data["toolchain"]["gradle"], {"agp": "8.9.2", "gradle": "8.12", "kotlin": "2.1.20"}),
         "dependencies.golang.org/x/mobile.version": (mobile["version"], "v0.0.0-20240806205939-81131f6468ab"),
         "dependencies.golang.org/x/mobile.sum": (mobile["sum"], "h1:KONOFF8Uy3b60HEzOsGnNghORNhY4ImyOx0PGm73K9k="),
+        "resolvedDigests.go.archiveSha256": (resolved["go"]["archiveSha256"], expected_go_archive_sha),
+        "resolvedDigests.androidNdk.archiveSha256": (resolved["androidNdk"]["archiveSha256"], expected_ndk_archive_sha),
     }
     for name, (actual, wanted) in expected.items():
         if actual != wanted:
@@ -175,11 +225,9 @@ ndk_archive_lock_sha="${values[1]}"
 mobile_version="${values[2]}"
 mobile_sum="${values[3]}"
 
-toolchain_owner="$repo_root"
-if common_git_dir="$(git -C "$repo_root" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" \
-  && [[ "$(basename "$common_git_dir")" == '.git' ]]; then
-  toolchain_owner="$(dirname "$common_git_dir")"
-fi
+command -v git >/dev/null 2>&1 || fail 'git is required to resolve the shared toolchain root'
+command -v realpath >/dev/null 2>&1 || fail 'realpath is required to resolve the shared toolchain root'
+toolchain_owner="$(resolve_toolchain_owner "$repo_root")"
 downloads="$toolchain_owner/.toolchains/downloads"
 go_root="$toolchain_owner/.toolchains/go-$TSNET_GO_VERSION"
 gomobile_root="$toolchain_owner/.toolchains/gomobile-$TSNET_GOMOBILE_VERSION"
@@ -227,18 +275,6 @@ actual_go_archive_sha="$(sha256_file "$go_archive")" || fail "cannot hash $TSNET
 actual_ndk_archive_sha="$(sha256_file "$ndk_archive")" || fail "cannot hash $TSNET_NDK_ARCHIVE"
 [[ "$actual_ndk_archive_sha" == "$ndk_archive_lock_sha" && "$actual_ndk_archive_sha" == "${values[11]}" ]] || fail "$TSNET_NDK_ARCHIVE digest does not match lock"
 
-go_version_output="$("$go_binary" version 2>/dev/null)" || fail 'locked Go executable cannot report its version'
-[[ "$go_version_output" == 'go version go1.26.5 linux/amd64' ]] || fail "locked Go must be stock go1.26.5 linux/amd64, got: $go_version_output"
-
-for tool in "$gomobile_binary" "$gobind_binary"; do
-  build_info="$("$go_binary" version -m "$tool" 2>/dev/null)" || fail "locked Go cannot inspect build metadata for $tool"
-  printf '%s\n' "$build_info" | awk -v module="$TSNET_GOMOBILE_MODULE" -v version="$mobile_version" -v sum="$mobile_sum" \
-    '$1 == "mod" && $2 == module && $3 == version && $4 == sum { found = 1 } END { exit !found }' \
-    || fail "$(basename "$tool") build metadata does not contain the locked gomobile module revision and sum"
-done
-[[ "$mobile_version" == "$TSNET_GOMOBILE_VERSION" ]] || fail 'gomobile module revision does not match the canonical lock'
-[[ "$mobile_sum" == "$TSNET_GOMOBILE_SUM" && "${values[7]}" == "$TSNET_GOMOBILE_SUM" ]] || fail 'gomobile module sum does not match the canonical lock'
-
 grep -Eq '^[[:space:]]*Pkg\.Revision[[:space:]]*=[[:space:]]*27\.2\.12479018[[:space:]]*$' "$ndk_root/source.properties" \
   || fail "NDK source.properties does not report $TSNET_NDK_REVISION"
 [[ "$(basename "$ndk_root")" == "$TSNET_NDK_REVISION" ]] || fail 'NDK directory basename does not equal Pkg.Revision'
@@ -251,11 +287,6 @@ for platform_spec in "$api34_root:34" "$api35_root:35"; do
   grep -Eq "^[[:space:]]*AndroidVersion\.ApiLevel[[:space:]]*=[[:space:]]*$api_level[[:space:]]*$" "$platform/source.properties" \
     || fail "$(basename "$platform") does not report API level $api_level in source.properties"
 done
-
-java_version_output="$("$java_binary" -version 2>&1)" || fail 'locked Java executable cannot report its version'
-if [[ "$java_version_output" != *'openjdk version "17.0.20"'* || "$java_version_output" != *'Temurin-17.0.20+8'* ]]; then
-  fail 'locked JDK must be Temurin 17.0.20+8'
-fi
 
 checks=(
   "$(sha256_file "$go_binary")" "${values[5]}" 'Go binary'
@@ -272,6 +303,23 @@ checks=(
 for ((index = 0; index < ${#checks[@]}; index += 3)); do
   [[ "${checks[index]}" == "${checks[index + 1]}" ]] || fail "${checks[index + 2]} digest does not match resolved lock"
 done
+
+go_version_output="$("$go_binary" version 2>/dev/null)" || fail 'locked Go executable cannot report its version'
+[[ "$go_version_output" == 'go version go1.26.5 linux/amd64' ]] || fail "locked Go must be stock go1.26.5 linux/amd64, got: $go_version_output"
+
+for tool in "$gomobile_binary" "$gobind_binary"; do
+  build_info="$("$go_binary" version -m "$tool" 2>/dev/null)" || fail "locked Go cannot inspect build metadata for $tool"
+  printf '%s\n' "$build_info" | awk -v module="$TSNET_GOMOBILE_MODULE" -v version="$mobile_version" -v sum="$mobile_sum" \
+    '$1 == "mod" && $2 == module && $3 == version && $4 == sum { found = 1 } END { exit !found }' \
+    || fail "$(basename "$tool") build metadata does not contain the locked gomobile module revision and sum"
+done
+[[ "$mobile_version" == "$TSNET_GOMOBILE_VERSION" ]] || fail 'gomobile module revision does not match the canonical lock'
+[[ "$mobile_sum" == "$TSNET_GOMOBILE_SUM" && "${values[7]}" == "$TSNET_GOMOBILE_SUM" ]] || fail 'gomobile module sum does not match the canonical lock'
+
+java_version_output="$("$java_binary" -version 2>&1)" || fail 'locked Java executable cannot report its version'
+if [[ "$java_version_output" != *'openjdk version "17.0.20"'* || "$java_version_output" != *'Temurin-17.0.20+8'* ]]; then
+  fail 'locked JDK must be Temurin 17.0.20+8'
+fi
 
 for cache in "$module_cache" "$go_cache"; do
   [[ -d "$cache" && ! -L "$cache" ]] || fail "locked cache directory is missing or is a symlink: $cache"
@@ -298,5 +346,5 @@ printf 'TSNET_TOOLCHAIN_READY\n'
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
   repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
-  verify_tsnet_toolchain "$repo_root" "$@"
+  verify_tsnet_toolchain "$repo_root" "$TSNET_GO_ARCHIVE_SHA256" "$TSNET_NDK_ARCHIVE_SHA256" "$@"
 fi
