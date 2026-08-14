@@ -137,19 +137,25 @@ class CapabilityOutboxDispatcher(
                 return DeliveryOutcome.CANCELLED
             } catch (_: Exception) {
                 onFailure(CapabilityDispatchFailure.TRANSPORT_FAILURE)
-                cleanup(TransportCloseReason.FAILURE)
+                if (cleanup(TransportCloseReason.FAILURE) == CleanupOutcome.CANCELLED) {
+                    return DeliveryOutcome.CANCELLED
+                }
                 continue
             }
             // `open` suspends; a local revoke may race the first fence.
             if (!egressGate.allows(event)) {
                 onFailure(CapabilityDispatchFailure.POLICY_REVOKED)
-                cleanup(TransportCloseReason.POLICY_REVOKED)
+                if (cleanup(TransportCloseReason.POLICY_REVOKED) == CleanupOutcome.CANCELLED) {
+                    return DeliveryOutcome.CANCELLED
+                }
                 return DeliveryOutcome.RETAINED
             }
             // Keep a distinct final fence immediately before bytes leave the device.
             if (!egressGate.allows(event)) {
                 onFailure(CapabilityDispatchFailure.POLICY_REVOKED)
-                cleanup(TransportCloseReason.POLICY_REVOKED)
+                if (cleanup(TransportCloseReason.POLICY_REVOKED) == CleanupOutcome.CANCELLED) {
+                    return DeliveryOutcome.CANCELLED
+                }
                 return DeliveryOutcome.RETAINED
             }
             val ackWire = try {
@@ -160,7 +166,9 @@ class CapabilityOutboxDispatcher(
                 return DeliveryOutcome.CANCELLED
             } catch (_: Exception) {
                 onFailure(CapabilityDispatchFailure.TRANSPORT_FAILURE)
-                cleanup(TransportCloseReason.FAILURE)
+                if (cleanup(TransportCloseReason.FAILURE) == CleanupOutcome.CANCELLED) {
+                    return DeliveryOutcome.CANCELLED
+                }
                 continue
             }
             val acknowledged = try {
@@ -171,11 +179,15 @@ class CapabilityOutboxDispatcher(
                 return DeliveryOutcome.CANCELLED
             } catch (_: CapabilityOutboxAckRejected) {
                 onFailure(CapabilityDispatchFailure.ACK_REJECTED)
-                cleanup(TransportCloseReason.FAILURE)
+                if (cleanup(TransportCloseReason.FAILURE) == CleanupOutcome.CANCELLED) {
+                    return DeliveryOutcome.CANCELLED
+                }
                 false
             } catch (_: Exception) {
                 onFailure(CapabilityDispatchFailure.OUTBOX_FAILURE)
-                cleanup(TransportCloseReason.FAILURE)
+                if (cleanup(TransportCloseReason.FAILURE) == CleanupOutcome.CANCELLED) {
+                    return DeliveryOutcome.CANCELLED
+                }
                 false
             }
             if (acknowledged) {

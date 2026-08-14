@@ -187,6 +187,82 @@ class CapabilityOutboxDispatcherTest {
     }
 
     @Test
+    fun recoverable_open_failure_cleanup_cancellation_stops_retry_and_preserves_known_pending_events() {
+        val outbox = RecordingOutbox(events = listOf(event("sms:1"), event("sms:2")))
+        val transport = RecordingTransport(
+            openFailures = mutableListOf(IllegalStateException("open failed")),
+            closeFailure = CancellationException("cleanup cancelled"),
+        )
+
+        val result = runSuspend { dispatcher(outbox, transport, maxAttempts = 2).dispatchPending() }
+
+        assertEquals(CapabilityDispatchResult(0, 2, CapabilityDispatchFailure.CANCELLED), result)
+        assertEquals(1, transport.opens)
+        assertTrue(transport.sentEventIds.isEmpty())
+        assertEquals(listOf("sms:1", "sms:2"), outbox.events.map { it.eventId })
+    }
+
+    @Test
+    fun recoverable_send_and_receive_cleanup_cancellation_stops_retry_and_later_egress() {
+        for (failure in listOf(FailurePoint.SEND, FailurePoint.RECEIVE)) {
+            val outbox = RecordingOutbox(events = listOf(event("sms:1"), event("sms:2")))
+            val transport = RecordingTransport(
+                failurePoint = failure,
+                closeFailure = CancellationException("cleanup cancelled"),
+            )
+
+            val result = runSuspend { dispatcher(outbox, transport, maxAttempts = 2).dispatchPending() }
+
+            assertEquals("$failure result", CapabilityDispatchResult(0, 2, CapabilityDispatchFailure.CANCELLED), result)
+            assertEquals("$failure opens", 1, transport.opens)
+            assertTrue("$failure must not send later event", transport.sentEventIds.none { it == "sms:2" })
+            assertEquals("$failure durable events", listOf("sms:1", "sms:2"), outbox.events.map { it.eventId })
+        }
+    }
+
+    @Test
+    fun ack_rejection_and_recoverable_outbox_failure_cleanup_cancellation_stop_retry() {
+        for (outbox in listOf(
+            RecordingOutbox(events = listOf(event("sms:1"), event("sms:2")), rejectAcks = true),
+            RecordingOutbox(
+                events = listOf(event("sms:1"), event("sms:2")),
+                acknowledgeFailure = IllegalStateException("outbox unavailable"),
+            ),
+        )) {
+            val transport = RecordingTransport(closeFailure = CancellationException("cleanup cancelled"))
+
+            val result = runSuspend { dispatcher(outbox, transport, maxAttempts = 2).dispatchPending() }
+
+            assertEquals(CapabilityDispatchResult(0, 2, CapabilityDispatchFailure.CANCELLED), result)
+            assertEquals(1, transport.opens)
+            assertEquals(listOf("sms:1"), transport.sentEventIds)
+            assertEquals(listOf("sms:1", "sms:2"), outbox.events.map { it.eventId })
+        }
+    }
+
+    @Test
+    fun post_open_and_pre_send_policy_cleanup_cancellation_is_distinct_and_stops_egress() {
+        for (deniedGate in listOf(2, 3)) {
+            var gates = 0
+            val outbox = RecordingOutbox(events = listOf(event("sms:1"), event("sms:2")))
+            val transport = RecordingTransport(closeFailure = CancellationException("cleanup cancelled"))
+
+            val result = runSuspend {
+                dispatcher(
+                    outbox,
+                    transport,
+                    egressGate = CapabilityEventEgressGate { ++gates < deniedGate },
+                ).dispatchPending()
+            }
+
+            assertEquals("gate $deniedGate result", CapabilityDispatchResult(0, 2, CapabilityDispatchFailure.CANCELLED), result)
+            assertEquals("gate $deniedGate opens", 1, transport.opens)
+            assertTrue("gate $deniedGate must not send", transport.sentEventIds.isEmpty())
+            assertEquals("gate $deniedGate durable events", listOf("sms:1", "sms:2"), outbox.events.map { it.eventId })
+        }
+    }
+
+    @Test
     fun pairing_open_send_receive_and_ack_failures_are_retained_and_do_not_overtake_later_expected_events() {
         val pairingOutbox = RecordingOutbox(events = listOf(event("sms:1"), event("sms:2")))
         val pairing = runSuspend {
@@ -413,6 +489,7 @@ class CapabilityOutboxDispatcherTest {
         private val recoveryFatal: Error? = null,
         private val recoveryCancellation: Boolean = false,
         private val acknowledgeCancellation: Boolean = false,
+        private val acknowledgeFailure: Exception? = null,
     ) : CapabilityOutbox {
         val events = events.toMutableList()
 
@@ -420,6 +497,7 @@ class CapabilityOutboxDispatcherTest {
 
         override suspend fun acknowledge(eventId: String, eventAckWire: ByteArray) {
             if (acknowledgeCancellation) throw CancellationException("acknowledge cancelled")
+            acknowledgeFailure?.let { throw it }
             if (rejectAcks || !eventAckWire.contentEquals(byteArrayOf(9))) {
                 throw CapabilityOutboxAckRejected("reject")
             }
