@@ -37,6 +37,7 @@ class AesGcmEncryptedBlobStore(
             DataInputStream(ByteArrayInputStream(envelope)).use { input ->
                 check(readString(input) == MAGIC)
                 val iv = readField(input, IV_BYTES)
+                check(iv.size == IV_BYTES)
                 val ciphertext = readField(input, MAX_CIPHERTEXT_BYTES)
                 check(ciphertext.size >= TAG_BYTES + 1)
                 check(input.available() == 0)

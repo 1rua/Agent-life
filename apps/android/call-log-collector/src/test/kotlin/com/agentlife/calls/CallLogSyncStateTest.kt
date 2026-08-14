@@ -1,10 +1,15 @@
 package com.agentlife.calls
 
 import com.agentlife.encrypted.store.AesGcmKeyProvider
+import com.agentlife.encrypted.store.AesGcmEncryptedBlobStore
 import com.agentlife.encrypted.store.EncryptedOutboxPersistence
 import com.agentlife.encrypted.store.InMemoryOutboxPersistence
 import java.security.SecureRandom
+import java.io.ByteArrayOutputStream
+import java.io.DataOutputStream
+import javax.crypto.Cipher
 import javax.crypto.SecretKey
+import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -64,6 +69,32 @@ class CallLogSyncStateTest {
     }
 
     @Test
+    fun independent_outer_and_inner_corruption_paths_are_fail_closed_and_redacted() {
+        val key = SecretKeySpec(ByteArray(32) { 9 }, "AES")
+        val validPlain = encodedState(CallLogSyncState(1u, CallLogCursor(2, 3), 7u))
+        val goodPersistence = InMemoryOutboxPersistence().also {
+            AesGcmEncryptedBlobStore(it, key).writePlaintext(validPlain)
+        }
+        val good = checkNotNull(goodPersistence.bytes)
+        val cases = listOf(
+            good.copyOf().also { it[it.lastIndex] = (it.last() + 1).toByte() },
+            good.copyOf(3),
+            good.copyOf().also { it[4] = 'X'.code.toByte() },
+            good + byteArrayOf(1),
+            envelopeWithIv(key, ByteArray(11) { 4 }, validPlain),
+            InMemoryOutboxPersistence().also { AesGcmEncryptedBlobStore(it, key).writePlaintext("unknown-state".encodeToByteArray()) }.bytes!!,
+        )
+
+        cases.forEach { bytes ->
+            val failure = assertThrows(CallLogSyncStateCorrupted::class.java) {
+                EncryptedCallLogSyncStateStore(InMemoryOutboxPersistence().also { it.write(bytes) }, FixedKeyProvider(key)).snapshot()
+            }
+            assertEquals("CALL_LOG_SYNC_STATE_CORRUPTED", failure.message)
+            assertNull(failure.cause)
+        }
+    }
+
+    @Test
     fun missing_state_is_uninitialized_and_reset_does_not_decode_old_ciphertext() {
         val persistence = CountingPersistence()
         val keys = RecordingKeyProvider()
@@ -106,6 +137,11 @@ class CallLogSyncStateTest {
         override fun delete() { deleteCalls += 1; key = null }
     }
 
+    private class FixedKeyProvider(private val key: SecretKey) : AesGcmKeyProvider {
+        override fun getOrCreate(): SecretKey = key
+        override fun delete() = Unit
+    }
+
     private class CountingPersistence : EncryptedOutboxPersistence {
         var bytes: ByteArray? = null
         var readCalls = 0
@@ -132,6 +168,39 @@ class CallLogSyncStateTest {
                 throw IllegalStateException("clear failed")
             }
             bytes = null
+        }
+    }
+
+    private fun encodedState(state: CallLogSyncState): ByteArray = ByteArrayOutputStream().use { bytes ->
+        DataOutputStream(bytes).use { output ->
+            output.writeUTF("AGENT_LIFE_CALL_SYNC_STATE_V1")
+            output.writeLong(state.sourceEpoch.toLong())
+            output.writeBoolean(state.cursor != null)
+            state.cursor?.let {
+                output.writeLong(it.startedAtEpochMs)
+                output.writeLong(it.providerId)
+            }
+            output.writeLong(state.policyRevision.toLong())
+        }
+        bytes.toByteArray()
+    }
+
+    private fun envelopeWithIv(key: SecretKey, iv: ByteArray, plain: ByteArray): ByteArray {
+        val ciphertext = Cipher.getInstance("AES/GCM/NoPadding").run {
+            init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(128, iv))
+            doFinal(plain)
+        }
+        return ByteArrayOutputStream().use { bytes ->
+            DataOutputStream(bytes).use { output ->
+                val magic = "AGENT_LIFE_AES_GCM_BLOB_V1".encodeToByteArray()
+                output.writeInt(magic.size)
+                output.write(magic)
+                output.writeInt(iv.size)
+                output.write(iv)
+                output.writeInt(ciphertext.size)
+                output.write(ciphertext)
+            }
+            bytes.toByteArray()
         }
     }
 }
