@@ -93,6 +93,7 @@ class AgentLifeApplication : Application() {
 
         smsAuthority = createSmsAuthorityFailClosed()
         smsScheduler = createSmsSchedulerFailClosed()
+        restoreSmsScheduling()
         val smsRuntime = createSmsRuntimeFailClosed()
         SmsRuntimeFactoryRegistry.install(SmsRuntimeFactory { smsRuntime })
 
@@ -141,6 +142,18 @@ class AgentLifeApplication : Application() {
     }
 
     fun smsJobScheduler(): SmsJobScheduler = smsScheduler
+
+    private fun restoreSmsScheduling() {
+        try {
+            val snapshot = smsAuthority.snapshot()
+            if (snapshot.corrupted || !snapshot.granted || !snapshot.autoSendEnabled) return
+            val interval = snapshot.syncInterval
+            if (interval.periodMs == null) return
+            smsScheduler.schedule(interval)
+        } catch (_: Throwable) {
+            // Scheduling restoration is best-effort; failure must not block app start.
+        }
+    }
 
     private fun createOutboxFailClosed(): NotificationOutbox = try {
         NotificationOutboxStore(
