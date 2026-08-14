@@ -41,6 +41,9 @@ def _skip_string_or_comment(source: str, index: int) -> int:
     if source.startswith("/*", index):
         end = source.find("*/", index + 2)
         return len(source) if end == -1 else end + 2
+    if source.startswith('"""', index):
+        end = source.find('"""', index + 3)
+        return len(source) if end == -1 else end + 3
     quote = source[index]
     if quote not in ('"', "'"):
         return index
@@ -86,30 +89,69 @@ def _matching_delimiter(source: str, opening_index: int, opening: str, closing: 
     raise ValueError(f"unbalanced {opening}{closing} in Gradle source")
 
 
-def _dependencies_block(build: str) -> str:
+def _dependencies_blocks(build: str) -> list[str]:
+    blocks: list[str] = []
     index = 0
+    curly_depth = 0
+    paren_depth = 0
+    bracket_depth = 0
     while index < len(build):
-        index = _skip_whitespace_and_comments(build, index)
-        if index >= len(build):
-            break
+        if build.startswith("//", index) or build.startswith("/*", index):
+            index = _skip_string_or_comment(build, index)
+            continue
         if build[index] in ('"', "'"):
             index = _skip_string_or_comment(build, index)
             continue
-        if build.startswith("dependencies", index):
-            before_is_identifier = index > 0 and (build[index - 1].isalnum() or build[index - 1] == "_")
-            after = index + len("dependencies")
-            after_is_identifier = after < len(build) and (build[after].isalnum() or build[after] == "_")
-            if not before_is_identifier and not after_is_identifier:
-                opening = _skip_whitespace_and_comments(build, after)
-                if opening < len(build) and build[opening] == "{":
-                    closing = _matching_delimiter(build, opening, "{", "}")
-                    return build[opening + 1 : closing]
+        if build[index] == "{":
+            curly_depth += 1
+            index += 1
+            continue
+        if build[index] == "}":
+            curly_depth -= 1
+            index += 1
+            continue
+        if build[index] == "(":
+            paren_depth += 1
+            index += 1
+            continue
+        if build[index] == ")":
+            paren_depth -= 1
+            index += 1
+            continue
+        if build[index] == "[":
+            bracket_depth += 1
+            index += 1
+            continue
+        if build[index] == "]":
+            bracket_depth -= 1
+            index += 1
+            continue
+        if build[index].isalpha() or build[index] == "_":
+            start = index
+            index += 1
+            while index < len(build) and (build[index].isalnum() or build[index] == "_"):
+                index += 1
+            configuration = build[start:index]
+            opening = _skip_whitespace_and_comments(build, index)
+            if (
+                configuration == "dependencies"
+                and curly_depth == 0
+                and paren_depth == 0
+                and bracket_depth == 0
+                and opening < len(build)
+                and build[opening] == "{"
+            ):
+                closing = _matching_delimiter(build, opening, "{", "}")
+                blocks.append(build[opening + 1 : closing])
+                index = closing + 1
+            continue
         index += 1
-    raise ValueError("Gradle source has no dependencies block")
+    if not blocks:
+        raise ValueError("Gradle source has no dependencies block")
+    return blocks
 
 
-def dependency_declarations(build: str) -> list[tuple[str, str]]:
-    body = _dependencies_block(build)
+def _dependency_declarations_from_body(body: str) -> list[tuple[str, str]]:
     declarations: list[tuple[str, str]] = []
     index = 0
     curly_depth = 0
@@ -142,6 +184,13 @@ def dependency_declarations(build: str) -> list[tuple[str, str]]:
                 index = closing + 1
             continue
         index += 1
+    return declarations
+
+
+def dependency_declarations(build: str) -> list[tuple[str, str]]:
+    declarations: list[tuple[str, str]] = []
+    for body in _dependencies_blocks(build):
+        declarations.extend(_dependency_declarations_from_body(body))
     return declarations
 
 
@@ -216,6 +265,55 @@ class CallLogCollectorStaticTest(unittest.TestCase):
                         '                testImplementation("junit:junit:4.13.2")',
                     ),
                 )
+
+    def test_production_dependency_allowlist_scans_a_second_dependencies_block(self):
+        first_block = """
+            dependencies {
+                implementation(project(":capability-ports"))
+                implementation(project(":core-model"))
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
+                testImplementation("junit:junit:4.13.2")
+            }
+        """
+        for invalid_declaration in (
+            'implementation(project(":transport"))',
+            'implementation("com.squareup.okhttp3:okhttp:4.12.0")',
+            'debugImplementation("com.example:debug-only:1.0")',
+        ):
+            with self.subTest(invalid_declaration=invalid_declaration):
+                self.assertRaises(
+                    AssertionError,
+                    assert_production_dependencies_allowed,
+                    f"{first_block}\n            dependencies {{\n                {invalid_declaration}\n            }}\n",
+                )
+
+    def test_nested_dependencies_block_inside_other_block_is_not_module_block(self):
+        build = """
+            configure("nested") {
+                dependencies {
+                    implementation(project(":transport"))
+                }
+            }
+            dependencies {
+                implementation(project(":capability-ports"))
+                implementation(project(":core-model"))
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
+                testImplementation("junit:junit:4.13.2")
+            }
+        """
+        assert_production_dependencies_allowed(build)
+
+    def test_dependency_keyword_inside_a_raw_string_is_not_a_module_block(self):
+        build = (
+            'val marker = """dependencies { implementation(project(":transport")) }"""\n'
+            'dependencies {\n'
+            '    implementation(project(":capability-ports"))\n'
+            '    implementation(project(":core-model"))\n'
+            '    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")\n'
+            '    testImplementation("junit:junit:4.13.2")\n'
+            '}\n'
+        )
+        assert_production_dependencies_allowed(build)
 
     def test_main_manifest_is_read_only_for_sms_and_call_log(self):
         root = ET.parse(APP_MANIFEST).getroot()
