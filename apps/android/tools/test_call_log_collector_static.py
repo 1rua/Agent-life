@@ -407,10 +407,8 @@ class CallLogCollectorStaticTest(unittest.TestCase):
 
         service = CALL_LOG_JOB_SERVICE.read_text(encoding="utf-8")
         self.assertIn("START_NOT_STICKY", service)
-        self.assertIn(
-            "CallLogRuntimeFactoryRegistry.create(applicationContext).retryAfterStop()",
-            service,
-        )
+        self.assertIn("return retryCallLogJobAfterStop {", service)
+        self.assertIn("CallLogRuntimeFactoryRegistry.create(applicationContext)", service)
 
     def test_no_manifest_declares_forbidden_phone_permissions(self):
         forbidden_permissions = {

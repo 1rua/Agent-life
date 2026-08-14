@@ -14,6 +14,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -234,6 +235,48 @@ class CallLogSyncJobServiceTest {
 
         assertTrue(job.isCancelled)
         assertTrue(completed.isEmpty())
+    }
+
+    @Test
+    fun `stop retry factory cancellation propagates unchanged`() {
+        val cancellation = CancellationException("factory cancelled")
+
+        val thrown = assertThrows(CancellationException::class.java) {
+            retryCallLogJobAfterStop { throw cancellation }
+        }
+
+        assertSame(cancellation, thrown)
+    }
+
+    @Test
+    fun `stop retry runtime source cancellation propagates unchanged`() {
+        val cancellation = CancellationException("state cancelled")
+        val state = object : CallLogSyncStateStore by RecordingStateStore(null) {
+            override fun snapshot(): CallLogSyncState? = throw cancellation
+        }
+        val runtime = CallLogRuntime(
+            enabledAuthority(policy(revision = 7u)),
+            CallLogAvailabilitySource { CapabilityAvailability.READY },
+            state,
+            RecordingRunner(),
+        )
+
+        val thrown = assertThrows(CancellationException::class.java) {
+            retryCallLogJobAfterStop { runtime }
+        }
+
+        assertSame(cancellation, thrown)
+    }
+
+    @Test
+    fun `stop retry fatal error propagates while recoverable failure closes`() {
+        val fatal = AssertionError("fatal factory")
+        val thrownFatal = assertThrows(AssertionError::class.java) {
+            retryCallLogJobAfterStop { throw fatal }
+        }
+        assertSame(fatal, thrownFatal)
+
+        assertFalse(retryCallLogJobAfterStop { throw IllegalStateException("unavailable") })
     }
 
     private fun runtime(

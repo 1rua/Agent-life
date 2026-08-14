@@ -39,6 +39,17 @@ internal class CallLogJobExecution(
     }
 }
 
+/** Maps only recoverable stop-retry lookup failures to the deny-first result. */
+internal fun retryCallLogJobAfterStop(
+    runtimeFactory: () -> CallLogRuntime,
+): Boolean = try {
+    runtimeFactory().retryAfterStop()
+} catch (failure: CancellationException) {
+    throw failure
+} catch (_: Exception) {
+    false
+}
+
 /** Runs one freshly authorized call-log batch for the periodic local job. */
 class CallLogSyncJobService : JobService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -65,10 +76,8 @@ class CallLogSyncJobService : JobService() {
         runningExecution = null
         runningJob?.cancel()
         runningJob = null
-        return try {
-            CallLogRuntimeFactoryRegistry.create(applicationContext).retryAfterStop()
-        } catch (_: Exception) {
-            false
+        return retryCallLogJobAfterStop {
+            CallLogRuntimeFactoryRegistry.create(applicationContext)
         }
     }
 

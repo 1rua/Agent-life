@@ -51,14 +51,26 @@ class AndroidCallLogSyncScheduler private constructor(
             cancel()
             return
         }
-        val scheduled = jobs.schedulePeriodic(
-            ScheduledPeriodicCallLogJob(JOB_ID, periodMs, persisted = false),
-        )
+        val scheduled = try {
+            jobs.schedulePeriodic(
+                ScheduledPeriodicCallLogJob(JOB_ID, periodMs, persisted = false),
+            )
+        } catch (failure: CancellationException) {
+            throw failure
+        } catch (_: Exception) {
+            throw CallLogJobSchedulingException()
+        }
         if (!scheduled) throw CallLogJobSchedulingException()
     }
 
     override fun cancel() {
-        jobs.cancel(JOB_ID)
+        try {
+            jobs.cancel(JOB_ID)
+        } catch (failure: CancellationException) {
+            throw failure
+        } catch (_: Exception) {
+            throw CallLogJobSchedulingException()
+        }
     }
 
     companion object {
