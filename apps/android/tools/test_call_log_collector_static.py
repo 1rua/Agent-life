@@ -17,9 +17,12 @@ ASSISTANT_HOLDER_MANIFEST = ROOT / "assistant-holder" / "src" / "main" / "Androi
 FORBIDDEN_SURFACES = ROOT / "gradle" / "mvp-forbidden-surfaces.gradle.kts"
 CALL_LOG_READER = CALL_LOG_ROOT / "src" / "main" / "kotlin" / "com" / "agentlife" / "calls" / "AndroidCallLogReader.kt"
 CALL_LOG_CAPABILITY_PROVIDER = CALL_LOG_ROOT / "src" / "main" / "kotlin" / "com" / "agentlife" / "calls" / "AndroidCallLogCapabilityProvider.kt"
+CALL_LOG_SCHEDULER = CALL_LOG_ROOT / "src" / "main" / "kotlin" / "com" / "agentlife" / "calls" / "CallLogSyncScheduler.kt"
+CALL_LOG_JOB_SERVICE = CALL_LOG_ROOT / "src" / "main" / "kotlin" / "com" / "agentlife" / "calls" / "CallLogSyncJobService.kt"
 ANDROID_NS = "{http://schemas.android.com/apk/res/android}"
 ALLOWED_PRODUCTION_DEPENDENCIES = {
     ("implementation", 'project(":capability-ports")'),
+    ("implementation", 'project(":capability-sync-runtime")'),
     ("implementation", 'project(":core-model")'),
     ("implementation", 'project(":encrypted-store")'),
     ("implementation", '"org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0"'),
@@ -243,6 +246,7 @@ class CallLogCollectorStaticTest(unittest.TestCase):
         valid_build = """
             dependencies {
                 implementation(project(":capability-ports"))
+                implementation(project(":capability-sync-runtime"))
                 implementation(project(":core-model"))
                 implementation(project(":encrypted-store"))
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
@@ -271,10 +275,11 @@ class CallLogCollectorStaticTest(unittest.TestCase):
                     ),
                 )
 
-    def test_encrypted_store_is_the_only_new_production_dependency(self):
+    def test_only_the_closed_call_log_runtime_dependencies_are_allowed(self):
         valid_build = """
             dependencies {
                 implementation(project(":capability-ports"))
+                implementation(project(":capability-sync-runtime"))
                 implementation(project(":core-model"))
                 implementation(project(":encrypted-store"))
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
@@ -302,6 +307,7 @@ class CallLogCollectorStaticTest(unittest.TestCase):
         first_block = """
             dependencies {
                 implementation(project(":capability-ports"))
+                implementation(project(":capability-sync-runtime"))
                 implementation(project(":core-model"))
                 implementation(project(":encrypted-store"))
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
@@ -329,6 +335,7 @@ class CallLogCollectorStaticTest(unittest.TestCase):
             }
             dependencies {
                 implementation(project(":capability-ports"))
+                implementation(project(":capability-sync-runtime"))
                 implementation(project(":core-model"))
                 implementation(project(":encrypted-store"))
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
@@ -342,6 +349,7 @@ class CallLogCollectorStaticTest(unittest.TestCase):
             'val marker = """dependencies { implementation(project(":transport")) }"""\n'
             'dependencies {\n'
             '    implementation(project(":capability-ports"))\n'
+            '    implementation(project(":capability-sync-runtime"))\n'
             '    implementation(project(":core-model"))\n'
             '    implementation(project(":encrypted-store"))\n'
             '    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")\n'
@@ -371,6 +379,38 @@ class CallLogCollectorStaticTest(unittest.TestCase):
         )
         self.assertIsNotNone(telephony_feature)
         self.assertEqual("false", telephony_feature.get(f"{ANDROID_NS}required"))
+
+    def test_call_log_job_service_is_private_and_platform_bound(self):
+        root = ET.parse(APP_MANIFEST).getroot()
+        application = root.find("application")
+        self.assertIsNotNone(application)
+        services = [
+            service
+            for service in application.findall("service")
+            if service.get(f"{ANDROID_NS}name") == "com.agentlife.calls.CallLogSyncJobService"
+        ]
+        self.assertEqual(1, len(services))
+        self.assertEqual("false", services[0].get(f"{ANDROID_NS}exported"))
+        self.assertEqual(
+            "android.permission.BIND_JOB_SERVICE",
+            services[0].get(f"{ANDROID_NS}permission"),
+        )
+
+    def test_call_log_scheduling_has_no_reboot_persistence_surface(self):
+        root = ET.parse(APP_MANIFEST).getroot()
+        self.assertNotIn("android.permission.RECEIVE_BOOT_COMPLETED", manifest_permissions(root))
+        self.assertEqual([], root.findall(".//receiver"))
+
+        scheduler = CALL_LOG_SCHEDULER.read_text(encoding="utf-8")
+        self.assertIn(".setPersisted(false)", scheduler)
+        self.assertNotIn(".setPersisted(true)", scheduler)
+
+        service = CALL_LOG_JOB_SERVICE.read_text(encoding="utf-8")
+        self.assertIn("START_NOT_STICKY", service)
+        self.assertIn(
+            "CallLogRuntimeFactoryRegistry.create(applicationContext).retryAfterStop()",
+            service,
+        )
 
     def test_no_manifest_declares_forbidden_phone_permissions(self):
         forbidden_permissions = {
@@ -449,7 +489,8 @@ class CallLogCollectorStaticTest(unittest.TestCase):
         source = CALL_LOG_CAPABILITY_PROVIDER.read_text(encoding="utf-8")
         self.assertEqual(1, source.count('recordId.removePrefix("call:").toLong()'))
         self.assertIn("fun CallsMetadata.toCallLogCursor()", source)
-        self.assertNotRegex(source, r"catch\s*\([^)]*:\s*Exception\b")
+        self.assertEqual(1, len(re.findall(r"catch\s*\([^)]*:\s*Exception\b", source)))
+        self.assertIn("Fixed allowlisted audit fields are best effort", source)
 
 
 if __name__ == "__main__":
