@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "upstreamUrl": "https://github.com/tailscale/tailscale.git",
+    "release": "v1.98.10",
+    "tagObject": "0ee734d3089846b27bc6ebcddd3d6ee5ec13e04d",
+    "commit": "36550d57f4a4055246ef7412f4e650a012a465f1",
+    "sourceFiles": {
+      "version": {
+        "path": "VERSION.txt",
+        "value": "1.98.10"
+      },
+      "module": {
+        "path": "go.mod",
+        "module": "tailscale.com",
+        "goDirective": "1.26.5"
+      }
+    }
+  },
+  "toolchain": {
+    "go": {
+      "archive": "go1.26.5.linux-amd64.tar.gz",
+      "sha256": "5c2c3b16caefa1d968a94c1daca04a7ca301a496d9b086e17ad77bb81393f053"
+    },
+    "gomobile": {
+      "module": "golang.org/x/mobile",
+      "tools": [
+        "gomobile",
+        "gobind"
+      ]
+    },
+    "androidNdk": {
+      "archive": "android-ndk-r27c-linux.zip",
+      "revision": "27.2.12479018",
+      "sha256": "59c2f6dc96743b5daf5d1626684640b20a6bd2b1d85b13156b90333741bad5cc",
+      "provisionalDigest": true
+    },
+    "jdk": {
+      "distribution": "Temurin",
+      "version": "17.0.20+8"
+    },
+    "androidSdk": {
+      "gomobileApi": 34,
+      "compileSdk": 35
+    },
+    "gradle": {
+      "agp": "8.9.2",
+      "gradle": "8.12",
+      "kotlin": "2.1.20"
+    }
+  },
+  "abi": {
+    "gomobileTargets": [
+      "android/arm64",
+      "android/amd64"
+    ],
+    "aarAbis": [
+      "arm64-v8a",
+      "x86_64"
+    ]
+  },
+  "build": {
+    "argumentVector": [
+      "gomobile",
+      "bind",
+      "-target=android/arm64,android/amd64",
+      "-androidapi=34",
+      "-trimpath",
+      "-tags=ts_omit_cachenetmap",
+      "-ldflags=-buildid= -linkmode=external -extldflags=-Wl,-z,max-page-size=16384",
+      "-o",
+      "tsnet-android-1.98.10.raw.aar",
+      "./tsnetbridge"
+    ],
+    "minimumElfLoadAlignment": 16384,
+    "maximumAarBytes": 83886080,
+    "wireFrame": {
+      "transport": "binary-wss-message",
+      "minimumBytes": 1,
+      "maximumBytes": 262144
+    }
+  },
+  "dependencies": {
+    "golang.org/x/mobile": {
+      "version": "v0.0.0-20240806205939-81131f6468ab",
+      "sum": "h1:KONOFF8Uy3b60HEzOsGnNghORNhY4ImyOx0PGm73K9k="
+    },
+    "github.com/coder/websocket": {
+      "version": "v1.8.12",
+      "sum": null
+    }
+  },
+  "outputs": {
+    "rawAar": "tsnet-android-1.98.10.raw.aar",
+    "aar": "tsnet-android-1.98.10.aar",
+    "aarSha256": "tsnet-android-1.98.10.aar.sha256",
+    "provenance": "tsnet-android-1.98.10.provenance.json",
+    "sbom": "tsnet-android-1.98.10.sbom.json",
+    "notices": "THIRD_PARTY_NOTICES.md"
+  }
+}
