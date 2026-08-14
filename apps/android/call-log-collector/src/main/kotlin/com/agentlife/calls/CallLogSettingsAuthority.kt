@@ -284,6 +284,8 @@ internal object CallLogSettingsCodec {
         get() = magic.size
     internal val authorizationRevisionOffset: Int
         get() = phaseOffset + 1
+    internal val policyRevisionFloorOffset: Int
+        get() = authorizationRevisionOffset + Long.SIZE_BYTES + 1
     internal val enabledModeBooleanOffset: Int
         get() = phaseOffset + 1 + Long.SIZE_BYTES + 1 + Long.SIZE_BYTES + 1 + Long.SIZE_BYTES + Int.SIZE_BYTES + 3
 
@@ -329,7 +331,13 @@ internal object CallLogSettingsCodec {
                 authorizationRevision = input.readULong(),
                 epochExhausted = input.readCanonicalBoolean(),
                 policyRevisionFloor = input.readULong(),
-            )
+            ).also { state ->
+                val fresh = state.authorizationRevision == 0uL && state.policyRevisionFloor == 0uL
+                val postRevocation = state.authorizationRevision > 0uL && state.policyRevisionFloor > 0uL
+                require((fresh && !state.epochExhausted) || postRevocation) {
+                    "disabled revision tuple is invalid"
+                }
+            }
             ENABLED_TAG -> {
                 val authorizationRevision = input.readULong()
                 val exhausted = input.readCanonicalBoolean()

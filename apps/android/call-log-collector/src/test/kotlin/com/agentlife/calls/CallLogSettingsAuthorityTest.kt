@@ -221,6 +221,42 @@ class CallLogSettingsAuthorityTest {
     }
 
     @Test
+    fun `disabled encoding rejects mismatched authorization and policy floor revisions`() {
+        val persistence = InMemoryCallLogSettingsPersistence()
+        val authority = enabledAuthority(persistence)
+        authority.beginRevocation(
+            targetEpoch = 2u,
+            targetPolicyRevision = 3u,
+            targetPolicy = null,
+            authorizationRevision = 2u,
+        )
+        authority.commitRevocationTarget()
+        val disabledBytes = persistence.read()!!
+
+        val authorizationRevisionReset = disabledBytes.copyOf().also {
+            for (index in CallLogSettingsCodec.authorizationRevisionOffset until
+                CallLogSettingsCodec.authorizationRevisionOffset + Long.SIZE_BYTES
+            ) {
+                it[index] = 0
+            }
+        }
+        val policyFloorReset = disabledBytes.copyOf().also {
+            for (index in CallLogSettingsCodec.policyRevisionFloorOffset until
+                CallLogSettingsCodec.policyRevisionFloorOffset + Long.SIZE_BYTES
+            ) {
+                it[index] = 0
+            }
+        }
+
+        listOf(authorizationRevisionReset, policyFloorReset).forEach { malformed ->
+            val restored = PersistentCallLogSettingsAuthority(InMemoryCallLogSettingsPersistence(malformed))
+            assertTrue(restored.snapshot().corrupted)
+            assertEquals(CallLogSettingsPhase.Disabled, restored.snapshot().phase)
+            assertNull(restored.capabilityGrant())
+        }
+    }
+
+    @Test
     fun `epoch exhausted state persists and never exposes a grant`() {
         val persistence = InMemoryCallLogSettingsPersistence()
         val authority = enabledAuthority(persistence)
