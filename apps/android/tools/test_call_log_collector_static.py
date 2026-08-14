@@ -21,6 +21,7 @@ ANDROID_NS = "{http://schemas.android.com/apk/res/android}"
 ALLOWED_PRODUCTION_DEPENDENCIES = {
     ("implementation", 'project(":capability-ports")'),
     ("implementation", 'project(":core-model")'),
+    ("implementation", 'project(":encrypted-store")'),
     ("implementation", '"org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0"'),
 }
 ALLOWED_TEST_DEPENDENCIES = {
@@ -243,6 +244,7 @@ class CallLogCollectorStaticTest(unittest.TestCase):
             dependencies {
                 implementation(project(":capability-ports"))
                 implementation(project(":core-model"))
+                implementation(project(":encrypted-store"))
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
                 testImplementation("junit:junit:4.13.2")
             }
@@ -269,11 +271,39 @@ class CallLogCollectorStaticTest(unittest.TestCase):
                     ),
                 )
 
+    def test_encrypted_store_is_the_only_new_production_dependency(self):
+        valid_build = """
+            dependencies {
+                implementation(project(":capability-ports"))
+                implementation(project(":core-model"))
+                implementation(project(":encrypted-store"))
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
+                testImplementation("junit:junit:4.13.2")
+            }
+        """
+        assert_production_dependencies_allowed(valid_build)
+        for extra in (
+            'implementation(project(":contacts"))',
+            'implementation(project(":calendar"))',
+            'implementation(project(":sensors"))',
+            'implementation("com.example:unapproved:1.0")',
+        ):
+            with self.subTest(extra=extra):
+                self.assertRaises(
+                    AssertionError,
+                    assert_production_dependencies_allowed,
+                    valid_build.replace(
+                        'testImplementation("junit:junit:4.13.2")',
+                        f"{extra}\n                testImplementation(\"junit:junit:4.13.2\")",
+                    ),
+                )
+
     def test_production_dependency_allowlist_scans_a_second_dependencies_block(self):
         first_block = """
             dependencies {
                 implementation(project(":capability-ports"))
                 implementation(project(":core-model"))
+                implementation(project(":encrypted-store"))
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
                 testImplementation("junit:junit:4.13.2")
             }
@@ -300,6 +330,7 @@ class CallLogCollectorStaticTest(unittest.TestCase):
             dependencies {
                 implementation(project(":capability-ports"))
                 implementation(project(":core-model"))
+                implementation(project(":encrypted-store"))
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
                 testImplementation("junit:junit:4.13.2")
             }
@@ -312,6 +343,7 @@ class CallLogCollectorStaticTest(unittest.TestCase):
             'dependencies {\n'
             '    implementation(project(":capability-ports"))\n'
             '    implementation(project(":core-model"))\n'
+            '    implementation(project(":encrypted-store"))\n'
             '    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")\n'
             '    testImplementation("junit:junit:4.13.2")\n'
             '}\n'
