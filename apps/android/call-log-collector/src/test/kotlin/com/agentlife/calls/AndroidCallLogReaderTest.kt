@@ -4,10 +4,13 @@ import android.database.Cursor
 import com.agentlife.capability.CallDirection
 import com.agentlife.capability.CallHistoryPolicy
 import com.agentlife.capability.CallNumberPresentation
+import com.agentlife.capability.CapabilityAvailability
 import java.lang.reflect.Proxy
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -242,6 +245,102 @@ class AndroidCallLogReaderTest {
     }
 
     @Test
+    fun query_maps_move_to_next_security_exception_to_permission_required_without_provider_details() {
+        val cursor = CursorDouble(
+            columns = COLUMNS,
+            rows = emptyList(),
+            moveFailure = SecurityException("provider exposed 15551234567"),
+        )
+        val reader = AndroidCallLogReader { _, _, _, _, _, _ -> cursor.value }
+
+        val failure = assertThrows(CallLogPermissionRequiredException::class.java) {
+            reader.query(allDirectionsQuery())
+        }
+
+        assertEquals("CALL_LOG_PERMISSION_REQUIRED", failure.message)
+        assertNull(failure.cause)
+        assertFalse(failure.message!!.contains("15551234567"))
+        assertTrue(cursor.closed)
+    }
+
+    @Test
+    fun query_maps_get_long_security_exception_to_permission_required_without_provider_details() {
+        val cursor = CursorDouble(
+            columns = COLUMNS,
+            rows = listOf(listOf(1L, 1, 10L, 0L, "private", 1)),
+            getLongFailure = SecurityException("provider exposed 15551234567"),
+        )
+        val reader = AndroidCallLogReader { _, _, _, _, _, _ -> cursor.value }
+
+        val failure = assertThrows(CallLogPermissionRequiredException::class.java) {
+            reader.query(allDirectionsQuery())
+        }
+
+        assertEquals("CALL_LOG_PERMISSION_REQUIRED", failure.message)
+        assertNull(failure.cause)
+        assertFalse(failure.message!!.contains("15551234567"))
+        assertTrue(cursor.closed)
+    }
+
+    @Test
+    fun query_maps_close_security_exception_to_permission_required_without_provider_details() {
+        val cursor = CursorDouble(
+            columns = COLUMNS,
+            rows = listOf(listOf(1L, 1, 10L, 0L, "private", 1)),
+            closeFailure = SecurityException("provider exposed 15551234567"),
+        )
+        val reader = AndroidCallLogReader { _, _, _, _, _, _ -> cursor.value }
+
+        val failure = assertThrows(CallLogPermissionRequiredException::class.java) {
+            reader.query(allDirectionsQuery())
+        }
+
+        assertEquals("CALL_LOG_PERMISSION_REQUIRED", failure.message)
+        assertNull(failure.cause)
+        assertFalse(failure.message!!.contains("15551234567"))
+        assertEquals(0, failure.suppressed.size)
+        assertTrue(cursor.closed)
+    }
+
+    @Test
+    fun probe_maps_cursor_security_exception_to_permission_required_in_availability() {
+        val cursor = CursorDouble(
+            columns = COLUMNS,
+            rows = emptyList(),
+            moveFailure = SecurityException("provider exposed 15551234567"),
+        )
+        val reader = AndroidCallLogReader { _, _, _, _, _, _ -> cursor.value }
+        val availability = AndroidCallLogAvailability(
+            localEnabled = { true },
+            providerAvailable = { true },
+            permissionGranted = { true },
+            probe = reader::probe,
+        )
+
+        assertEquals(CapabilityAvailability.PERMISSION_REQUIRED, availability.current())
+        assertTrue(cursor.closed)
+    }
+
+    @Test
+    fun query_does_not_swallow_fatal_cursor_failures() {
+        listOf(
+            OutOfMemoryError("fatal provider error"),
+            LinkageError("fatal linkage error"),
+            ThreadDeath(),
+        ).forEach { fatal ->
+            val cursor = CursorDouble(COLUMNS, emptyList(), moveFailure = fatal)
+            val reader = AndroidCallLogReader { _, _, _, _, _, _ -> cursor.value }
+
+            val thrown = assertThrows(fatal::class.java) {
+                reader.query(allDirectionsQuery())
+            }
+
+            assertSame(fatal, thrown)
+            assertTrue(cursor.closed)
+        }
+    }
+
+    @Test
     fun query_maps_bad_row_and_close_failure_to_query_failure_without_suppressed_provider_details() {
         val cursor = CursorDouble(
             columns = COLUMNS,
@@ -277,10 +376,10 @@ class AndroidCallLogReaderTest {
     private class CursorDouble(
         columns: List<String>,
         private val rows: List<List<Any?>>,
-        private val moveFailure: Exception? = null,
-        private val getLongFailure: Exception? = null,
-        private val getStringFailure: Exception? = null,
-        private val closeFailure: Exception? = null,
+        private val moveFailure: Throwable? = null,
+        private val getLongFailure: Throwable? = null,
+        private val getStringFailure: Throwable? = null,
+        private val closeFailure: Throwable? = null,
     ) {
         private val indexes = columns.withIndex().associate { it.value to it.index }
         private var rowIndex = -1

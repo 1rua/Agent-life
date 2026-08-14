@@ -387,6 +387,7 @@ class CallLogCollectorStaticTest(unittest.TestCase):
             source,
         )
         self.assertNotRegex(source, r"(?i)\bLIMIT\s+[0-9?$]")
+        self.assertNotRegex(source, r"catch\s*\([^)]*:\s*Throwable\b")
         self.assertEqual(
             ["CallLog.Calls.CONTENT_URI"],
             re.findall(r"CallLog\.[A-Za-z0-9_]+\.CONTENT_URI", source),

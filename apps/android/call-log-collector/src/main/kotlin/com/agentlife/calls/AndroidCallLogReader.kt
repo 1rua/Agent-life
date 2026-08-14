@@ -73,23 +73,37 @@ class AndroidCallLogReader private constructor(
 
     private fun readAndClose(cursor: Cursor, maxRecords: Int): List<CallLogRow> {
         var rows: List<CallLogRow>? = null
-        var readFailure: Throwable? = null
+        var readFailure: Exception? = null
+        var readCompleted = false
         try {
-            rows = readRows(cursor, maxRecords)
-        } catch (failure: Throwable) {
-            readFailure = failure
+            try {
+                rows = readRows(cursor, maxRecords)
+            } catch (failure: SecurityException) {
+                readFailure = CallLogPermissionRequiredException()
+            } catch (failure: CallLogPermissionRequiredException) {
+                readFailure = failure
+            } catch (failure: CallLogInvalidRowException) {
+                readFailure = failure
+            } catch (failure: CallLogQueryException) {
+                readFailure = failure
+            } catch (_: Exception) {
+                readFailure = CallLogQueryException()
+            }
+            readCompleted = true
+        } finally {
+            val closeFailure = try {
+                cursor.close()
+                null
+            } catch (_: SecurityException) {
+                CallLogPermissionRequiredException()
+            } catch (_: Exception) {
+                CallLogQueryException()
+            }
+            if (readCompleted && closeFailure != null) {
+                throw closeFailure
+            }
         }
 
-        var closeFailure: Throwable? = null
-        try {
-            cursor.close()
-        } catch (failure: Throwable) {
-            closeFailure = failure
-        }
-
-        if (closeFailure != null) {
-            throw CallLogQueryException()
-        }
         when (val failure = readFailure) {
             null -> return rows.orEmpty()
             is CallLogInvalidRowException -> throw failure
@@ -142,7 +156,11 @@ class AndroidCallLogReader private constructor(
                 rawDuration = cursor.getLong(duration)
                 rawNumber = cursor.getString(number)
                 rawNumberPresentation = cursor.getInt(numberPresentation)
-            } catch (_: Throwable) {
+            } catch (failure: SecurityException) {
+                throw CallLogPermissionRequiredException()
+            } catch (failure: CallLogPermissionRequiredException) {
+                throw failure
+            } catch (_: Exception) {
                 throw CallLogQueryException()
             }
             return try {
@@ -156,7 +174,7 @@ class AndroidCallLogReader private constructor(
                 )
             } catch (failure: CallLogInvalidRowException) {
                 throw failure
-            } catch (_: Throwable) {
+            } catch (_: Exception) {
                 throw CallLogInvalidRowException()
             }
         }
