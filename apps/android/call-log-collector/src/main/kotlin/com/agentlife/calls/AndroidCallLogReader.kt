@@ -61,26 +61,50 @@ class AndroidCallLogReader private constructor(
                 SORT_ORDER,
                 request.history.maxRecords,
             )
+        } catch (_: SecurityException) {
+            throw CallLogPermissionRequiredException()
         } catch (_: Exception) {
             throw CallLogQueryException()
         }
-        return try {
-            cursor?.use { providerCursor ->
-                val indexes = try {
-                    ColumnIndexes(providerCursor)
-                } catch (_: Exception) {
-                    throw CallLogQueryException()
-                }
-                buildList {
-                    while (size < request.history.maxRecords && providerCursor.moveToNext()) {
-                        add(indexes.read(providerCursor))
-                    }
-                }
-            }.orEmpty()
-        } catch (failure: CallLogInvalidRowException) {
-            throw failure
-        } catch (_: Exception) {
+        return cursor?.let { providerCursor ->
+            readAndClose(providerCursor, request.history.maxRecords)
+        }.orEmpty()
+    }
+
+    private fun readAndClose(cursor: Cursor, maxRecords: Int): List<CallLogRow> {
+        var rows: List<CallLogRow>? = null
+        var readFailure: Throwable? = null
+        try {
+            rows = readRows(cursor, maxRecords)
+        } catch (failure: Throwable) {
+            readFailure = failure
+        }
+
+        var closeFailure: Throwable? = null
+        try {
+            cursor.close()
+        } catch (failure: Throwable) {
+            closeFailure = failure
+        }
+
+        if (closeFailure != null) {
             throw CallLogQueryException()
+        }
+        when (val failure = readFailure) {
+            null -> return rows.orEmpty()
+            is CallLogInvalidRowException -> throw failure
+            is CallLogPermissionRequiredException -> throw failure
+            is CallLogQueryException -> throw failure
+            else -> throw CallLogQueryException()
+        }
+    }
+
+    private fun readRows(cursor: Cursor, maxRecords: Int): List<CallLogRow> {
+        val indexes = ColumnIndexes(cursor)
+        return buildList {
+            while (size < maxRecords && cursor.moveToNext()) {
+                add(indexes.read(cursor))
+            }
         }
     }
 
@@ -104,17 +128,37 @@ class AndroidCallLogReader private constructor(
         private val number = cursor.getColumnIndexOrThrow("number")
         private val numberPresentation = cursor.getColumnIndexOrThrow("number_presentation")
 
-        fun read(cursor: Cursor): CallLogRow = try {
-            CallLogRow(
-                providerId = cursor.getLong(providerId),
-                direction = cursor.getInt(type).toCallDirection(),
-                startedAtEpochMs = cursor.getLong(date),
-                durationSeconds = cursor.getLong(duration),
-                number = cursor.getString(number),
-                numberPresentation = cursor.getInt(numberPresentation).toNumberPresentation(),
-            )
-        } catch (_: Exception) {
-            throw CallLogInvalidRowException()
+        fun read(cursor: Cursor): CallLogRow {
+            val rawProviderId: Long
+            val rawType: Int
+            val rawDate: Long
+            val rawDuration: Long
+            val rawNumber: String?
+            val rawNumberPresentation: Int
+            try {
+                rawProviderId = cursor.getLong(providerId)
+                rawType = cursor.getInt(type)
+                rawDate = cursor.getLong(date)
+                rawDuration = cursor.getLong(duration)
+                rawNumber = cursor.getString(number)
+                rawNumberPresentation = cursor.getInt(numberPresentation)
+            } catch (_: Throwable) {
+                throw CallLogQueryException()
+            }
+            return try {
+                CallLogRow(
+                    providerId = rawProviderId,
+                    direction = rawType.toCallDirection(),
+                    startedAtEpochMs = rawDate,
+                    durationSeconds = rawDuration,
+                    number = rawNumber,
+                    numberPresentation = rawNumberPresentation.toNumberPresentation(),
+                )
+            } catch (failure: CallLogInvalidRowException) {
+                throw failure
+            } catch (_: Throwable) {
+                throw CallLogInvalidRowException()
+            }
         }
     }
 

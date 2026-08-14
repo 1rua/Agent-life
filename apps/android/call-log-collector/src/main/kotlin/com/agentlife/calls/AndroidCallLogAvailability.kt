@@ -40,6 +40,8 @@ class AndroidCallLogAvailability private constructor(
         else -> try {
             seams.probe()
             CapabilityAvailability.READY
+        } catch (_: CallLogPermissionRequiredException) {
+            CapabilityAvailability.PERMISSION_REQUIRED
         } catch (_: SecurityException) {
             CapabilityAvailability.PERMISSION_REQUIRED
         } catch (_: Exception) {

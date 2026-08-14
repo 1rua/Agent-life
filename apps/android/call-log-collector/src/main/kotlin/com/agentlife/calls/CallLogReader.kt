@@ -68,3 +68,5 @@ fun interface CallLogAvailabilitySource {
 class CallLogInvalidRowException : RuntimeException("CALL_LOG_INVALID_ROW")
 
 class CallLogQueryException : RuntimeException("CALL_LOG_QUERY_FAILED")
+
+class CallLogPermissionRequiredException : RuntimeException("CALL_LOG_PERMISSION_REQUIRED")

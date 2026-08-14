@@ -2,6 +2,8 @@ package com.agentlife.calls
 
 import com.agentlife.capability.CapabilityAvailability
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Test
 
@@ -44,6 +46,26 @@ class AndroidCallLogAvailabilityTest {
             permissionGranted = true,
             probe = { throw IllegalStateException("private provider failure") },
         )
+    }
+
+    @Test
+    fun current_maps_a_real_reader_query_security_exception_to_permission_required_without_provider_details() {
+        val reader = AndroidCallLogReader { _, _, _, _, _, _ ->
+            throw SecurityException("provider exposed 15551234567 at 1700000000000")
+        }
+        val availability = AndroidCallLogAvailability(
+            localEnabled = { true },
+            providerAvailable = { true },
+            permissionGranted = { true },
+            probe = reader::probe,
+        )
+
+        assertEquals(CapabilityAvailability.PERMISSION_REQUIRED, availability.current())
+        val failure = assertThrows(CallLogPermissionRequiredException::class.java) { reader.probe() }
+        assertEquals("CALL_LOG_PERMISSION_REQUIRED", failure.message)
+        assertNull(failure.cause)
+        assertFalse(failure.message!!.contains("15551234567"))
+        assertFalse(failure.message!!.contains("1700000000000"))
     }
 
     @Test

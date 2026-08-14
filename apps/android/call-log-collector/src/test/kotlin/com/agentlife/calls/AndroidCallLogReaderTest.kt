@@ -186,6 +186,80 @@ class AndroidCallLogReaderTest {
         assertTrue(cursor.closed)
     }
 
+    @Test
+    fun query_maps_get_long_failure_to_query_failure_and_closes_the_cursor() {
+        val cursor = CursorDouble(
+            columns = COLUMNS,
+            rows = listOf(listOf(1L, 1, 10L, 0L, "private", 1)),
+            getLongFailure = IllegalStateException("provider exposed 15551234567"),
+        )
+        val reader = AndroidCallLogReader { _, _, _, _, _, _ -> cursor.value }
+
+        val failure = assertThrows(CallLogQueryException::class.java) {
+            reader.query(allDirectionsQuery())
+        }
+
+        assertEquals("CALL_LOG_QUERY_FAILED", failure.message)
+        assertNull(failure.cause)
+        assertTrue(cursor.closed)
+    }
+
+    @Test
+    fun query_maps_get_string_failure_to_query_failure_and_closes_the_cursor() {
+        val cursor = CursorDouble(
+            columns = COLUMNS,
+            rows = listOf(listOf(1L, 1, 10L, 0L, "private", 1)),
+            getStringFailure = IllegalStateException("provider exposed 15551234567"),
+        )
+        val reader = AndroidCallLogReader { _, _, _, _, _, _ -> cursor.value }
+
+        val failure = assertThrows(CallLogQueryException::class.java) {
+            reader.query(allDirectionsQuery())
+        }
+
+        assertEquals("CALL_LOG_QUERY_FAILED", failure.message)
+        assertNull(failure.cause)
+        assertTrue(cursor.closed)
+    }
+
+    @Test
+    fun query_maps_success_close_failure_to_query_failure_without_suppressed_provider_details() {
+        val cursor = CursorDouble(
+            columns = COLUMNS,
+            rows = listOf(listOf(1L, 1, 10L, 0L, "private", 1)),
+            closeFailure = IllegalStateException("provider exposed 15551234567 at 1700000000000"),
+        )
+        val reader = AndroidCallLogReader { _, _, _, _, _, _ -> cursor.value }
+
+        val failure = assertThrows(CallLogQueryException::class.java) {
+            reader.query(allDirectionsQuery())
+        }
+
+        assertEquals("CALL_LOG_QUERY_FAILED", failure.message)
+        assertNull(failure.cause)
+        assertEquals(0, failure.suppressed.size)
+        assertTrue(cursor.closed)
+    }
+
+    @Test
+    fun query_maps_bad_row_and_close_failure_to_query_failure_without_suppressed_provider_details() {
+        val cursor = CursorDouble(
+            columns = COLUMNS,
+            rows = listOf(listOf(0L, 1, 10L, 0L, "private", 1)),
+            closeFailure = IllegalStateException("provider exposed 15551234567 at 1700000000000"),
+        )
+        val reader = AndroidCallLogReader { _, _, _, _, _, _ -> cursor.value }
+
+        val failure = assertThrows(CallLogQueryException::class.java) {
+            reader.query(allDirectionsQuery())
+        }
+
+        assertEquals("CALL_LOG_QUERY_FAILED", failure.message)
+        assertNull(failure.cause)
+        assertEquals(0, failure.suppressed.size)
+        assertTrue(cursor.closed)
+    }
+
     private fun allDirectionsQuery(maxRecords: Int = 10): CallLogQuery = CallLogQuery(
         history = CallHistoryPolicy(fromEpochMs = null, maxRecords = maxRecords),
         directions = CallDirection.entries.toSet(),
@@ -204,6 +278,9 @@ class AndroidCallLogReaderTest {
         columns: List<String>,
         private val rows: List<List<Any?>>,
         private val moveFailure: Exception? = null,
+        private val getLongFailure: Exception? = null,
+        private val getStringFailure: Exception? = null,
+        private val closeFailure: Exception? = null,
     ) {
         private val indexes = columns.withIndex().associate { it.value to it.index }
         private var rowIndex = -1
@@ -218,11 +295,21 @@ class AndroidCallLogReaderTest {
                     moveFailure?.let { throw it }
                     (++rowIndex) < rows.size
                 }
-                "getLong" -> (cell(arguments) as Number).toLong()
+                "getLong" -> {
+                    getLongFailure?.let { throw it }
+                    (cell(arguments) as Number).toLong()
+                }
                 "getInt" -> (cell(arguments) as Number).toInt()
-                "getString" -> cell(arguments) as String?
+                "getString" -> {
+                    getStringFailure?.let { throw it }
+                    cell(arguments) as String?
+                }
                 "isNull" -> cell(arguments) == null
-                "close" -> { closed = true; null }
+                "close" -> {
+                    closed = true
+                    closeFailure?.let { throw it }
+                    null
+                }
                 "isClosed" -> closed
                 "toString" -> "Provider cursor with private 15551234567"
                 "hashCode" -> System.identityHashCode(this)
