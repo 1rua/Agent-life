@@ -334,6 +334,10 @@ class SmsAutoSyncCoordinatorTest {
         }
 
         override suspend fun recoverUnacknowledged(): List<CapabilityDurableEvent> = entries.values.toList()
+
+        override suspend fun clear() {
+            entries.clear()
+        }
     }
 
     private class RecordingTransport(

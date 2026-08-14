@@ -40,13 +40,14 @@ class CapabilityDurableEvent(
 
     /** Never include potentially sensitive wire bytes in diagnostics. */
     override fun toString(): String =
-        "CapabilityDurableEvent(eventId=$eventId, capability=$capability, recordId=$recordId, policyRevision=$policyRevision)"
+        "CapabilityDurableEvent(capability=$capability,policyRevision=$policyRevision,identity=<redacted>,wire=<redacted>)"
 }
 
 interface CapabilityOutbox {
     suspend fun enqueueAccepted(event: CapabilityDurableEvent): CapabilityDurableEvent
     suspend fun acknowledge(eventId: String, eventAckWire: ByteArray)
     suspend fun recoverUnacknowledged(): List<CapabilityDurableEvent>
+    suspend fun clear()
 }
 
 class CapabilityOutboxConflict(message: String) : IllegalArgumentException(message)

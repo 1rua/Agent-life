@@ -33,6 +33,7 @@ class CapabilityOutboxStore(
 
     init {
         require(encryptionKey.algorithm.equals("AES", ignoreCase = true)) { "outbox key must use AES" }
+        encryptionKey.encoded?.let { require(it.size == 32) { "outbox key must be 256 bits" } }
         require(maxEvents in 1..MAX_EVENTS) { "outbox capacity must be between 1 and $MAX_EVENTS" }
         restore()
     }
@@ -98,6 +99,20 @@ class CapabilityOutboxStore(
         events.values.map { it.snapshot() }
     }
 
+    override suspend fun clear() = clearBlocking()
+
+    fun clearBlocking() = synchronized(lock) {
+        val snapshot = LinkedHashMap(events)
+        try {
+            events.clear()
+            persistence.clear()
+        } catch (failure: Exception) {
+            events.clear()
+            events.putAll(snapshot)
+            throw failure
+        }
+    }
+
     private fun restore() {
         val envelope = persistence.read() ?: return
         try {
@@ -117,7 +132,7 @@ class CapabilityOutboxStore(
                 }
                 check(input.available() == 0) { "capability outbox trailing bytes" }
             }
-        } catch (failure: Throwable) {
+        } catch (failure: Exception) {
             events.clear()
             throw if (failure is OutboxCorrupted) failure else OutboxCorrupted("capability outbox recovery failed", failure)
         }
@@ -193,8 +208,8 @@ class CapabilityOutboxStore(
         private val utf8 = StandardCharsets.UTF_8
 
         private fun validateKeyBytes(value: ByteArray): ByteArray {
-            require(value.size == 16 || value.size == 24 || value.size == 32) {
-                "outbox key must be 128, 192 or 256 bits"
+            require(value.size == 32) {
+                "outbox key must be 256 bits"
             }
             return value.copyOf()
         }

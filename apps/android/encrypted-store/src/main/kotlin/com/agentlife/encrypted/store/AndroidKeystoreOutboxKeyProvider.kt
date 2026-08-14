@@ -9,8 +9,8 @@ import javax.crypto.SecretKey
 /** Provides a non-exportable AES-GCM key owned by Android Keystore. */
 class AndroidKeystoreOutboxKeyProvider(
     private val alias: String = DEFAULT_ALIAS,
-) {
-    fun getOrCreate(): SecretKey {
+) : AesGcmKeyProvider {
+    override fun getOrCreate(): SecretKey {
         require(alias.isNotBlank()) { "outbox key alias must not be blank" }
         val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         val existing = keyStore.getKey(alias, null)
@@ -30,6 +30,11 @@ class AndroidKeystoreOutboxKeyProvider(
             )
             generateKey()
         }
+    }
+
+    override fun delete() {
+        require(alias.isNotBlank()) { "outbox key alias must not be blank" }
+        KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.deleteEntry(alias)
     }
 
     companion object {
