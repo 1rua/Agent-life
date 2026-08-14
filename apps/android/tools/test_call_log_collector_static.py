@@ -2,6 +2,7 @@
 """Host checks for the call-log collector module and manifest boundary."""
 
 from pathlib import Path
+import re
 import unittest
 import xml.etree.ElementTree as ET
 
@@ -14,6 +15,7 @@ APP_MANIFEST = ROOT / "app" / "src" / "main" / "AndroidManifest.xml"
 ASSISTANT_HOLDER_BUILD_GRADLE = ROOT / "assistant-holder" / "build.gradle.kts"
 ASSISTANT_HOLDER_MANIFEST = ROOT / "assistant-holder" / "src" / "main" / "AndroidManifest.xml"
 FORBIDDEN_SURFACES = ROOT / "gradle" / "mvp-forbidden-surfaces.gradle.kts"
+CALL_LOG_READER = CALL_LOG_ROOT / "src" / "main" / "kotlin" / "com" / "agentlife" / "calls" / "AndroidCallLogReader.kt"
 ANDROID_NS = "{http://schemas.android.com/apk/res/android}"
 ALLOWED_PRODUCTION_DEPENDENCIES = {
     ("implementation", 'project(":capability-ports")'),
@@ -375,6 +377,39 @@ class CallLogCollectorStaticTest(unittest.TestCase):
     def test_call_log_module_is_in_the_root_forbidden_surface_scan(self):
         guard = FORBIDDEN_SURFACES.read_text(encoding="utf-8")
         self.assertRegex(guard, r'listOf\([^)]*"call-log-collector"')
+
+    def test_call_log_reader_has_the_single_bounded_read_only_provider_surface(self):
+        source = CALL_LOG_READER.read_text(encoding="utf-8")
+        self.assertEqual(1, source.count("CallLog.Calls.CONTENT_URI"))
+        self.assertIn("CallLog.Calls.LIMIT_PARAM_KEY", source)
+        self.assertIn(
+            'arrayOf("_id", "type", "date", "duration", "number", "number_presentation")',
+            source,
+        )
+        self.assertNotRegex(source, r"(?i)\bLIMIT\s+[0-9?$]")
+        self.assertEqual(
+            ["CallLog.Calls.CONTENT_URI"],
+            re.findall(r"CallLog\.[A-Za-z0-9_]+\.CONTENT_URI", source),
+        )
+        for forbidden_operation in ("insert", "update", "delete", "bulkInsert"):
+            with self.subTest(forbidden_operation=forbidden_operation):
+                self.assertNotRegex(source, rf"\.{forbidden_operation}\s*\(")
+        for forbidden_surface in (
+            "Telephony",
+            "Telecom",
+            "PhoneStateListener",
+            "TelephonyManager",
+            "TelecomManager",
+            "Accessibility",
+            "MediaProjection",
+            "Socket",
+            "URL",
+            "ProcessBuilder",
+            "Runtime.getRuntime",
+            "java.net",
+        ):
+            with self.subTest(forbidden_surface=forbidden_surface):
+                self.assertNotIn(forbidden_surface, source)
 
 
 if __name__ == "__main__":
