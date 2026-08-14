@@ -39,7 +39,7 @@ tasks.register("noVpnSurfaceCheck") {
     group = "verification"
     description = "Reject system VPN, route/DNS, proxy/listener and generic dial surfaces."
     doLast {
-        val roots = listOf("app", "assistant-holder", "artifact-ports", "core-model", "capability-ports", "control-ports", "policy-engine", "notification-collector", "sms-collector", "call-log-collector", "tailnet-core", "transport", "encrypted-store")
+        val roots = listOf("app", "assistant-holder", "artifact-ports", "core-model", "capability-ports", "capability-sync-runtime", "control-ports", "policy-engine", "notification-collector", "sms-collector", "call-log-collector", "tailnet-core", "transport", "encrypted-store")
             .map(::file)
         val violations = scanNoVpnSurfaces(roots.flatMap { root -> root.walkTopDown().toList() })
         check(violations.isEmpty()) { violations.joinToString("\n") }

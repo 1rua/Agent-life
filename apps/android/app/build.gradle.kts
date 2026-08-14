@@ -11,6 +11,7 @@ android {
 dependencies {
     implementation(project(":artifact-ports"))
     implementation(project(":capability-ports"))
+    implementation(project(":capability-sync-runtime"))
     implementation(project(":core-model"))
     implementation(project(":control-ports"))
     implementation(project(":transport"))

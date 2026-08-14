@@ -27,6 +27,7 @@ include(
     ":assistant-holder",
     ":artifact-ports",
     ":capability-ports",
+    ":capability-sync-runtime",
     ":core-model",
     ":control-ports",
     ":policy-engine",
