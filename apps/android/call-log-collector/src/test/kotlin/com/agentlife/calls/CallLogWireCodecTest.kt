@@ -80,6 +80,11 @@ class CallLogWireCodecTest {
         val wire = String(fixture("call-record-released.json"), Charsets.UTF_8)
         rejects(wire.replace("\"source_epoch\":\"7\"", "\"source_epoch\":\"18446744073709551616\""))
         assertEquals(ULong.MAX_VALUE, codec.decode(wire.replace("\"source_epoch\":\"7\"", "\"source_epoch\":\"18446744073709551615\"").toByteArray()).sourceEpoch)
+        val maxRevisions = wire
+            .replace("\"capture_revision\":\"9\"", "\"capture_revision\":\"18446744073709551615\"")
+            .replace("\"policy_revision\":\"9\"", "\"policy_revision\":\"18446744073709551615\"")
+        assertEquals(ULong.MAX_VALUE, codec.decode(maxRevisions.toByteArray()).captureRevision)
+        rejects(maxRevisions.replace("18446744073709551615", "18446744073709551616"))
         val atLongMax = wire
             .replace("\"cursor_started_at_epoch_ms\":\"1700000000000\"", "\"cursor_started_at_epoch_ms\":\"9223372036854775807\"")
             .replace("\"captured_at_epoch_ms\":\"1700000000999\"", "\"captured_at_epoch_ms\":\"9223372036854775807\"")

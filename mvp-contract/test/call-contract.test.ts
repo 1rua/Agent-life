@@ -47,6 +47,8 @@ describe("call record v1", () => {
     expect(validateWireCallRecord({ ...released, cursor_provider_id: "43" })).toBe(false);
     expect(validateWireCallRecord({ ...released, source_epoch: "18446744073709551616" })).toBe(false);
     expect(validateWireCallRecord({ ...released, source_epoch: "18446744073709551615" })).toBe(true);
+    expect(validateWireCallRecord({ ...released, capture_revision: "18446744073709551615", policy_revision: "18446744073709551615" })).toBe(true);
+    expect(validateWireCallRecord({ ...released, capture_revision: "18446744073709551616", policy_revision: "18446744073709551616" })).toBe(false);
     expect(validateWireCallRecord({ ...released, metadata: { ...released.metadata, direction: "blocked" } })).toBe(false);
     expect(validateWireCallRecord({ ...released, counterparty_number: { state: "withheld", value: "+1" } })).toBe(false);
   });
@@ -103,6 +105,8 @@ describe("call record v1", () => {
     const validateSchema = createCallRecordSchemaValidator(schema);
     expect(validateSchema({ ...released, counterparty_number: { state: "released", value: "😀".repeat(64) } })).toBe(true);
     expect(validateSchema({ ...released, counterparty_number: { state: "released", value: "😀".repeat(65) } })).toBe(false);
+    expect(validateSchema({ ...released, capture_revision: "18446744073709551615", policy_revision: "18446744073709551615" })).toBe(true);
+    expect(validateSchema({ ...released, capture_revision: "18446744073709551616", policy_revision: "18446744073709551616" })).toBe(false);
   });
 
   test("rejects nested missing extra null and wrong-type values", () => {
