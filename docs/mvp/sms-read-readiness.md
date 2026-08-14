@@ -67,10 +67,9 @@ provider, deployment, or native AAR evidence from the host/static suites. The
 Android SDK and the project-built Tailscale AAR are environment dependencies;
 their absence is a verification blocker, not a passing substitute.
 
-An unresolved policy conflict remains: the source configures persisted periodic
-JobScheduler work while the permission allowlist forbids
-`RECEIVE_BOOT_COMPLETED`. Android ordinarily needs that permission to restore
-scheduled work after reboot. Until a reviewed policy/design resolves this
-persisted JobScheduler versus `RECEIVE_BOOT_COMPLETED` conflict, scheduling is
-only a best-effort in-process/installed-app configuration and must not be
-called reboot-resilient.
+Periodic work is best-effort `JobScheduler` scheduling (`.setPersisted(false)`).
+Jobs are not persisted across reboots. When the app starts, `AgentLifeApplication`
+reads the persisted SMS settings and restores the periodic job if auto-send is
+enabled with a non-manual interval. Reboot without a subsequent app launch
+results in no scheduled jobs. The app does not request `RECEIVE_BOOT_COMPLETED`
+and registers no `BroadcastReceiver`.
