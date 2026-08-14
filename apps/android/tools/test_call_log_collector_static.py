@@ -96,6 +96,48 @@ def _matching_delimiter(source: str, opening_index: int, opening: str, closing: 
     raise ValueError(f"unbalanced {opening}{closing} in Gradle source")
 
 
+def _kotlin_function_body(source: str, name: str) -> str | None:
+    match = re.search(rf"\bfun\s+{re.escape(name)}\s*\(", source)
+    if match is None:
+        return None
+    opening_parenthesis = source.find("(", match.start())
+    closing_parenthesis = _matching_delimiter(source, opening_parenthesis, "(", ")")
+    index = closing_parenthesis + 1
+    while index < len(source):
+        index = _skip_whitespace_and_comments(source, index)
+        if index >= len(source) or source[index] == "=":
+            return None
+        if source[index] == "{":
+            closing_brace = _matching_delimiter(source, index, "{", "}")
+            return source[index + 1 : closing_brace]
+        index += 1
+    return None
+
+
+def _compact_kotlin_code(source: str) -> str:
+    compacted: list[str] = []
+    index = 0
+    while index < len(source):
+        if source.startswith("//", index) or source.startswith("/*", index) or source[index] in ('"', "'"):
+            index = _skip_string_or_comment(source, index)
+        elif source[index].isspace():
+            index += 1
+        else:
+            compacted.append(source[index])
+            index += 1
+    return "".join(compacted)
+
+
+def _on_stop_job_uses_fresh_runtime_factory(source: str) -> bool:
+    body = _kotlin_function_body(source, "onStopJob")
+    if body is None:
+        return False
+    return (
+        "retryCallLogJobAfterStop{CallLogRuntimeFactoryRegistry.create(applicationContext)}"
+        in _compact_kotlin_code(body)
+    )
+
+
 def _dependencies_blocks(build: str) -> list[str]:
     blocks: list[str] = []
     index = 0
@@ -407,8 +449,38 @@ class CallLogCollectorStaticTest(unittest.TestCase):
 
         service = CALL_LOG_JOB_SERVICE.read_text(encoding="utf-8")
         self.assertIn("START_NOT_STICKY", service)
-        self.assertIn("return retryCallLogJobAfterStop {", service)
-        self.assertIn("CallLogRuntimeFactoryRegistry.create(applicationContext)", service)
+        self.assertTrue(_on_stop_job_uses_fresh_runtime_factory(service))
+
+    def test_stop_retry_factory_lookup_must_be_inside_on_stop_job_lambda(self):
+        start_only_lookup = """
+            class CallLogSyncJobService {
+                override fun onStartJob(params: JobParameters): Boolean {
+                    return retryCallLogJobAfterStop {
+                        CallLogRuntimeFactoryRegistry.create(applicationContext)
+                    }
+                }
+
+                override fun onStopJob(params: JobParameters): Boolean {
+                    return retryCallLogJobAfterStop { CallLogRuntime.denyFirst() }
+                }
+            }
+        """
+        direct_stop_lookup = """
+            class CallLogSyncJobService {
+                override fun onStopJob(params: JobParameters): Boolean {
+                    return retryCallLogJobAfterStop {
+                        CallLogRuntimeFactoryRegistry.create( applicationContext )
+                    }
+                }
+            }
+        """
+
+        # The previous independent whole-file checks both pass for this bad
+        # sample because the registry lookup lives in onStartJob.
+        self.assertIn("return retryCallLogJobAfterStop {", start_only_lookup)
+        self.assertIn("CallLogRuntimeFactoryRegistry.create(applicationContext)", start_only_lookup)
+        self.assertFalse(_on_stop_job_uses_fresh_runtime_factory(start_only_lookup))
+        self.assertTrue(_on_stop_job_uses_fresh_runtime_factory(direct_stop_lookup))
 
     def test_no_manifest_declares_forbidden_phone_permissions(self):
         forbidden_permissions = {
