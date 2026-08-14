@@ -11,6 +11,11 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+type LockRow = Record<string, string>;
+type DependencyLockParse = Readonly<{ rows: LockRow[]; errors: string[] }>;
+type DependencyLockResult = Readonly<{ ok: boolean; errors: string[]; pending: string[]; rows: LockRow[] }>;
+const cell = (row: LockRow, column: string): string => row[column] ?? "";
+
 export const EXPECTED_LOCK_IDS = [
   "MVP-DEP-ANDROID",
   "MVP-DEP-TSNET",
@@ -46,9 +51,9 @@ export const LOCK_COLUMNS = [
   "blocks",
 ];
 
-const stripMarkdown = (value) => value.trim().replace(/^`|`$/g, "").trim();
+const stripMarkdown = (value: string): string => value.trim().replace(/^`|`$/g, "").trim();
 
-const parseTableLine = (line) => {
+const parseTableLine = (line: string): string[] | null => {
   const trimmed = line.trim();
   if (!trimmed.startsWith("|")) return null;
   const body = trimmed.endsWith("|") ? trimmed.slice(1, -1) : trimmed.slice(1);
@@ -61,7 +66,7 @@ const parseTableLine = (line) => {
  * Parsing is intentionally strict: a prose list or a table with renamed
  * columns cannot accidentally become an accepted lock.
  */
-export const parseDependencyLock = (markdown) => {
+export const parseDependencyLock = (markdown: string): DependencyLockParse => {
   const lines = String(markdown).split(/\r?\n/);
   const headerIndex = lines.findIndex((line) => {
     const cells = parseTableLine(line);
@@ -69,11 +74,12 @@ export const parseDependencyLock = (markdown) => {
   });
   if (headerIndex < 0) return { rows: [], errors: ["lock table header is missing"] };
 
-  const header = parseTableLine(lines[headerIndex]);
+  const header = parseTableLine(lines[headerIndex] ?? "");
+  if (header === null) return { rows: [], errors: ["lock table header is missing"] };
   const indexes = Object.fromEntries(LOCK_COLUMNS.map((column) => [column, header.indexOf(column)]));
-  const rows = [];
+  const rows: LockRow[] = [];
   for (let index = headerIndex + 1; index < lines.length; index += 1) {
-    const cells = parseTableLine(lines[index]);
+    const cells = parseTableLine(lines[index] ?? "");
     if (!cells) {
       if (rows.length > 0) break;
       continue;
@@ -81,26 +87,26 @@ export const parseDependencyLock = (markdown) => {
     // Ignore the markdown separator row. Any other short row is malformed and
     // is retained as a row so validation can report the missing evidence.
     if (cells.every((cell) => /^:?-{3,}:?$/.test(cell))) continue;
-    const row = {};
-    for (const column of LOCK_COLUMNS) row[column] = cells[indexes[column]] ?? "";
+    const row: LockRow = {};
+    for (const column of LOCK_COLUMNS) row[column] = cells[indexes[column] ?? -1] ?? "";
     rows.push(row);
   }
   return { rows, errors: [] };
 };
 
 /** Canonical tuple covered by a row's integrity reference (excluding integrity). */
-export const canonicalEvidence = (row) => JSON.stringify(LOCK_COLUMNS
+export const canonicalEvidence = (row: LockRow) => JSON.stringify(LOCK_COLUMNS
   .filter((column) => column !== "integrity")
   .map((column) => [column, String(row[column] ?? "")]),
 );
 
-export const sha256Evidence = (row) => createHash("sha256").update(canonicalEvidence(row), "utf8").digest("hex");
+export const sha256Evidence = (row: LockRow): string => createHash("sha256").update(canonicalEvidence(row), "utf8").digest("hex");
 
-const addError = (errors, message) => {
+const addError = (errors: string[], message: string): void => {
   if (!errors.includes(message)) errors.push(message);
 };
 
-const isPending = (value) => /^pending\b/i.test(String(value).trim());
+const isPending = (value: unknown): boolean => /^pending\b/i.test(String(value).trim());
 
 /**
  * Validate a dependency-lock markdown document. `ok` means every row is
@@ -110,14 +116,14 @@ const isPending = (value) => /^pending\b/i.test(String(value).trim());
  * locked.
  * `pending` lists explicit fail-closed rows separately from malformed rows.
  */
-export const validateDependencyLock = (markdown, now = new Date()) => {
+export const validateDependencyLock = (markdown: string, now: Date | string | number = new Date()): DependencyLockResult => {
   const parsed = parseDependencyLock(markdown);
   const errors = [...parsed.errors];
-  const pending = [];
-  const counts = new Map();
+  const pending: string[] = [];
+  const counts = new Map<string, number>();
   const rows = parsed.rows;
 
-  for (const row of rows) counts.set(row.decision_id, (counts.get(row.decision_id) ?? 0) + 1);
+  for (const row of rows) counts.set(cell(row, "decision_id"), (counts.get(cell(row, "decision_id")) ?? 0) + 1);
   for (const id of EXPECTED_LOCK_IDS) {
     const count = counts.get(id) ?? 0;
     if (count === 0) addError(errors, `missing decision_id ${id}`);
@@ -127,12 +133,12 @@ export const validateDependencyLock = (markdown, now = new Date()) => {
     if (!EXPECTED_LOCK_IDS.includes(id)) addError(errors, `unknown decision_id ${id || "<empty>"}`);
   }
 
-  const covered = new Set();
+  const covered = new Set<string>();
   const nowEpoch = now instanceof Date ? now.getTime() : new Date(now).getTime();
   if (!Number.isFinite(nowEpoch)) addError(errors, "validator clock is invalid");
 
   for (const row of rows) {
-    const id = row.decision_id || "<empty>";
+    const id = cell(row, "decision_id") || "<empty>";
     const missing = LOCK_COLUMNS.filter((column) => !String(row[column] ?? "").trim());
     for (const column of missing) addError(errors, `${id} missing ${column}`);
 
@@ -148,23 +154,23 @@ export const validateDependencyLock = (markdown, now = new Date()) => {
       continue;
     }
 
-    if (row.status !== "locked") addError(errors, `${id} status must be locked or pending`);
-    if (!/^https:\/\//i.test(row.official_reference)) addError(errors, `${id} official_reference must be https`);
-    if (/\b(?:pending|latest|main|master|floating)\b/i.test(row.immutable_version)) {
+    if (cell(row, "status") !== "locked") addError(errors, `${id} status must be locked or pending`);
+    if (!/^https:\/\//i.test(cell(row, "official_reference"))) addError(errors, `${id} official_reference must be https`);
+    if (/\b(?:pending|latest|main|master|floating)\b/i.test(cell(row, "immutable_version"))) {
       addError(errors, `${id} immutable_version is not immutable`);
     }
-    if (!/^sha256:[a-f0-9]{64}$/i.test(row.integrity)) {
+    if (!/^sha256:[a-f0-9]{64}$/i.test(cell(row, "integrity"))) {
       addError(errors, `${id} integrity must be sha256:<64 hex>`);
-    } else if (row.integrity.slice(7).toLowerCase() !== sha256Evidence(row)) {
+    } else if (cell(row, "integrity").slice(7).toLowerCase() !== sha256Evidence(row)) {
       addError(errors, `${id} integrity mismatch`);
     }
-    if (/\b(?:pending|unreviewed|unknown)\b/i.test(row.license_review)) addError(errors, `${id} license_review is incomplete`);
-    const reviewerEpoch = Date.parse(row.reviewer_time);
+    if (/\b(?:pending|unreviewed|unknown)\b/i.test(cell(row, "license_review"))) addError(errors, `${id} license_review is incomplete`);
+    const reviewerEpoch = Date.parse(cell(row, "reviewer_time"));
     if (!Number.isFinite(reviewerEpoch)) addError(errors, `${id} reviewer_time must be an ISO timestamp`);
-    const expiryEpoch = Date.parse(row.evidence_expires_at);
+    const expiryEpoch = Date.parse(cell(row, "evidence_expires_at"));
     if (!Number.isFinite(expiryEpoch)) addError(errors, `${id} evidence_expires_at must be an ISO timestamp`);
     else if (expiryEpoch <= nowEpoch) addError(errors, `${id} evidence is expired`);
-    if (isPending(row.verify_command)) addError(errors, `${id} verify_command is incomplete`);
+    if (isPending(cell(row, "verify_command"))) addError(errors, `${id} verify_command is incomplete`);
   }
   for (const block of EXPECTED_BLOCKS) if (!covered.has(block)) addError(errors, `missing blocks id ${block}`);
 
@@ -176,7 +182,7 @@ export const validateDependencyLock = (markdown, now = new Date()) => {
 const runCli = () => {
   const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
   const lockPath = process.env.MVP_DEPENDENCY_LOCK ?? resolve(projectRoot, "docs/mvp/mvp-dependency-lock.md");
-  let markdown;
+  let markdown: string;
   try {
     markdown = readFileSync(lockPath, "utf8");
   } catch (error) {

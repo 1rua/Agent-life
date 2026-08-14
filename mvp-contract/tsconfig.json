@@ -7,5 +7,5 @@
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true
   },
-  "include": ["src/**/*.ts", "test/call-contract.test.ts"]
+  "include": ["src/**/*.ts", "test/**/*.ts"]
 }

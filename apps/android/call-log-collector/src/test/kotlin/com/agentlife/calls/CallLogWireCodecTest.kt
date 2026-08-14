@@ -57,8 +57,46 @@ class CallLogWireCodecTest {
         if (raw.lastOrNull() == '\n'.code.toByte()) rejects(raw.toString(Charsets.UTF_8))
     }
 
+    @Test fun `accepts supplementary unicode raw and escaped but rejects lone surrogates`() {
+        val raw = String(fixture("call-record-released.json"), Charsets.UTF_8).replace("+15551234567", "😀")
+        assertEquals("call:42", codec.decode(raw.toByteArray()).recordId)
+        assertEquals("call:42", codec.decode(raw.replace("😀", "\\uD83D\\uDE00").toByteArray()).recordId)
+        val releasedEmoji = record.copy(counterpartyNumber = normalizeCallCounterpartyNumber("😀", CallNumberPresentation.ALLOWED, CallLogTestFixtures.readScope(CallLogTestFixtures.policy(counterpartyAccess = com.agentlife.capability.CallCounterpartyAccess.NUMBER))))
+        assertEquals("call:42", codec.decode(codec.encode("call:7:42", releasedEmoji, 7uL, 9uL)).recordId)
+        rejects(raw.replace("😀", "\\uD800"))
+        rejects(raw.replace("😀", "\\uDC00"))
+        rejects(raw.replace("😀", "😀".repeat(65)))
+    }
+
+    @Test fun `accepts Long and ULong boundaries only in their designated fields`() {
+        val wire = String(fixture("call-record-released.json"), Charsets.UTF_8)
+        rejects(wire.replace("\"cursor_started_at_epoch_ms\":\"1700000000000\"", "\"cursor_started_at_epoch_ms\":\"9223372036854775808\""))
+        rejects(wire.replace("\"source_epoch\":\"7\"", "\"source_epoch\":\"18446744073709551616\""))
+        assertEquals(ULong.MAX_VALUE, codec.decode(wire.replace("\"source_epoch\":\"7\"", "\"source_epoch\":\"18446744073709551615\"").toByteArray()).sourceEpoch)
+        val atLongMax = wire
+            .replace("\"cursor_started_at_epoch_ms\":\"1700000000000\"", "\"cursor_started_at_epoch_ms\":\"9223372036854775807\"")
+            .replace("\"captured_at_epoch_ms\":\"1700000000999\"", "\"captured_at_epoch_ms\":\"9223372036854775807\"")
+            .replace("\"started_at_epoch_ms\":\"1700000000000\"", "\"started_at_epoch_ms\":\"9223372036854775807\"")
+            .replace("\"ended_at_epoch_ms\":\"1700000060000\"", "\"ended_at_epoch_ms\":\"9223372036854775807\"")
+            .replace("\"duration_seconds\":\"60\"", "\"duration_seconds\":\"0\"")
+            .replace("\"observed_at_epoch_ms\":\"1700000000999\"", "\"observed_at_epoch_ms\":\"9223372036854775807\"")
+        assertEquals("call:42", codec.decode(atLongMax.toByteArray()).recordId)
+    }
+
+    @Test fun `encoder rejects invalid event source identity and lone surrogate number`() {
+        rejectsEncode { codec.encode("call:8:42", record, 7uL, 9uL) }
+        rejectsEncode { codec.encode("call:0:42", record, 0uL, 9uL) }
+        rejectsEncode { codec.encode("call:7:42", record.copy(metadata = record.metadata.copy(recordId = "call:43")), 7uL, 9uL) }
+        val loneSurrogate = record.copy(counterpartyNumber = normalizeCallCounterpartyNumber("\uD800", CallNumberPresentation.ALLOWED, CallLogTestFixtures.readScope(CallLogTestFixtures.policy(counterpartyAccess = com.agentlife.capability.CallCounterpartyAccess.NUMBER))))
+        rejectsEncode { codec.encode("call:7:42", loneSurrogate, 7uL, 9uL) }
+    }
+
     private fun rejects(value: String) {
         try { codec.decode(value.toByteArray()) ; fail("expected strict decode failure") } catch (_: CallLogWireFormatException) { }
+    }
+
+    private fun rejectsEncode(operation: () -> Unit) {
+        try { operation(); fail("expected encoder failure") } catch (_: IllegalArgumentException) { }
     }
 
     private fun fixture(name: String): ByteArray {

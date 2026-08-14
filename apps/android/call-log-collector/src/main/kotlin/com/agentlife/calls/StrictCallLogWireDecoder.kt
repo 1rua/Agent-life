@@ -65,7 +65,7 @@ class StrictCallLogWireDecoder(private val wire: ByteArray) {
                 Charsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT).onUnmappableCharacter(CodingErrorAction.REPORT)
                     .decode(ByteBuffer.wrap(raw.toByteArray())).toString()
             } catch (_: CharacterCodingException) { throw CallLogWireFormatException() }
-            decoded.forEach { character -> requireFormat(character.code !in 0xD800..0xDFFF) }
+            requireValidUnicodeScalars(decoded)
             result.append(decoded); raw.reset()
         }
         while (index < wire.size) {
@@ -119,6 +119,19 @@ class StrictCallLogWireDecoder(private val wire: ByteArray) {
         }; return value
     }
     private fun requireFormat(condition: Boolean) { if (!condition) throw CallLogWireFormatException() }
+    private fun requireValidUnicodeScalars(value: String) {
+        var position = 0
+        while (position < value.length) {
+            val character = value[position]
+            if (character.isHighSurrogate()) {
+                requireFormat(position + 1 < value.length && value[position + 1].isLowSurrogate())
+                position += 2
+            } else {
+                requireFormat(!character.isLowSurrogate())
+                position += 1
+            }
+        }
+    }
 
     private companion object {
         val DIRECTIONS = setOf("incoming", "outgoing", "missed", "rejected")

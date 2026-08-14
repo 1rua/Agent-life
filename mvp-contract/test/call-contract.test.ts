@@ -57,7 +57,22 @@ describe("call record v1", () => {
     expect(validateWireCallRecord({ ...released, metadata: { ...released.metadata, observed_at_epoch_ms: "1" } })).toBe(false);
     expect(validateWireCallRecord({ ...released, metadata: { ...released.metadata, ended_at_epoch_ms: "1700000060001" } })).toBe(false);
     expect(validateWireCallRecord({ ...released, counterparty_number: { state: "released", value: "x".repeat(257) } })).toBe(false);
+    expect(validateWireCallRecord({ ...released, counterparty_number: { state: "released", value: "😀".repeat(64) } })).toBe(true);
+    expect(validateWireCallRecord({ ...released, counterparty_number: { state: "released", value: "😀".repeat(65) } })).toBe(false);
+    expect(validateWireCallRecord({ ...released, counterparty_number: { state: "released", value: "\uD800" } })).toBe(false);
+    expect(validateWireCallRecord({ ...released, counterparty_number: { state: "released", value: "\uDC00" } })).toBe(false);
+    expect(validateWireCallRecord({ ...released, cursor_started_at_epoch_ms: "9223372036854775807" })).toBe(false);
+    expect(validateWireCallRecord({ ...released, metadata: { ...released.metadata, started_at_epoch_ms: "9223372036854775808" } })).toBe(false);
     expect(validateWireCallRecord({ ...released, counterparty_number: { state: "withheld" } })).toBe(true);
+
+    const atLongMax = {
+      ...released,
+      cursor_started_at_epoch_ms: "9223372036854775807",
+      captured_at_epoch_ms: "9223372036854775807",
+      metadata: { ...released.metadata, started_at_epoch_ms: "9223372036854775807", ended_at_epoch_ms: "9223372036854775807", duration_seconds: "0", observed_at_epoch_ms: "9223372036854775807" },
+    };
+    expect(validateWireCallRecord(atLongMax)).toBe(true);
+    expect(validateWireCallRecord({ ...atLongMax, captured_at_epoch_ms: "9223372036854775808" })).toBe(false);
   });
 
   test("strict decoder rejects duplicate keys and trailing material", () => {
@@ -66,7 +81,27 @@ describe("call record v1", () => {
     expect(() => decodeCallRecordJson(new TextEncoder().encode('{"kind":"upsert","kind":"upsert"}'))).toThrow("WIRE_RECORD_UNREPRESENTABLE");
     expect(() => decodeCallRecordJson(new Uint8Array([...encoded, 0x20, 0x21]))).toThrow("WIRE_RECORD_UNREPRESENTABLE");
     expect(() => decodeCallRecordJson(new Uint8Array([...encoded, 0x20]))).toThrow("WIRE_RECORD_UNREPRESENTABLE");
+    expect(() => decodeCallRecordJson(new TextEncoder().encode(JSON.stringify(released).replace('"kind":"upsert","record_id"', '"record_id":"call:42","kind":"upsert"')))).toThrow("WIRE_RECORD_UNREPRESENTABLE");
     expect(() => decodeCallRecordJson(new Uint8Array([0xff]))).toThrow("WIRE_RECORD_UNREPRESENTABLE");
     expect(() => decodeCallRecordJson(new TextEncoder().encode('{"kind":"upsert","record_id":"\\uD800"}'))).toThrow("WIRE_RECORD_UNREPRESENTABLE");
+  });
+
+  test("preserves valid supplementary unicode in raw and escaped call numbers", () => {
+    const raw = { ...released, counterparty_number: { state: "released" as const, value: "😀" } };
+    expect(decodeCallRecordJson(new TextEncoder().encode(JSON.stringify(raw)))).toEqual(raw);
+    const escaped = JSON.stringify(raw).replace("😀", "\\uD83D\\uDE00");
+    expect(decodeCallRecordJson(new TextEncoder().encode(escaped))).toEqual(raw);
+    expect(() => decodeCallRecordJson(new TextEncoder().encode(JSON.stringify(raw).replace("😀", "\\uD800")))).toThrow("WIRE_RECORD_UNREPRESENTABLE");
+    expect(() => decodeCallRecordJson(new TextEncoder().encode(JSON.stringify(raw).replace("😀", "\\uDC00")))).toThrow("WIRE_RECORD_UNREPRESENTABLE");
+  });
+
+  test("rejects nested missing extra null and wrong-type values", () => {
+    expect(validateWireCallRecord({ ...released, metadata: { ...released.metadata, extra: true } })).toBe(false);
+    expect(validateWireCallRecord({ ...released, metadata: { direction: "incoming" } })).toBe(false);
+    expect(validateWireCallRecord({ ...released, metadata: null })).toBe(false);
+    expect(validateWireCallRecord({ ...released, metadata: { ...released.metadata, duration_seconds: 60 } })).toBe(false);
+    expect(validateWireCallRecord({ ...released, counterparty_number: { state: "released" } })).toBe(false);
+    const schemaText = readFileSync(resolve(process.cwd(), "mvp-contract/schemas/v1/call-record.schema.json"), "utf8");
+    expect(schemaText).toContain('"x-agent-life-maxUtf8Bytes": 256');
   });
 });

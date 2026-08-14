@@ -506,13 +506,25 @@ const MAX_I64 = 9_223_372_036_854_775_807n;
 const CALL_DIRECTIONS = new Set(["incoming", "outgoing", "missed", "rejected"]);
 const CALL_PRESENTATIONS = new Set(["allowed", "restricted", "unknown", "payphone", "unavailable"]);
 const validCallProviderId = (value: unknown): value is string => isPositiveU64(value) && BigInt(value) <= MAX_I64;
+const validNonNegativeI64 = (value: unknown): value is string => isDecimalU64(value) && BigInt(value) <= MAX_I64;
+const validUnicodeScalars = (value: string): boolean => {
+  for (let index = 0; index < value.length; index += 1) {
+    const unit = value.charCodeAt(index);
+    if (unit >= 0xD800 && unit <= 0xDBFF) {
+      const low = value.charCodeAt(index + 1);
+      if (!Number.isInteger(low) || low < 0xDC00 || low > 0xDFFF) return false;
+      index += 1;
+    } else if (unit >= 0xDC00 && unit <= 0xDFFF) return false;
+  }
+  return true;
+};
 const validCallRecordId = (value: unknown): value is string =>
   typeof value === "string" && value.startsWith("call:") && validCallProviderId(value.slice(5));
 const validCallMetadata = (value: unknown): value is WireCallRecord["metadata"] => recordObject(value)
   && exactKeys(value, ["direction", "started_at_epoch_ms", "ended_at_epoch_ms", "duration_seconds", "observed_at_epoch_ms", "number_presentation"])
   && stringValue(value.direction) && CALL_DIRECTIONS.has(value.direction)
-  && isDecimalU64(value.started_at_epoch_ms) && isDecimalU64(value.ended_at_epoch_ms)
-  && isDecimalU64(value.duration_seconds) && isDecimalU64(value.observed_at_epoch_ms)
+  && validNonNegativeI64(value.started_at_epoch_ms) && validNonNegativeI64(value.ended_at_epoch_ms)
+  && validNonNegativeI64(value.duration_seconds) && validNonNegativeI64(value.observed_at_epoch_ms)
   && stringValue(value.number_presentation) && CALL_PRESENTATIONS.has(value.number_presentation)
   && BigInt(value.ended_at_epoch_ms) === BigInt(value.started_at_epoch_ms) + BigInt(value.duration_seconds) * 1000n;
 const validCallCounterparty = (value: unknown, presentation: unknown): value is WireCallRecord["counterparty_number"] => {
@@ -520,7 +532,7 @@ const validCallCounterparty = (value: unknown, presentation: unknown): value is 
   if (value.state === "withheld") return exactKeys(value, ["state"]);
   return exactKeys(value, ["state", "value"])
     && value.state === "released" && presentation === "allowed"
-    && stringValue(value.value) && value.value.length > 0 && new TextEncoder().encode(value.value).byteLength <= 256;
+    && stringValue(value.value) && validUnicodeScalars(value.value) && value.value.length > 0 && new TextEncoder().encode(value.value).byteLength <= 256;
 };
 
 /** Validates the published call-record v1 object as well as its recovery invariants. */
@@ -530,8 +542,8 @@ export const validateWireCallRecord = (value: unknown): value is WireCallRecord 
     "captured_at_epoch_ms", "capture_revision", "policy_revision", "metadata", "counterparty_number",
   ])) return false;
   if (value.kind !== "upsert" || !validCallRecordId(value.record_id) || !isPositiveU64(value.source_epoch)
-    || value.record_revision !== "1" || !isDecimalU64(value.cursor_started_at_epoch_ms)
-    || !validCallProviderId(value.cursor_provider_id) || !isDecimalU64(value.captured_at_epoch_ms)
+    || value.record_revision !== "1" || !validNonNegativeI64(value.cursor_started_at_epoch_ms)
+    || !validCallProviderId(value.cursor_provider_id) || !validNonNegativeI64(value.captured_at_epoch_ms)
     || !isDecimalU64(value.capture_revision) || !isDecimalU64(value.policy_revision) || !validCallMetadata(value.metadata)) return false;
   return value.record_id === `call:${value.cursor_provider_id}`
     && value.cursor_started_at_epoch_ms === value.metadata.started_at_epoch_ms
@@ -561,14 +573,20 @@ export const encodeCallRecord = (record: WireCallRecord): WireCallRecord => {
 
 class StrictJsonReader {
   private index = 0;
+  private readonly objectOrders = new WeakMap<Record<string, unknown>, readonly string[]>();
   constructor(private readonly text: string) {}
 
   readDocument(): unknown {
     this.skipWhitespace();
     const value = this.readValue();
-    this.skipWhitespace();
     if (this.index !== this.text.length) this.fail();
     return value;
+  }
+
+  hasObjectOrder(value: unknown, expected: readonly string[]): boolean {
+    if (!recordObject(value)) return false;
+    const order = this.objectOrders.get(value);
+    return order !== undefined && order.length === expected.length && order.every((key, index) => key === expected[index]);
   }
 
   private readValue(): unknown {
@@ -587,14 +605,14 @@ class StrictJsonReader {
     this.expect("{"); this.skipWhitespace();
     const result: Record<string, unknown> = {};
     const keys = new Set<string>();
-    if (this.text[this.index] === "}") { this.index += 1; return result; }
+    if (this.text[this.index] === "}") { this.index += 1; this.objectOrders.set(result, []); return result; }
     while (true) {
       if (this.text[this.index] !== '"') this.fail();
       const key = this.readString();
       if (keys.has(key)) this.fail();
       keys.add(key); this.skipWhitespace(); this.expect(":"); this.skipWhitespace();
       result[key] = this.readValue(); this.skipWhitespace();
-      if (this.text[this.index] === "}") { this.index += 1; return result; }
+      if (this.text[this.index] === "}") { this.index += 1; this.objectOrders.set(result, [...keys]); return result; }
       this.expect(","); this.skipWhitespace();
     }
   }
@@ -632,8 +650,14 @@ class StrictJsonReader {
         } else { if (code >= 0xDC00 && code <= 0xDFFF) this.fail(); result += String.fromCharCode(code); }
         continue;
       }
-      const point = value.codePointAt(0) ?? -1;
-      if (value.charCodeAt(0) < 0x20 || (point >= 0xD800 && point <= 0xDFFF)) this.fail();
+      if (value.charCodeAt(0) < 0x20) this.fail();
+      const unit = value.charCodeAt(0);
+      if (unit >= 0xD800 && unit <= 0xDBFF) {
+        const low = this.text[this.index];
+        if (low === undefined || low.charCodeAt(0) < 0xDC00 || low.charCodeAt(0) > 0xDFFF) this.fail();
+        result += value + low; this.index += 1; continue;
+      }
+      if (unit >= 0xDC00 && unit <= 0xDFFF) this.fail();
       result += value;
     }
   }
@@ -658,13 +682,14 @@ class StrictJsonReader {
 /** Decodes JSON only after a recursive byte-safe duplicate-key scan. */
 export const decodeCallRecordJson = (wire: Uint8Array): WireCallRecord => {
   let decoded: unknown;
-  try { decoded = new StrictJsonReader(new TextDecoder("utf-8", { fatal: true }).decode(wire)).readDocument(); }
+  let reader: StrictJsonReader;
+  try { reader = new StrictJsonReader(new TextDecoder("utf-8", { fatal: true }).decode(wire)); decoded = reader.readDocument(); }
   catch (_error) { throw new Error("WIRE_RECORD_UNREPRESENTABLE"); }
   if (!validateWireCallRecord(decoded)) throw new Error("WIRE_RECORD_UNREPRESENTABLE");
-  const canonical = encodeCallRecord(decoded);
-  const expected = new TextEncoder().encode(JSON.stringify(canonical));
-  if (wire.byteLength !== expected.byteLength || wire.some((value, index) => value !== expected[index])) {
-    throw new Error("WIRE_RECORD_UNREPRESENTABLE");
-  }
-  return canonical;
+  const expectedRoot = ["kind", "record_id", "source_epoch", "record_revision", "cursor_started_at_epoch_ms", "cursor_provider_id", "captured_at_epoch_ms", "capture_revision", "policy_revision", "metadata", "counterparty_number"];
+  const expectedMetadata = ["direction", "started_at_epoch_ms", "ended_at_epoch_ms", "duration_seconds", "observed_at_epoch_ms", "number_presentation"];
+  const expectedCounterparty = decoded.counterparty_number.state === "withheld" ? ["state"] : ["state", "value"];
+  if (!reader.hasObjectOrder(decoded, expectedRoot) || !reader.hasObjectOrder(decoded.metadata, expectedMetadata)
+    || !reader.hasObjectOrder(decoded.counterparty_number, expectedCounterparty)) throw new Error("WIRE_RECORD_UNREPRESENTABLE");
+  return encodeCallRecord(decoded);
 };
