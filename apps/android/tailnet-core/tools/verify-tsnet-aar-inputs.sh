@@ -2,6 +2,9 @@
 set -euo pipefail
 export GIT_NO_LAZY_FETCH=1
 
+readonly TSNET_CANONICAL_TAG_OBJECT='0ee734d3089846b27bc6ebcddd3d6ee5ec13e04d'
+readonly TSNET_CANONICAL_COMMIT='36550d57f4a4055246ef7412f4e650a012a465f1'
+
 fail() {
   printf 'TSNET_AAR_INPUTS_BLOCKED: %s\n' "$1" >&2
   exit 2
@@ -10,6 +13,11 @@ fail() {
 controller_fetch_prerequisite() {
   printf '%s\n' 'git -C third_party/tailscale fetch --filter=blob:none origin refs/tags/v1.98.10:refs/tags/v1.98.10' >&2
 }
+
+verify_tsnet_aar_inputs() (
+expected_tag_object="$1"
+expected_commit="$2"
+shift 2
 
 source_dir=''
 lock_file=''
@@ -37,16 +45,19 @@ done
 [[ -d "$source_dir" ]] || fail "source checkout is missing: $source_dir"
 command -v python3 >/dev/null 2>&1 || fail 'python3 is required to validate the lock'
 command -v git >/dev/null 2>&1 || fail 'git is required to verify the source checkout'
+command -v realpath >/dev/null 2>&1 || fail 'realpath is required to verify the worktree boundary'
 
 lock_values_file="$(mktemp)"
 trap 'rm -f "$lock_values_file"' EXIT
-if ! python3 - "$lock_file" >"$lock_values_file" <<'PY'
+if ! python3 - "$lock_file" "$expected_tag_object" "$expected_commit" >"$lock_values_file" <<'PY'
 import json
 import pathlib
 import re
 import sys
 
 lock_path = pathlib.Path(sys.argv[1])
+expected_tag_object = sys.argv[2]
+expected_commit = sys.argv[3]
 
 def reject(message):
     raise ValueError(message)
@@ -92,6 +103,8 @@ try:
         "schemaVersion": (data["schemaVersion"], 1),
         "source.upstreamUrl": (source["upstreamUrl"], "https://github.com/tailscale/tailscale.git"),
         "source.release": (source["release"], "v1.98.10"),
+        "source.tagObject": (source["tagObject"], expected_tag_object),
+        "source.commit": (source["commit"], expected_commit),
         "source.sourceFiles.version.path": (version_file["path"], "VERSION.txt"),
         "source.sourceFiles.version.value": (version_file["value"], "1.98.10"),
         "source.sourceFiles.module.path": (module_file["path"], "go.mod"),
@@ -163,6 +176,10 @@ module_value="${lock_values[7]}"
 go_value="${lock_values[8]}"
 
 git -C "$source_dir" rev-parse --is-inside-work-tree >/dev/null 2>&1 || fail 'source is not a Git checkout'
+source_real="$(realpath -e "$source_dir")" || fail 'source checkout path cannot be resolved'
+worktree_root="$(git -C "$source_dir" rev-parse --show-toplevel 2>/dev/null)" || fail 'source worktree root cannot be resolved'
+worktree_real="$(realpath -e "$worktree_root")" || fail 'source worktree root path cannot be resolved'
+[[ "$source_real" == "$worktree_real" ]] || fail 'source must be the Git worktree root'
 origin_url="$(git -C "$source_dir" remote get-url origin 2>/dev/null)" || fail 'source checkout has no origin remote'
 normalized_origin="${origin_url%/}"
 [[ "$normalized_origin" == "$upstream_url" ]] || fail "origin URL does not match the official upstream: $origin_url"
@@ -191,10 +208,22 @@ if ! git -C "$source_dir" cat-file -e "$commit^{commit}" 2>/dev/null; then
   fail "pinned commit object is missing: $commit"
 fi
 
-actual_version="$(git -C "$source_dir" show "$commit:$version_path" 2>/dev/null)" || fail "$version_path is missing from pinned commit"
+version_blob="$(git -C "$source_dir" rev-parse "$commit:$version_path" 2>/dev/null)" || fail "$version_path is missing from pinned commit"
+if ! version_blob_type="$(git -C "$source_dir" cat-file -t "$version_blob" 2>/dev/null)"; then
+  controller_fetch_prerequisite
+  fail "$version_path blob is missing from the local object database"
+fi
+[[ "$version_blob_type" == 'blob' ]] || fail "$version_path does not resolve to a blob"
+actual_version="$(git -C "$source_dir" show "$commit:$version_path" 2>/dev/null)" || fail "$version_path blob cannot be read"
 [[ "$actual_version" == "$version_value" ]] || fail "$version_path does not match lock"
 
-go_mod="$(git -C "$source_dir" show "$commit:$module_path" 2>/dev/null)" || fail "$module_path is missing from pinned commit"
+module_blob="$(git -C "$source_dir" rev-parse "$commit:$module_path" 2>/dev/null)" || fail "$module_path is missing from pinned commit"
+if ! module_blob_type="$(git -C "$source_dir" cat-file -t "$module_blob" 2>/dev/null)"; then
+  controller_fetch_prerequisite
+  fail "$module_path blob is missing from the local object database"
+fi
+[[ "$module_blob_type" == 'blob' ]] || fail "$module_path does not resolve to a blob"
+go_mod="$(git -C "$source_dir" show "$commit:$module_path" 2>/dev/null)" || fail "$module_path blob cannot be read"
 actual_module="$(printf '%s\n' "$go_mod" | sed -n 's/^module[[:space:]]\{1,\}//p')"
 actual_go="$(printf '%s\n' "$go_mod" | sed -n 's/^go[[:space:]]\{1,\}//p')"
 [[ "$actual_module" == "$module_value" ]] || fail "$module_path module does not match lock"
@@ -203,3 +232,8 @@ actual_go="$(printf '%s\n' "$go_mod" | sed -n 's/^go[[:space:]]\{1,\}//p')"
 printf 'TSNET_AAR_INPUTS_READY\n'
 printf 'source_commit=%s\n' "$commit"
 printf 'source_tag_object=%s\n' "$tag_object"
+)
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  verify_tsnet_aar_inputs "$TSNET_CANONICAL_TAG_OBJECT" "$TSNET_CANONICAL_COMMIT" "$@"
+fi
