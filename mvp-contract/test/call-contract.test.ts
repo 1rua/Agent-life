@@ -1,8 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { Ajv2020 } from "ajv/dist/2020.js";
-import { decodeCallRecordJson, encodeCallRecord, validateWireCallRecord } from "../src/wire-codec.ts";
+import { createCallRecordSchemaValidator, decodeCallRecordJson, encodeCallRecord, validateWireCallRecord } from "../src/wire-codec.ts";
 
 const released = {
   kind: "upsert",
@@ -33,7 +32,7 @@ describe("call record v1", () => {
 
   test("validates both shared frozen fixtures", () => {
     const schema = JSON.parse(readFileSync(resolve(process.cwd(), "mvp-contract/schemas/v1/call-record.schema.json"), "utf8"));
-    const validateSchema = new Ajv2020({ strict: false }).compile(schema);
+    const validateSchema = createCallRecordSchemaValidator(schema);
     for (const fixture of ["call-record-released.json", "call-record-withheld.json"]) {
       const parsed: unknown = JSON.parse(readFileSync(resolve(process.cwd(), "mvp-contract/fixtures/v1", fixture), "utf8"));
       expect(validateWireCallRecord(parsed)).toBe(true);
@@ -61,7 +60,6 @@ describe("call record v1", () => {
     expect(validateWireCallRecord({ ...released, counterparty_number: { state: "released", value: "😀".repeat(65) } })).toBe(false);
     expect(validateWireCallRecord({ ...released, counterparty_number: { state: "released", value: "\uD800" } })).toBe(false);
     expect(validateWireCallRecord({ ...released, counterparty_number: { state: "released", value: "\uDC00" } })).toBe(false);
-    expect(validateWireCallRecord({ ...released, cursor_started_at_epoch_ms: "9223372036854775807" })).toBe(false);
     expect(validateWireCallRecord({ ...released, metadata: { ...released.metadata, started_at_epoch_ms: "9223372036854775808" } })).toBe(false);
     expect(validateWireCallRecord({ ...released, counterparty_number: { state: "withheld" } })).toBe(true);
 
@@ -72,7 +70,12 @@ describe("call record v1", () => {
       metadata: { ...released.metadata, started_at_epoch_ms: "9223372036854775807", ended_at_epoch_ms: "9223372036854775807", duration_seconds: "0", observed_at_epoch_ms: "9223372036854775807" },
     };
     expect(validateWireCallRecord(atLongMax)).toBe(true);
-    expect(validateWireCallRecord({ ...atLongMax, captured_at_epoch_ms: "9223372036854775808" })).toBe(false);
+    expect(validateWireCallRecord({
+      ...atLongMax,
+      cursor_started_at_epoch_ms: "9223372036854775808",
+      captured_at_epoch_ms: "9223372036854775808",
+      metadata: { ...atLongMax.metadata, started_at_epoch_ms: "9223372036854775808", ended_at_epoch_ms: "9223372036854775808", observed_at_epoch_ms: "9223372036854775808" },
+    })).toBe(false);
   });
 
   test("strict decoder rejects duplicate keys and trailing material", () => {
@@ -93,6 +96,13 @@ describe("call record v1", () => {
     expect(decodeCallRecordJson(new TextEncoder().encode(escaped))).toEqual(raw);
     expect(() => decodeCallRecordJson(new TextEncoder().encode(JSON.stringify(raw).replace("😀", "\\uD800")))).toThrow("WIRE_RECORD_UNREPRESENTABLE");
     expect(() => decodeCallRecordJson(new TextEncoder().encode(JSON.stringify(raw).replace("😀", "\\uDC00")))).toThrow("WIRE_RECORD_UNREPRESENTABLE");
+  });
+
+  test("schema validator executes the UTF-8 byte limit extension", () => {
+    const schema = JSON.parse(readFileSync(resolve(process.cwd(), "mvp-contract/schemas/v1/call-record.schema.json"), "utf8"));
+    const validateSchema = createCallRecordSchemaValidator(schema);
+    expect(validateSchema({ ...released, counterparty_number: { state: "released", value: "😀".repeat(64) } })).toBe(true);
+    expect(validateSchema({ ...released, counterparty_number: { state: "released", value: "😀".repeat(65) } })).toBe(false);
   });
 
   test("rejects nested missing extra null and wrong-type values", () => {

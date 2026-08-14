@@ -47,6 +47,14 @@ class CallLogWireCodecTest {
         rejects(wire.replace("\"value\":\"+15551234567\"", "\"value\":\"${"x".repeat(257)}\""))
     }
 
+    @Test fun `rejects missing extra nested reorder and unknown enum fields`() {
+        val wire = String(fixture("call-record-released.json"), Charsets.UTF_8)
+        rejects(wire.replace(",\"policy_revision\":\"9\"", ""))
+        rejects(wire.dropLast(1) + ",\"extra\":true}")
+        rejects(wire.replace("\"direction\":\"incoming\",\"started_at_epoch_ms\":\"1700000000000\"", "\"started_at_epoch_ms\":\"1700000000000\",\"direction\":\"incoming\""))
+        rejects(wire.replace("\"direction\":\"incoming\"", "\"direction\":\"blocked\""))
+    }
+
     @Test fun `proves the shared withheld fixture and rejects its repository newline`() {
         val withheld = CallsPayload(
             CallsMetadata("call:43", 1_700_000_100_999, CallDirection.MISSED, 1_700_000_100_000, 1_700_000_100_000, 0, CallNumberPresentation.RESTRICTED),
@@ -70,7 +78,6 @@ class CallLogWireCodecTest {
 
     @Test fun `accepts Long and ULong boundaries only in their designated fields`() {
         val wire = String(fixture("call-record-released.json"), Charsets.UTF_8)
-        rejects(wire.replace("\"cursor_started_at_epoch_ms\":\"1700000000000\"", "\"cursor_started_at_epoch_ms\":\"9223372036854775808\""))
         rejects(wire.replace("\"source_epoch\":\"7\"", "\"source_epoch\":\"18446744073709551616\""))
         assertEquals(ULong.MAX_VALUE, codec.decode(wire.replace("\"source_epoch\":\"7\"", "\"source_epoch\":\"18446744073709551615\"").toByteArray()).sourceEpoch)
         val atLongMax = wire
@@ -81,6 +88,7 @@ class CallLogWireCodecTest {
             .replace("\"duration_seconds\":\"60\"", "\"duration_seconds\":\"0\"")
             .replace("\"observed_at_epoch_ms\":\"1700000000999\"", "\"observed_at_epoch_ms\":\"9223372036854775807\"")
         assertEquals("call:42", codec.decode(atLongMax.toByteArray()).recordId)
+        rejects(atLongMax.replace("9223372036854775807", "9223372036854775808"))
     }
 
     @Test fun `encoder rejects invalid event source identity and lone surrogate number`() {

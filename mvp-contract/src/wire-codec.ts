@@ -7,6 +7,8 @@
  * identity and authorization facts are never encoded into these records.
  */
 
+import { Ajv2020 } from "ajv/dist/2020.js";
+
 const PACKAGE_NAME = /^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)+$/;
 const MAX_U64 = 18_446_744_073_709_551_615n;
 const MAX_SMS_PROVIDER_ID = 9_223_372_036_854_775_807n;
@@ -517,6 +519,25 @@ const validUnicodeScalars = (value: string): boolean => {
     } else if (unit >= 0xDC00 && unit <= 0xDFFF) return false;
   }
   return true;
+};
+
+/**
+ * Compiles a published call-record schema with its registered executable
+ * UTF-8-byte vocabulary. Generic JSON Schema validators do not interpret this
+ * contract extension, so callers must use this factory at the schema boundary.
+ */
+export const createCallRecordSchemaValidator = (schema: object) => {
+  const ajv = new Ajv2020({ strict: false });
+  ajv.addKeyword({
+    keyword: "x-agent-life-maxUtf8Bytes",
+    type: "string",
+    schemaType: "number",
+    validate: (limit: unknown, value: unknown): boolean =>
+      typeof limit === "number" && Number.isSafeInteger(limit) && limit >= 0
+      && typeof value === "string" && validUnicodeScalars(value)
+      && new TextEncoder().encode(value).byteLength <= limit,
+  });
+  return ajv.compile(schema);
 };
 const validCallRecordId = (value: unknown): value is string =>
   typeof value === "string" && value.startsWith("call:") && validCallProviderId(value.slice(5));
