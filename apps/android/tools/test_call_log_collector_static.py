@@ -16,6 +16,7 @@ ASSISTANT_HOLDER_BUILD_GRADLE = ROOT / "assistant-holder" / "build.gradle.kts"
 ASSISTANT_HOLDER_MANIFEST = ROOT / "assistant-holder" / "src" / "main" / "AndroidManifest.xml"
 FORBIDDEN_SURFACES = ROOT / "gradle" / "mvp-forbidden-surfaces.gradle.kts"
 CALL_LOG_READER = CALL_LOG_ROOT / "src" / "main" / "kotlin" / "com" / "agentlife" / "calls" / "AndroidCallLogReader.kt"
+CALL_LOG_CAPABILITY_PROVIDER = CALL_LOG_ROOT / "src" / "main" / "kotlin" / "com" / "agentlife" / "calls" / "AndroidCallLogCapabilityProvider.kt"
 ANDROID_NS = "{http://schemas.android.com/apk/res/android}"
 ALLOWED_PRODUCTION_DEPENDENCIES = {
     ("implementation", 'project(":capability-ports")'),
@@ -411,6 +412,12 @@ class CallLogCollectorStaticTest(unittest.TestCase):
         ):
             with self.subTest(forbidden_surface=forbidden_surface):
                 self.assertNotIn(forbidden_surface, source)
+
+    def test_capability_provider_uses_only_the_cursor_helper_for_call_record_id_parsing(self):
+        source = CALL_LOG_CAPABILITY_PROVIDER.read_text(encoding="utf-8")
+        self.assertEqual(1, source.count('recordId.removePrefix("call:").toLong()'))
+        self.assertIn("fun CallsMetadata.toCallLogCursor()", source)
+        self.assertNotRegex(source, r"catch\s*\([^)]*:\s*Exception\b")
 
 
 if __name__ == "__main__":

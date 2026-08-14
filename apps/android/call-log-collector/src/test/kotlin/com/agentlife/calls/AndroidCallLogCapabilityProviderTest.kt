@@ -80,7 +80,6 @@ class AndroidCallLogCapabilityProviderTest {
             CallLogPermissionRequiredException() to "CALL_LOG_PERMISSION_REQUIRED",
             CallLogQueryException() to "CALL_LOG_QUERY_FAILED",
             CallLogInvalidRowException() to "CALL_LOG_INVALID_ROW",
-            IllegalStateException("provider secret") to "CALL_LOG_QUERY_FAILED",
         )
         cases.forEach { (error, expected) ->
             val result = provider(CallLogTestFixtures.policy(), reader = CallLogTestFixtures.reader { throw error })
@@ -90,6 +89,19 @@ class AndroidCallLogCapabilityProviderTest {
             assertTrue(result.records.isEmpty())
             assertFalse(result.toString().contains("secret"))
         }
+    }
+
+    @Test
+    fun `unexpected reader exceptions propagate rather than being relabeled as provider failures`() = runBlocking {
+        val provider = provider(
+            CallLogTestFixtures.policy(),
+            reader = CallLogTestFixtures.reader { throw IllegalStateException("programming failure") },
+        )
+
+        assertThrows(IllegalStateException::class.java) {
+            runBlocking { provider.read(CallLogTestFixtures.readScope()) }
+        }
+        Unit
     }
 
     @Test

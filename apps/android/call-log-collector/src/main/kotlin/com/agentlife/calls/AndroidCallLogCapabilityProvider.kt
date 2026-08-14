@@ -66,8 +66,6 @@ class AndroidCallLogCapabilityProvider(
             failed(scope.policyRevision, CallLogProviderFailure.INVALID_ROW, started, readCount, acceptedCount)
         } catch (failure: CallLogQueryException) {
             failed(scope.policyRevision, CallLogProviderFailure.QUERY_FAILED, started, readCount, acceptedCount)
-        } catch (_: Exception) {
-            failed(scope.policyRevision, CallLogProviderFailure.QUERY_FAILED, started, readCount, acceptedCount)
         }
     }
 
@@ -86,14 +84,17 @@ class AndroidCallLogCapabilityProvider(
                 .take(fence.policy.historyPolicy.maxRecords)
             readCount = rows.size
             val events = rows.map { row ->
-                CapabilityEvent(
+                val record = row.toPayload(scope, fence.policy.directions)
+                val cursor = record.metadata.toCallLogCursor()
+                cursor to CapabilityEvent(
                     capability = MobileDataCapability.CALLS,
-                    eventId = "call:${state.sourceEpoch}:${row.providerId}",
-                    record = row.toPayload(scope, fence.policy.directions),
+                    eventId = "call:${state.sourceEpoch}:${cursor.providerId}",
+                    record = record,
                     policyRevision = scope.policyRevision,
                 )
-            }.sortedWith(compareBy<CapabilityEvent<CallsPayload>> { it.record.metadata.startedAtEpochMs }
-                .thenBy { it.record.metadata.recordId.removePrefix("call:").toLong() })
+            }.sortedWith(compareBy<Pair<CallLogCursor, CapabilityEvent<CallsPayload>>> { it.first.startedAtEpochMs }
+                .thenBy { it.first.providerId })
+                .map { it.second }
             acceptedCount = events.size
             requireUnchanged(fence, scope)
             events.forEach { event -> emit(event) }
@@ -115,8 +116,6 @@ class AndroidCallLogCapabilityProvider(
         } catch (failure: CallLogSyncStateCorrupted) {
             audit(scope.policyRevision, CallLogAuditResultCode.CALL_LOG_SYNC_STATE_CORRUPTED, readCount, acceptedCount, 0, started)
             throw CallLogProviderException(CallLogProviderFailure.QUERY_FAILED)
-        } catch (_: Exception) {
-            throwProvider(scope, CallLogProviderFailure.QUERY_FAILED, started, readCount, acceptedCount)
         }
     }
 
