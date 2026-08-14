@@ -64,6 +64,42 @@ class CallLogSettingsAuthorityTest {
     }
 
     @Test
+    fun `disabled state retains the highest policy revision across re enable`() {
+        val persistence = InMemoryCallLogSettingsPersistence()
+        val authority = enabledAuthority(persistence)
+
+        authority.beginRevocation(
+            targetEpoch = 2u,
+            targetPolicyRevision = 3u,
+            targetPolicy = null,
+            authorizationRevision = 2u,
+        )
+        authority.commitRevocationTarget()
+
+        val restoredDisabled = PersistentCallLogSettingsAuthority(persistence)
+        assertEquals(CallLogSettingsPhase.Disabled, restoredDisabled.snapshot().phase)
+        assertEquals(3uL, restoredDisabled.snapshot().policyRevisionFloor)
+        assertNull(restoredDisabled.capabilityGrant())
+        assertThrows(IllegalArgumentException::class.java) {
+            restoredDisabled.beginRevocation(
+                targetEpoch = 3u,
+                targetPolicyRevision = 3u,
+                targetPolicy = policy(3u, CallCounterpartyAccess.WITHHELD),
+                authorizationRevision = 3u,
+            )
+        }
+
+        restoredDisabled.beginRevocation(
+            targetEpoch = 3u,
+            targetPolicyRevision = 4u,
+            targetPolicy = policy(4u, CallCounterpartyAccess.WITHHELD),
+            authorizationRevision = 3u,
+        )
+        restoredDisabled.commitRevocationTarget()
+        assertEquals(4uL, restoredDisabled.capabilityGrant()!!.policyRevision)
+    }
+
+    @Test
     fun `policy directions are canonical and snapshots are copy safe`() {
         val persistence = InMemoryCallLogSettingsPersistence()
         val originalDirections = linkedSetOf(CallDirection.REJECTED, CallDirection.INCOMING)
@@ -142,6 +178,41 @@ class CallLogSettingsAuthorityTest {
             unknownPhase,
             encoded + byteArrayOf(0),
         ).forEach { malformed ->
+            val authority = PersistentCallLogSettingsAuthority(InMemoryCallLogSettingsPersistence(malformed))
+            assertTrue(authority.snapshot().corrupted)
+            assertEquals(CallLogSettingsPhase.Disabled, authority.snapshot().phase)
+            assertNull(authority.capabilityGrant())
+        }
+    }
+
+    @Test
+    fun `non canonical booleans and phase dependent zero revisions fail closed`() {
+        val enabledBytes = InMemoryCallLogSettingsPersistence().also { persistence ->
+            enabledAuthority(persistence)
+        }.read()!!
+        val malformedBoolean = enabledBytes.copyOf().also {
+            it[CallLogSettingsCodec.enabledModeBooleanOffset] = 2
+        }
+        val malformedEnabledRevision = enabledBytes.copyOf().also {
+            for (index in CallLogSettingsCodec.authorizationRevisionOffset until
+                CallLogSettingsCodec.authorizationRevisionOffset + Long.SIZE_BYTES
+            ) {
+                it[index] = 0
+            }
+        }
+        val malformedRevokingTarget = CallLogSettingsCodec.encode(
+            CallLogSettingsSnapshot(
+                phase = CallLogSettingsPhase.Revoking(
+                    targetEpoch = 1u,
+                    targetPolicyRevision = 0u,
+                    targetPolicy = null,
+                ),
+                authorizationRevision = 1u,
+                policyRevisionFloor = 0u,
+            ),
+        )
+
+        listOf(malformedBoolean, malformedEnabledRevision, malformedRevokingTarget).forEach { malformed ->
             val authority = PersistentCallLogSettingsAuthority(InMemoryCallLogSettingsPersistence(malformed))
             assertTrue(authority.snapshot().corrupted)
             assertEquals(CallLogSettingsPhase.Disabled, authority.snapshot().phase)

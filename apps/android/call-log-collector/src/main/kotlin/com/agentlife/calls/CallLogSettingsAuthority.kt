@@ -33,7 +33,7 @@ class InMemoryCallLogSettingsPersistence(initial: ByteArray? = null) : CallLogSe
 }
 
 /** Atomic file persistence for [File] `Context.noBackupFilesDir` children. */
-class FileCallLogSettingsPersistence(private val file: File) : CallLogSettingsPersistence {
+class FileCallLogSettingsPersistence private constructor(private val file: File) : CallLogSettingsPersistence {
     override fun read(): ByteArray? = if (file.isFile) file.readBytes() else null
 
     override fun write(value: ByteArray) {
@@ -131,10 +131,11 @@ data class CallLogSettingsSnapshot(
     val authorizationRevision: ULong,
     val corrupted: Boolean = false,
     val epochExhausted: Boolean = false,
+    val policyRevisionFloor: ULong = phase.policyRevision(),
 ) {
     override fun toString(): String =
         "CallLogSettingsSnapshot(phase=${phase::class.simpleName},authorizationRevision=$authorizationRevision," +
-            "corrupted=$corrupted,epochExhausted=$epochExhausted)"
+            "policyRevisionFloor=$policyRevisionFloor,corrupted=$corrupted,epochExhausted=$epochExhausted)"
 }
 
 /**
@@ -180,7 +181,7 @@ class PersistentCallLogSettingsAuthority(
             require(authorizationRevision > previous.authorizationRevision) {
                 "call-log authorization revision must advance"
             }
-            require(targetPolicyRevision > previous.phase.policyRevision()) {
+            require(targetPolicyRevision > previous.policyRevisionFloor) {
                 "call-log policy revision must advance"
             }
             if (previous.phase is CallLogSettingsPhase.Disabled) {
@@ -200,6 +201,7 @@ class PersistentCallLogSettingsAuthority(
                 ),
                 authorizationRevision = authorizationRevision,
                 epochExhausted = epochExhausted,
+                policyRevisionFloor = targetPolicyRevision,
             )
             persistence.write(CallLogSettingsCodec.encode(candidate))
             current = candidate
@@ -218,6 +220,7 @@ class PersistentCallLogSettingsAuthority(
                     ?: CallLogSettingsPhase.Disabled,
                 authorizationRevision = previous.authorizationRevision,
                 epochExhausted = previous.epochExhausted,
+                policyRevisionFloor = previous.policyRevisionFloor,
             )
             persistence.write(CallLogSettingsCodec.encode(candidate))
             current = candidate
@@ -279,6 +282,10 @@ internal object CallLogSettingsCodec {
     private val magic = "AGENT_LIFE_CALL_SETTINGS_V1".encodeToByteArray()
     internal val phaseOffset: Int
         get() = magic.size
+    internal val authorizationRevisionOffset: Int
+        get() = phaseOffset + 1
+    internal val enabledModeBooleanOffset: Int
+        get() = phaseOffset + 1 + Long.SIZE_BYTES + 1 + Long.SIZE_BYTES + 1 + Long.SIZE_BYTES + Int.SIZE_BYTES + 3
 
     fun encode(snapshot: CallLogSettingsSnapshot): ByteArray = ByteArrayOutputStream().use { bytes ->
         DataOutputStream(bytes).use { output ->
@@ -289,6 +296,7 @@ internal object CallLogSettingsCodec {
                     output.writeByte(ENABLED_TAG)
                     output.writeULong(snapshot.authorizationRevision)
                     output.writeBoolean(snapshot.epochExhausted)
+                    output.writeULong(snapshot.policyRevisionFloor)
                     output.writePolicy(phase.policy)
                     return@use
                 }
@@ -296,6 +304,7 @@ internal object CallLogSettingsCodec {
                     output.writeByte(REVOKING_TAG)
                     output.writeULong(snapshot.authorizationRevision)
                     output.writeBoolean(snapshot.epochExhausted)
+                    output.writeULong(snapshot.policyRevisionFloor)
                     output.writeULong(phase.targetEpoch)
                     output.writeULong(phase.targetPolicyRevision)
                     output.writeBoolean(phase.targetPolicy != null)
@@ -305,6 +314,7 @@ internal object CallLogSettingsCodec {
             }
             output.writeULong(snapshot.authorizationRevision)
             output.writeBoolean(snapshot.epochExhausted)
+            output.writeULong(snapshot.policyRevisionFloor)
         }
         bytes.toByteArray()
     }
@@ -317,23 +327,38 @@ internal object CallLogSettingsCodec {
             DISABLED_TAG -> CallLogSettingsSnapshot(
                 phase = CallLogSettingsPhase.Disabled,
                 authorizationRevision = input.readULong(),
-                epochExhausted = input.readBoolean(),
+                epochExhausted = input.readCanonicalBoolean(),
+                policyRevisionFloor = input.readULong(),
             )
             ENABLED_TAG -> {
                 val authorizationRevision = input.readULong()
-                val exhausted = input.readBoolean()
+                val exhausted = input.readCanonicalBoolean()
+                val policyRevisionFloor = input.readULong()
+                require(authorizationRevision > 0u) { "enabled authorization revision must be positive" }
                 CallLogSettingsSnapshot(
                     phase = CallLogSettingsPhase.Enabled(input.readPolicy()),
                     authorizationRevision = authorizationRevision,
                     epochExhausted = exhausted,
-                )
+                    policyRevisionFloor = policyRevisionFloor,
+                ).also { state ->
+                    val policy = (state.phase as CallLogSettingsPhase.Enabled).policy
+                    require(policyRevisionFloor > 0u && policy.policyRevision == policyRevisionFloor) {
+                        "enabled policy revision floor mismatch"
+                    }
+                }
             }
             REVOKING_TAG -> {
                 val authorizationRevision = input.readULong()
-                val exhausted = input.readBoolean()
+                val exhausted = input.readCanonicalBoolean()
+                val policyRevisionFloor = input.readULong()
                 val targetEpoch = input.readULong()
                 val targetRevision = input.readULong()
-                val target = if (input.readBoolean()) input.readPolicy() else null
+                val target = if (input.readCanonicalBoolean()) input.readPolicy() else null
+                require(authorizationRevision > 0u) { "revoking authorization revision must be positive" }
+                require(targetRevision > 0u) { "revoking target policy revision must be positive" }
+                require(policyRevisionFloor == targetRevision) {
+                    "revoking policy revision floor mismatch"
+                }
                 require(target == null || target.policyRevision == targetRevision) {
                     "call-log revocation target policy revision mismatch"
                 }
@@ -341,6 +366,7 @@ internal object CallLogSettingsCodec {
                     phase = CallLogSettingsPhase.Revoking(targetEpoch, targetRevision, target),
                     authorizationRevision = authorizationRevision,
                     epochExhausted = exhausted,
+                    policyRevisionFloor = policyRevisionFloor,
                 )
             }
             else -> throw IllegalArgumentException("unknown call-log settings phase")
@@ -370,7 +396,7 @@ internal object CallLogSettingsCodec {
     }
 
     private fun DataInputStream.readPolicy(): CallLogLocalPolicy {
-        val hasHistoryStart = readBoolean()
+        val hasHistoryStart = readCanonicalBoolean()
         val historyStart = if (hasHistoryStart) readLong() else null
         val maxRecords = readInt()
         val mask = readUnsignedByte()
@@ -386,9 +412,9 @@ internal object CallLogSettingsCodec {
             directions = directions,
             counterpartyAccess = counterpartyAccess,
             syncInterval = syncInterval,
-            onDemandEnabled = readBoolean(),
-            autoSendEnabled = readBoolean(),
-            agentMayRequest = readBoolean(),
+            onDemandEnabled = readCanonicalBoolean(),
+            autoSendEnabled = readCanonicalBoolean(),
+            agentMayRequest = readCanonicalBoolean(),
             policyRevision = readULong(),
         )
     }
@@ -396,6 +422,12 @@ internal object CallLogSettingsCodec {
     private fun DataOutputStream.writeULong(value: ULong) = writeLong(value.toLong())
 
     private fun DataInputStream.readULong(): ULong = readLong().toULong()
+
+    private fun DataInputStream.readCanonicalBoolean(): Boolean = when (readUnsignedByte()) {
+        0 -> false
+        1 -> true
+        else -> throw IllegalArgumentException("non-canonical call-log settings boolean")
+    }
 
     private const val DISABLED_TAG = 0
     private const val ENABLED_TAG = 1
