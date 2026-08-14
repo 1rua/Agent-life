@@ -64,8 +64,18 @@ sealed interface CapabilityFilter {
         override val capability: MobileDataCapability = MobileDataCapability.SMS
     }
 
-    data object Calls : CapabilityFilter {
+    data class Calls(
+        val directions: Set<CallDirection>,
+        val counterpartyAccess: CallCounterpartyAccess,
+    ) : CapabilityFilter {
         override val capability: MobileDataCapability = MobileDataCapability.CALLS
+
+        init {
+            require(directions.isNotEmpty()) { "call directions must not be empty" }
+        }
+
+        fun canonicalDirections(): List<CallDirection> =
+            CallDirection.entries.filter(directions::contains)
     }
 
     data object Contacts : CapabilityFilter {
@@ -260,6 +270,9 @@ data class CapabilityEvent<T : CapabilityPayload>(
     init {
         require(eventId.isNotBlank()) { "event ID must not be blank" }
     }
+
+    override fun toString(): String =
+        "CapabilityEvent(capability=$capability,eventId=<redacted>,record=<redacted>,policyRevision=$policyRevision)"
 }
 
 /**

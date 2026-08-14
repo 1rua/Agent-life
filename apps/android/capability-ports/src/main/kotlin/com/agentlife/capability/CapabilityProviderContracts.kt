@@ -11,7 +11,9 @@ import kotlinx.coroutines.flow.Flow
 sealed interface NormalizedContent<out T> {
     data object Withheld : NormalizedContent<Nothing>
 
-    data class Released<T> internal constructor(val value: T) : NormalizedContent<T>
+    data class Released<T> internal constructor(val value: T) : NormalizedContent<T> {
+        override fun toString(): String = "Released(<redacted>)"
+    }
 }
 
 /** A provider only receives this after an on-demand access object is checked. */
@@ -124,17 +126,6 @@ internal fun requireMetadata(recordId: String, observedAtEpochMs: Long) {
     require(observedAtEpochMs >= 0) { "observed time must not be negative" }
 }
 
-data class CallsMetadata(
-    override val recordId: String,
-    override val observedAtEpochMs: Long,
-    val durationSeconds: Long,
-) : CapabilityMetadata {
-    init {
-        requireMetadata(recordId, observedAtEpochMs)
-        require(durationSeconds >= 0) { "call duration must not be negative" }
-    }
-}
-
 data class ContactsMetadata(
     override val recordId: String,
     override val observedAtEpochMs: Long,
@@ -244,7 +235,6 @@ class ScreenContentSnapshot private constructor(private val bytes: ByteArray) {
 }
 
 data class SmsPayload(val metadata: SmsMetadata, val content: NormalizedContent<String>) : CapabilityPayload
-data class CallsPayload(val metadata: CallsMetadata, val content: NormalizedContent<String>) : CapabilityPayload
 data class ContactsPayload(val metadata: ContactsMetadata, val content: NormalizedContent<String>) : CapabilityPayload
 data class ClipboardPayload(val metadata: ClipboardMetadata, val content: NormalizedContent<String>) : CapabilityPayload
 data class LocationPayload(val metadata: LocationMetadata, val content: NormalizedContent<String>) : CapabilityPayload
@@ -276,7 +266,10 @@ internal object SmsPayloadNormalizer : CapabilityPayloadNormalizer<RawProviderRe
 
 internal object CallsPayloadNormalizer : CapabilityPayloadNormalizer<RawProviderRecord<CallsMetadata, String>, CallsPayload> {
     override fun normalize(raw: RawProviderRecord<CallsMetadata, String>, scope: AuthorizedReadScope): CallsPayload =
-        CallsPayload(raw.metadata, normalizeContent(raw.content, scope))
+        CallsPayload(
+            raw.metadata,
+            normalizeCallCounterpartyNumber(raw.content, raw.metadata.numberPresentation, scope),
+        )
 }
 
 internal object ContactsPayloadNormalizer : CapabilityPayloadNormalizer<RawProviderRecord<ContactsMetadata, String>, ContactsPayload> {
