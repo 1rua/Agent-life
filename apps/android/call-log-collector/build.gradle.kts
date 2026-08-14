@@ -7,6 +7,7 @@ android { namespace = "com.agentlife.calls" }
 
 dependencies {
     implementation(project(":capability-ports"))
+    implementation(project(":capability-sync-runtime"))
     implementation(project(":core-model"))
     implementation(project(":encrypted-store"))
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
