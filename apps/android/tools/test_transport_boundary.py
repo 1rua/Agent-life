@@ -103,18 +103,17 @@ class TransportBoundaryTest(unittest.TestCase):
     def test_two_apk_manifests_have_distinct_packages_and_no_holder_network(self):
         app_manifest = (ROOT / "app" / "src" / "main" / "AndroidManifest.xml").read_text(encoding="utf-8")
         holder_manifest = (ROOT / "assistant-holder" / "src" / "main" / "AndroidManifest.xml").read_text(encoding="utf-8")
-        app_package = re.search(r'package="([^"]+)"', app_manifest).group(1)
-        holder_package = re.search(r'package="([^"]+)"', holder_manifest).group(1)
-        self.assertNotEqual(app_package, holder_package)
+        app_build = (ROOT / "app" / "build.gradle.kts").read_text(encoding="utf-8")
+        holder_build = (ROOT / "assistant-holder" / "build.gradle.kts").read_text(encoding="utf-8")
+        app_ids = re.findall(r'applicationId\s*=\s*"([^"]+)"', app_build)
+        holder_ids = re.findall(r'applicationId\s*=\s*"([^"]+)"', holder_build)
+        self.assertEqual(["com.agentlife.mobile"], app_ids)
+        self.assertEqual(["com.agentlife.assistant"], holder_ids)
+        self.assertNotEqual(app_ids[0], holder_ids[0])
         self.assertIn('android:allowBackup="false"', app_manifest)
         self.assertIn('android:allowBackup="false"', holder_manifest)
         self.assertNotIn("android.permission.INTERNET", holder_manifest)
         self.assertNotIn("android.permission.BIND_NOTIFICATION_LISTENER_SERVICE", holder_manifest)
-
-        app_build = (ROOT / "app" / "build.gradle.kts").read_text(encoding="utf-8")
-        holder_build = (ROOT / "assistant-holder" / "build.gradle.kts").read_text(encoding="utf-8")
-        self.assertRegex(app_build, r'applicationId\s*=\s*"com\.agentlife\.mobile"')
-        self.assertRegex(holder_build, r'applicationId\s*=\s*"com\.agentlife\.assistant"')
 
     def test_assistant_holder_exposes_only_the_default_assistant_entry_seam(self):
         holder_manifest = (ROOT / "assistant-holder" / "src" / "main" / "AndroidManifest.xml").read_text(encoding="utf-8")
