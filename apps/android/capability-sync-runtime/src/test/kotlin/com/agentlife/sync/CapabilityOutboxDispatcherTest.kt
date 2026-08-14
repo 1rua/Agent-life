@@ -15,6 +15,10 @@ import kotlin.coroutines.Continuation
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.coroutines.startCoroutine
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -293,15 +297,58 @@ class CapabilityOutboxDispatcherTest {
     }
 
     @Test
-    fun post_ack_close_cancellation_cannot_convert_a_removed_event_to_cancelled_or_retained() {
+    fun post_ack_close_cancellation_preserves_the_removed_event_and_reports_cancellation() {
         val outbox = RecordingOutbox(events = listOf(event("sms:1")))
         val transport = RecordingTransport(closeFailure = CancellationException("close cancelled"))
 
         val result = runSuspend { dispatcher(outbox, transport).dispatchPending() }
 
-        assertEquals(CapabilityDispatchResult(1, 0, null), result)
+        assertEquals(CapabilityDispatchResult(1, 0, CapabilityDispatchFailure.CANCELLED), result)
         assertEquals(listOf(TransportCloseReason.PROCESS_STOPPED), transport.closeReasons)
         assertTrue(outbox.events.isEmpty())
+    }
+
+    @Test
+    fun post_ack_close_cancellation_stops_before_later_expected_event_without_retain_lie() {
+        val outbox = RecordingOutbox(events = listOf(event("sms:1"), event("sms:2")))
+        val transport = RecordingTransport(closeFailure = CancellationException("close cancelled"))
+
+        val result = runSuspend { dispatcher(outbox, transport).dispatchPending() }
+
+        assertEquals(CapabilityDispatchResult(1, 1, CapabilityDispatchFailure.CANCELLED), result)
+        assertEquals(listOf("sms:1"), transport.sentEventIds)
+        assertEquals(listOf("sms:2"), outbox.events.map { it.eventId })
+        assertEquals(listOf(TransportCloseReason.PROCESS_STOPPED), transport.closeReasons)
+    }
+
+    @Test
+    fun post_ack_cleanup_observes_caller_job_cancellation_after_non_cancellable_close() {
+        val job = Job()
+        var cleanupFinished = false
+        val outbox = RecordingOutbox(events = listOf(event("sms:1"), event("sms:2")))
+        val transport = RecordingTransport(
+            onClose = {
+                job.cancel(CancellationException("caller cancelled during close"))
+                yield()
+                cleanupFinished = true
+            },
+        )
+
+        var boundaryCancellation: CancellationException? = null
+        try {
+            runBlocking {
+                withContext(job) {
+                    dispatcher(outbox, transport).dispatchPending()
+                }
+            }
+        } catch (failure: CancellationException) {
+            boundaryCancellation = failure
+        }
+
+        assertTrue(cleanupFinished)
+        assertTrue(boundaryCancellation != null)
+        assertEquals(listOf("sms:1"), transport.sentEventIds)
+        assertEquals(listOf("sms:2"), outbox.events.map { it.eventId })
     }
 
     @Test
@@ -395,6 +442,7 @@ class CapabilityOutboxDispatcherTest {
         private val openFailures: MutableList<Exception> = mutableListOf(),
         private val onOpenFailure: () -> Unit = {},
         private val closeFailure: Exception? = null,
+        private val onClose: suspend () -> Unit = {},
         private val trace: MutableList<String>? = null,
     ) : PairedBridgeTransport {
         val sentEventIds = mutableListOf<String>()
@@ -432,6 +480,7 @@ class CapabilityOutboxDispatcherTest {
         override suspend fun close(reason: TransportCloseReason) {
             closeReasons += reason
             trace?.add("close:$reason")
+            onClose()
             closeFailure?.let { throw it }
         }
     }

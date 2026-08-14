@@ -7,7 +7,9 @@ import com.agentlife.core.model.PairedBridgeTransport
 import com.agentlife.core.model.TransportCloseReason
 import com.agentlife.core.model.VerifiedPairingTransportBinding
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
 
 fun interface CapabilityPairedBridgeBindingSource {
@@ -88,6 +90,14 @@ class CapabilityOutboxDispatcher(
             }
             when (delivered) {
                 DeliveryOutcome.DELIVERED -> acknowledged += 1
+                DeliveryOutcome.ACKNOWLEDGED_CANCELLED -> {
+                    acknowledged += 1
+                    return CapabilityDispatchResult(
+                        acknowledged = acknowledged,
+                        retained = pending.size - acknowledged,
+                        failure = CapabilityDispatchFailure.CANCELLED,
+                    )
+                }
                 DeliveryOutcome.RETAINED -> {
                     retained += 1
                     break
@@ -169,22 +179,37 @@ class CapabilityOutboxDispatcher(
                 false
             }
             if (acknowledged) {
-                cleanup(TransportCloseReason.PROCESS_STOPPED)
-                return DeliveryOutcome.DELIVERED
+                return when (cleanup(TransportCloseReason.PROCESS_STOPPED)) {
+                    CleanupOutcome.COMPLETE -> DeliveryOutcome.DELIVERED
+                    CleanupOutcome.CANCELLED -> DeliveryOutcome.ACKNOWLEDGED_CANCELLED
+                }
             }
         }
         return DeliveryOutcome.RETAINED
     }
 
-    private suspend fun cleanup(reason: TransportCloseReason) = withContext(NonCancellable) {
-        try {
-            transport.close(reason)
-        } catch (_: CancellationException) {
-            // Cleanup cancellation cannot alter the ACK or retention outcome.
-        } catch (_: Exception) {
-            // Cleanup failure cannot alter the ACK or retention outcome.
+    private suspend fun cleanup(reason: TransportCloseReason): CleanupOutcome {
+        val callerJob = currentCoroutineContext()[Job]
+        return withContext(NonCancellable) {
+            val closeOutcome = try {
+                transport.close(reason)
+                CleanupOutcome.COMPLETE
+            } catch (_: CancellationException) {
+                // Cleanup cancellation cannot undo an ACK or retention outcome.
+                CleanupOutcome.CANCELLED
+            } catch (_: Exception) {
+                // A recoverable close failure cannot alter an ACK or retention outcome.
+                CleanupOutcome.COMPLETE
+            }
+            if (closeOutcome == CleanupOutcome.CANCELLED || callerJob?.isCancelled == true) {
+                CleanupOutcome.CANCELLED
+            } else {
+                CleanupOutcome.COMPLETE
+            }
         }
     }
 
-    private enum class DeliveryOutcome { DELIVERED, RETAINED, CANCELLED }
+    private enum class CleanupOutcome { COMPLETE, CANCELLED }
+
+    private enum class DeliveryOutcome { DELIVERED, ACKNOWLEDGED_CANCELLED, RETAINED, CANCELLED }
 }
