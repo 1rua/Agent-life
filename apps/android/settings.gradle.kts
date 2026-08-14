@@ -32,6 +32,7 @@ include(
     ":policy-engine",
     ":notification-collector",
     ":sms-collector",
+    ":call-log-collector",
     ":tailnet-core",
     ":transport",
     ":encrypted-store",

@@ -66,7 +66,11 @@ class SmsCollectorStaticTest(unittest.TestCase):
             for permission in root.findall("uses-permission")
         ]
         self.assertEqual(
-            ["android.permission.INTERNET", "android.permission.READ_SMS"],
+            [
+                "android.permission.INTERNET",
+                "android.permission.READ_SMS",
+                "android.permission.READ_CALL_LOG",
+            ],
             declared_permissions,
         )
 
