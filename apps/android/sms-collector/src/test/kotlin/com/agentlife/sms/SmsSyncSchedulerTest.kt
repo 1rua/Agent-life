@@ -51,7 +51,7 @@ class SmsSyncSchedulerTest {
         val periodicJobs = mutableListOf<ScheduledPeriodicSmsJob>()
         val cancelledJobIds = mutableListOf<Int>()
 
-        override fun schedulePersistedPeriodic(jobId: Int, periodMs: Long): Boolean {
+        override fun schedulePeriodic(jobId: Int, periodMs: Long): Boolean {
             periodicJobs += ScheduledPeriodicSmsJob(jobId, periodMs, persisted = false)
             return scheduleSucceeds
         }

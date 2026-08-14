@@ -20,7 +20,7 @@ interface SmsJobScheduler {
 
 /** Android framework boundary kept small enough for host-side scheduler tests. */
 internal interface AndroidSmsJobScheduler {
-    fun schedulePersistedPeriodic(jobId: Int, periodMs: Long): Boolean
+    fun schedulePeriodic(jobId: Int, periodMs: Long): Boolean
     fun cancel(jobId: Int)
 }
 
@@ -45,7 +45,7 @@ class AndroidSmsSyncScheduler private constructor(
         if (periodMs == null) {
             cancel()
         } else {
-            if (!jobs.schedulePersistedPeriodic(JOB_ID, periodMs)) throw SmsJobSchedulingException()
+            if (!jobs.schedulePeriodic(JOB_ID, periodMs)) throw SmsJobSchedulingException()
         }
     }
 
@@ -65,7 +65,7 @@ private class AndroidSmsJobSchedulerAdapter(context: Context) : AndroidSmsJobSch
     private val service = ComponentName(context, SmsSyncJobService::class.java)
 
     @SuppressLint("MissingPermission")
-    override fun schedulePersistedPeriodic(jobId: Int, periodMs: Long): Boolean =
+    override fun schedulePeriodic(jobId: Int, periodMs: Long): Boolean =
         scheduler.schedule(
             JobInfo.Builder(jobId, service)
                 .setPeriodic(periodMs)
