@@ -1,5 +1,7 @@
 .worktrees/
 /.toolchains/
+*.tsnet-toolchain.env
+/apps/android/tailnet-core/native/tsnetbridge/.tsnet-aar.lock.candidate.*
 .superpowers/
 /third_party/tailscale
 /node_modules/
