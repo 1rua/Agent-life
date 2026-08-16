@@ -23,6 +23,8 @@ const SCOPE = /^[A-Za-z][A-Za-z0-9_.-]{0,127}$/;
 const OCCURRENCE = UUID;
 const authorityObjects = new WeakSet<object>();
 const ackAuthorityObjects = new WeakSet<object>();
+const eventObjects = new WeakSet<object>();
+const ackFactObjects = new WeakSet<object>();
 
 type EventKind = "upsert" | "delete_tombstone" | "loss_marker";
 type RevisionSnapshotInput = Readonly<{
@@ -54,6 +56,9 @@ export type VerifiedDeviceEvent = Readonly<{
   readonly cursor: bigint;
   readonly occurrenceId: string;
   readonly eventKind: EventKind;
+  readonly pairingGeneration: bigint;
+  readonly authorizationEpoch: bigint;
+  readonly scopeRevisions: ReadonlyMap<string, bigint>;
   readonly routeByServerSubscriptionOnly: true;
   readonly [eventBrand]: true;
 }>;
@@ -76,6 +81,30 @@ export type VerifiedEventAck = Readonly<{
   readonly sourceCapability: string;
   readonly highestContiguousCursor: bigint;
   readonly [ackFactBrand]: true;
+}>;
+
+export type DurableDeviceEventProjection = Readonly<{
+  tenantId: string;
+  humanPrincipalId: string;
+  deviceId: string;
+  sourceEpoch: string;
+  sourceCapability: string;
+  cursor: bigint;
+  occurrenceId: string;
+  eventKind: EventKind;
+  pairingGeneration: bigint;
+  authorizationEpoch: bigint;
+  scopeRevisions: ReadonlyMap<string, bigint>;
+  routeByServerSubscriptionOnly: true;
+}>;
+
+export type DurableEventAckProjection = Readonly<{
+  tenantId: string;
+  humanPrincipalId: string;
+  deviceId: string;
+  sourceEpoch: string;
+  sourceCapability: string;
+  highestContiguousCursor: bigint;
 }>;
 
 export interface EventAckStore {
@@ -183,11 +212,33 @@ export function validateDeviceEvent(frame: unknown, authority: VerifiedCaptureAu
   const revision = parseRevision(payload.capture_revision);
   if (revision.pairingGeneration !== authority.revision.pairingGeneration || revision.authorizationEpoch !== authority.revision.authorizationEpoch) throw new Error("AUTH_BINDING_MISMATCH");
   for (const [key, value] of authority.revision.scopeRevisions) if (revision.scopeRevisions.get(key) !== value) throw new Error("AUTH_BINDING_MISMATCH");
-  return Object.freeze({
+  const event = Object.freeze({
     tenantId: authority.tenantId, humanPrincipalId: authority.humanPrincipalId, deviceId: authority.deviceId,
     sourceEpoch: authority.sourceEpoch, sourceCapability: authority.sourceCapability, cursor: BigInt(String(payload.cursor)),
-    occurrenceId: String(payload.occurrence_id), eventKind: payload.event_kind as EventKind, routeByServerSubscriptionOnly: true,
+    occurrenceId: String(payload.occurrence_id), eventKind: payload.event_kind as EventKind,
+    pairingGeneration: revision.pairingGeneration, authorizationEpoch: revision.authorizationEpoch,
+    scopeRevisions: new Map(revision.scopeRevisions), routeByServerSubscriptionOnly: true,
     [eventBrand]: true as const,
+  });
+  eventObjects.add(event);
+  return event;
+}
+
+export function projectVerifiedDeviceEvent(event: VerifiedDeviceEvent): DurableDeviceEventProjection {
+  if (!isObject(event) || !eventObjects.has(event) || event[eventBrand] !== true) throw new Error("AUTH_FAILED");
+  return Object.freeze({
+    tenantId: event.tenantId,
+    humanPrincipalId: event.humanPrincipalId,
+    deviceId: event.deviceId,
+    sourceEpoch: event.sourceEpoch,
+    sourceCapability: event.sourceCapability,
+    cursor: event.cursor,
+    occurrenceId: event.occurrenceId,
+    eventKind: event.eventKind,
+    pairingGeneration: event.pairingGeneration,
+    authorizationEpoch: event.authorizationEpoch,
+    scopeRevisions: new Map(event.scopeRevisions),
+    routeByServerSubscriptionOnly: true,
   });
 }
 
@@ -300,9 +351,23 @@ export function validateEventAck(frame: unknown, authority: VerifiedEventAckAuth
     || !exactKeys(payload, ["source_epoch", "source_capability", "highest_contiguous_cursor"])
     || payload.source_epoch !== authority.sourceEpoch || payload.source_capability !== authority.sourceCapability || !u64(payload.highest_contiguous_cursor)
     || BigInt(payload.highest_contiguous_cursor) !== authority.highestContiguousCursor) throw new Error("AUTH_BINDING_MISMATCH");
-  return Object.freeze({ tenantId: authority.tenantId, humanPrincipalId: authority.humanPrincipalId, deviceId: authority.deviceId,
+  const fact = Object.freeze({ tenantId: authority.tenantId, humanPrincipalId: authority.humanPrincipalId, deviceId: authority.deviceId,
     sourceEpoch: authority.sourceEpoch, sourceCapability: authority.sourceCapability,
     highestContiguousCursor: authority.highestContiguousCursor, [ackFactBrand]: true as const });
+  ackFactObjects.add(fact);
+  return fact;
+}
+
+export function projectVerifiedEventAck(fact: VerifiedEventAck): DurableEventAckProjection {
+  if (!isObject(fact) || !ackFactObjects.has(fact) || fact[ackFactBrand] !== true) throw new Error("AUTH_FAILED");
+  return Object.freeze({
+    tenantId: fact.tenantId,
+    humanPrincipalId: fact.humanPrincipalId,
+    deviceId: fact.deviceId,
+    sourceEpoch: fact.sourceEpoch,
+    sourceCapability: fact.sourceCapability,
+    highestContiguousCursor: fact.highestContiguousCursor,
+  });
 }
 
 export function createServerSubscriptionRouter(targets: readonly ServerSubscriptionTarget[]): Readonly<{ route(event: VerifiedDeviceEvent): Promise<readonly [{ subscriptionId: string }, ...{ subscriptionId: string }[]]> }> {

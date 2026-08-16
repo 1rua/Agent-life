@@ -13,6 +13,8 @@ import {
   createVerifiedCaptureAuthority,
   createVerifiedEventAckAuthority,
   createServerSubscriptionRouter,
+  projectVerifiedDeviceEvent,
+  projectVerifiedEventAck,
   validateDeviceEvent,
   validateEventAck,
   type EventAckStore,
@@ -198,6 +200,28 @@ describe("Task 9 verified authority and routing", () => {
     expect(() => validateDeviceEvent(frame, { authorityId: "forged" } as unknown as VerifiedCaptureAuthority)).toThrowError("AUTH_FAILED");
   });
 
+  it("projects only genuinely verified events into the durable state boundary", () => {
+    const event = validateDeviceEvent({
+      context: { kind: "device", tenantId: "tenant-a", humanPrincipalId: "human-a", deviceId: "device-a" },
+      envelope: { messageType: "device_event", payload: validEvent },
+    } as never, authority());
+    expect(projectVerifiedDeviceEvent(event)).toEqual({
+      tenantId: "tenant-a",
+      humanPrincipalId: "human-a",
+      deviceId: "device-a",
+      sourceEpoch: EPOCH,
+      sourceCapability: "notifications.metadata",
+      cursor: 9n,
+      occurrenceId: OCCURRENCE,
+      eventKind: "upsert",
+      pairingGeneration: 3n,
+      authorizationEpoch: 7n,
+      scopeRevisions: new Map([["notifications.metadata", 4n]]),
+      routeByServerSubscriptionOnly: true,
+    });
+    expect(() => projectVerifiedDeviceEvent({ ...event } as never)).toThrowError("AUTH_FAILED");
+  });
+
   it("returns only server-owned subscription targets for the exact lookup key", async () => {
     const router = createServerSubscriptionRouter([
       { tenantId: "tenant-a", humanPrincipalId: "human-a", deviceId: "device-a", sourceCapability: "notifications.metadata", subscriptionId: "subscription-a" },
@@ -215,22 +239,31 @@ describe("Task 9 ACK validation and durable-before-delete boundary", () => {
     const frame = { context: { kind: "device", tenantId: "tenant-a", humanPrincipalId: "human-a", deviceId: "device-a", direction: "bridge-to-app" }, envelope: { messageType: "event_ack", payload: ack } } as never;
     const fact = validateEventAck(frame, createVerifiedEventAckAuthority({ tenantId: "tenant-a", humanPrincipalId: "human-a", deviceId: "device-a", sourceEpoch: EPOCH, sourceCapability: "notifications.metadata", highestContiguousCursor: 9n }));
     expect(fact).toMatchObject({ sourceEpoch: EPOCH, highestContiguousCursor: 9n });
+    expect(projectVerifiedEventAck(fact)).toEqual({
+      tenantId: "tenant-a", humanPrincipalId: "human-a", deviceId: "device-a",
+      sourceEpoch: EPOCH, sourceCapability: "notifications.metadata", highestContiguousCursor: 9n,
+    });
+    expect(() => projectVerifiedEventAck({ ...fact } as never)).toThrowError("AUTH_FAILED");
     const wrongDirectionFrame = { ...(frame as unknown as Record<string, unknown>), context: { ...(frame as unknown as { context: Record<string, unknown> }).context, direction: "app-to-bridge" } };
     expect(() => validateEventAck(wrongDirectionFrame, createVerifiedEventAckAuthority({ tenantId: "tenant-a", humanPrincipalId: "human-a", deviceId: "device-a", sourceEpoch: EPOCH, sourceCapability: "notifications.metadata", highestContiguousCursor: 9n }))).toThrowError("AUTH_BINDING_MISMATCH");
     const store: EventAckStore = { persistBeforeSign: async () => ({ kind: "committed" }) };
     await expect(store.persistBeforeSign(fact)).resolves.toEqual({ kind: "committed" });
   });
 
-  it("reconstructs the checked-in ACK JCS vector exactly", () => {
+  it("reconstructs the checked-in event and ACK JCS vectors exactly", () => {
     const vectors = JSON.parse(readFileSync(new URL("../test-only/event/v1/event-ack-vectors.json", import.meta.url), "utf8")) as {
-      vectors: Array<{ id: string; payload: Record<string, unknown>; jcs_base64: string; utf8_bytes: string }>;
+      vectors: Array<{ id: string; message_type: "device_event" | "event_ack"; payload: Record<string, unknown>; jcs_base64: string; sha256_base64url: string; utf8_bytes: string }>;
     };
-    expect(vectors.vectors.length).toBeGreaterThanOrEqual(1);
+    expect(vectors.vectors.map((vector) => vector.id)).toEqual([
+      "device_event_upsert_metadata_cursor_1",
+      "event_ack_basic_metadata_cursor",
+    ]);
     for (const vector of vectors.vectors) {
       const bytes = canonicalBytes(vector.payload);
       expect(Buffer.from(bytes).toString("base64")).toBe(vector.jcs_base64);
+      expect(sha256B64Url(bytes)).toBe(vector.sha256_base64url);
       expect(String(bytes.byteLength)).toBe(vector.utf8_bytes);
-      expect(() => validateSchema("urn:agent-life:protocol:v1:message:event_ack", vector.payload)).not.toThrow();
+      expect(() => validateSchema(`urn:agent-life:protocol:v1:message:${vector.message_type}`, vector.payload)).not.toThrow();
     }
   });
 });
