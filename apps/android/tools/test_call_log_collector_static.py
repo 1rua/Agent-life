@@ -125,88 +125,6 @@ def _read_kotlin_identifier(source: str, index: int) -> tuple[str, int]:
     return source[index:end], end
 
 
-def _find_kotlin_class_body(source: str, name: str) -> tuple[int, int] | None:
-    index = 0
-    braces = 0
-    while index < len(source):
-        if source.startswith("//", index) or source.startswith("/*", index) or source[index] in ('"', "'"):
-            index = _skip_string_or_comment(source, index)
-            continue
-        if source[index] == "{":
-            braces += 1
-            index += 1
-            continue
-        if source[index] == "}":
-            braces = max(0, braces - 1)
-            index += 1
-            continue
-        word, end = _read_kotlin_identifier(source, index)
-        if braces != 0 or word != "class":
-            index = end if word else index + 1
-            continue
-        class_name_start = _skip_whitespace_and_comments(source, end)
-        class_name, class_name_end = _read_kotlin_identifier(source, class_name_start)
-        if class_name != name:
-            index = class_name_end if class_name else end
-            continue
-        body_start = class_name_end
-        while body_start < len(source):
-            if (
-                source.startswith("//", body_start)
-                or source.startswith("/*", body_start)
-                or source[body_start] in ('"', "'")
-            ):
-                body_start = _skip_string_or_comment(source, body_start)
-                continue
-            if source[body_start] == "{":
-                body_end = _matching_delimiter(source, body_start, "{", "}")
-                return body_start + 1, body_end
-            body_start += 1
-        return None
-    return None
-
-
-def _find_top_level_override_function(
-    source: str,
-    class_body: tuple[int, int],
-    name: str,
-) -> int | None:
-    index, class_end = class_body
-    nested_braces = 0
-    while index < class_end:
-        if source.startswith("//", index) or source.startswith("/*", index) or source[index] in ('"', "'"):
-            index = _skip_string_or_comment(source, index)
-            continue
-        if source[index] == "{":
-            nested_braces += 1
-            index += 1
-            continue
-        if source[index] == "}":
-            nested_braces = max(0, nested_braces - 1)
-            index += 1
-            continue
-        word, end = _read_kotlin_identifier(source, index)
-        if nested_braces != 0 or word != "override":
-            index = end if word else index + 1
-            continue
-        fun_start = _skip_whitespace_and_comments(source, end)
-        fun_word, fun_end = _read_kotlin_identifier(source, fun_start)
-        if fun_word != "fun":
-            index = end
-            continue
-        name_start = _skip_whitespace_and_comments(source, fun_end)
-        function_name, function_name_end = _read_kotlin_identifier(source, name_start)
-        if function_name != name:
-            index = function_name_end if function_name else fun_end
-            continue
-        opening_parenthesis = _skip_whitespace_and_comments(source, function_name_end)
-        if opening_parenthesis >= len(source) or source[opening_parenthesis] != "(":
-            index = function_name_end
-            continue
-        return _matching_delimiter(source, opening_parenthesis, "(", ")") + 1
-    return None
-
-
 def _compact_kotlin_code(source: str) -> str:
     compacted: list[str] = []
     index = 0
@@ -221,83 +139,205 @@ def _compact_kotlin_code(source: str) -> str:
     return "".join(compacted)
 
 
-def _direct_retry_lambda_uses_fresh_runtime_factory(source: str, index: int) -> bool:
-    index = _skip_whitespace_and_comments(source, index)
-    call_name, call_end = _read_kotlin_identifier(source, index)
-    if call_name != "retryCallLogJobAfterStop":
+def _kotlin_code_tokens(
+    source: str,
+    start: int = 0,
+    end: int | None = None,
+) -> list[tuple[str, int, int]]:
+    limit = len(source) if end is None else end
+    tokens: list[tuple[str, int, int]] = []
+    index = start
+    while index < limit:
+        if source.startswith("//", index) or source.startswith("/*", index) or source[index] in ('"', "'"):
+            index = min(limit, _skip_string_or_comment(source, index))
+            continue
+        if source[index].isspace():
+            index += 1
+            continue
+        word, word_end = _read_kotlin_identifier(source, index)
+        if word:
+            tokens.append((word, index, word_end))
+            index = word_end
+            continue
+        tokens.append((source[index], index, index + 1))
+        index += 1
+    return tokens
+
+
+def _find_kotlin_class_body(source: str, name: str) -> tuple[int, int] | None:
+    tokens = _kotlin_code_tokens(source)
+    top_level_braces = 0
+    for index, (value, _, _) in enumerate(tokens):
+        if value == "{":
+            top_level_braces += 1
+            continue
+        if value == "}":
+            top_level_braces = max(0, top_level_braces - 1)
+            continue
+        if (
+            top_level_braces != 0
+            or value != "class"
+            or index + 1 >= len(tokens)
+            or tokens[index + 1][0] != name
+        ):
+            continue
+        parentheses = 0
+        brackets = 0
+        header_braces = 0
+        for header_index in range(index + 2, len(tokens)):
+            header_value, header_start, header_end = tokens[header_index]
+            if header_value == "(":
+                parentheses += 1
+            elif header_value == ")":
+                parentheses = max(0, parentheses - 1)
+            elif header_value == "[":
+                brackets += 1
+            elif header_value == "]":
+                brackets = max(0, brackets - 1)
+            elif header_value == "{":
+                if parentheses == 0 and brackets == 0 and header_braces == 0:
+                    return header_end, _matching_delimiter(source, header_start, "{", "}")
+                header_braces += 1
+            elif header_value == "}":
+                if header_braces == 0:
+                    return None
+                header_braces -= 1
+    return None
+
+
+def _find_top_level_on_stop_job(
+    source: str,
+    class_body: tuple[int, int],
+) -> tuple[str, int, int] | None:
+    class_start, class_end = class_body
+    tokens = _kotlin_code_tokens(source, class_start, class_end)
+    braces = 0
+    for index, (value, _, _) in enumerate(tokens):
+        if value == "{":
+            braces += 1
+            continue
+        if value == "}":
+            braces = max(0, braces - 1)
+            continue
+        if (
+            braces != 0
+            or value != "override"
+            or index + 3 >= len(tokens)
+            or tokens[index + 1][0] != "fun"
+            or tokens[index + 2][0] != "onStopJob"
+            or tokens[index + 3][0] != "("
+        ):
+            continue
+        parameters_start = tokens[index + 3][2]
+        parameters_end = _matching_delimiter(source, tokens[index + 3][1], "(", ")")
+        parameter_values = [
+            parameter[0]
+            for parameter in _kotlin_code_tokens(source, parameters_start, parameters_end)
+        ]
+        if parameter_values != ["params", ":", "JobParameters"]:
+            continue
+        after_parameters = next(
+            (
+                token_index
+                for token_index, token in enumerate(tokens)
+                if token[1] > parameters_end
+            ),
+            len(tokens),
+        )
+        if (
+            after_parameters + 2 >= len(tokens)
+            or tokens[after_parameters][0] != ":"
+            or tokens[after_parameters + 1][0] != "Boolean"
+        ):
+            continue
+        body_marker, marker_start, marker_end = tokens[after_parameters + 2]
+        if body_marker == "{":
+            return "block", marker_end, _matching_delimiter(source, marker_start, "{", "}")
+        if body_marker == "=":
+            return "expression", marker_end, class_end
+    return None
+
+
+def _only_optional_semicolon_until(source: str, start: int, end: int) -> bool:
+    semicolon_seen = False
+    index = start
+    while index < end:
+        if source[index].isspace():
+            index += 1
+        elif source.startswith("//", index) or source.startswith("/*", index):
+            index = min(end, _skip_string_or_comment(source, index))
+        elif source[index] == ";" and not semicolon_seen:
+            semicolon_seen = True
+            index += 1
+        else:
+            return False
+    return True
+
+
+def _direct_retry_lambda_uses_fresh_runtime_factory(
+    source: str,
+    start: int,
+    boundary: int,
+) -> bool:
+    tokens = _kotlin_code_tokens(source, start, boundary)
+    if len(tokens) < 2 or tokens[0][0] != "retryCallLogJobAfterStop" or tokens[1][0] != "{":
         return False
-    lambda_start = _skip_whitespace_and_comments(source, call_end)
-    if lambda_start >= len(source) or source[lambda_start] != "{":
-        return False
+    lambda_start = tokens[1][1]
     lambda_end = _matching_delimiter(source, lambda_start, "{", "}")
-    compacted_body = _compact_kotlin_code(source[lambda_start + 1 : lambda_end]).rstrip(";")
-    return compacted_body == "CallLogRuntimeFactoryRegistry.create(applicationContext)"
+    if lambda_end >= boundary:
+        return False
+    compacted_body = _compact_kotlin_code(source[tokens[1][2] : lambda_end]).rstrip(";")
+    return (
+        compacted_body == "CallLogRuntimeFactoryRegistry.create(applicationContext)"
+        and _only_optional_semicolon_until(source, lambda_end + 1, boundary)
+    )
 
 
-def _last_top_level_return_uses_fresh_runtime_factory(body: str) -> bool:
-    returns: list[int] = []
-    index = 0
+def _block_return_uses_fresh_runtime_factory(
+    source: str,
+    body_start: int,
+    body_end: int,
+) -> bool:
+    all_returns: list[int] = []
+    top_level_returns: list[int] = []
     braces = 0
     parentheses = 0
     brackets = 0
-    while index < len(body):
-        if body.startswith("//", index) or body.startswith("/*", index) or body[index] in ('"', "'"):
-            index = _skip_string_or_comment(body, index)
-            continue
-        character = body[index]
-        if character == "{":
+    for value, _, token_end in _kotlin_code_tokens(source, body_start, body_end):
+        if value == "return":
+            all_returns.append(token_end)
+            if braces == 0 and parentheses == 0 and brackets == 0:
+                top_level_returns.append(token_end)
+        if value == "{":
             braces += 1
-            index += 1
-            continue
-        if character == "}":
+        elif value == "}":
             braces = max(0, braces - 1)
-            index += 1
-            continue
-        if character == "(":
+        elif value == "(":
             parentheses += 1
-            index += 1
-            continue
-        if character == ")":
+        elif value == ")":
             parentheses = max(0, parentheses - 1)
-            index += 1
-            continue
-        if character == "[":
+        elif value == "[":
             brackets += 1
-            index += 1
-            continue
-        if character == "]":
+        elif value == "]":
             brackets = max(0, brackets - 1)
-            index += 1
-            continue
-        word, end = _read_kotlin_identifier(body, index)
-        if braces == 0 and parentheses == 0 and brackets == 0 and word == "return":
-            returns.append(end)
-        index = end if word else index + 1
-    return bool(returns) and _direct_retry_lambda_uses_fresh_runtime_factory(body, returns[-1])
+    return (
+        len(all_returns) == 1
+        and len(top_level_returns) == 1
+        and _direct_retry_lambda_uses_fresh_runtime_factory(source, top_level_returns[0], body_end)
+    )
 
 
 def _on_stop_job_uses_fresh_runtime_factory(source: str) -> bool:
     class_body = _find_kotlin_class_body(source, "CallLogSyncJobService")
     if class_body is None:
         return False
-    function_end = _find_top_level_override_function(source, class_body, "onStopJob")
-    if function_end is None:
+    on_stop_job = _find_top_level_on_stop_job(source, class_body)
+    if on_stop_job is None:
         return False
-    index = function_end
-    class_end = class_body[1]
-    while index < class_end:
-        index = _skip_whitespace_and_comments(source, index)
-        if index >= len(source) or source[index] == "=":
-            return (
-                index < class_end
-                and source[index] == "="
-                and _direct_retry_lambda_uses_fresh_runtime_factory(source, index + 1)
-            )
-        if source[index] == "{":
-            closing_brace = _matching_delimiter(source, index, "{", "}")
-            return _last_top_level_return_uses_fresh_runtime_factory(source[index + 1 : closing_brace])
-        index += 1
-    return False
+    kind, result_start, result_end = on_stop_job
+    if kind == "block":
+        return _block_return_uses_fresh_runtime_factory(source, result_start, result_end)
+    return _direct_retry_lambda_uses_fresh_runtime_factory(source, result_start, result_end)
 
 
 def _dependencies_blocks(build: str) -> list[str]:
@@ -744,6 +784,115 @@ class CallLogCollectorStaticTest(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertFalse(_on_stop_job_uses_fresh_runtime_factory(source))
         self.assertTrue(_on_stop_job_uses_fresh_runtime_factory(expression_body))
+
+
+    def test_stop_retry_factory_lookup_rejects_suffix_returns_ctor_braces_and_wrong_overload(self):
+        good_block = """
+            class CallLogSyncJobService {
+                override fun onStopJob(params: JobParameters): Boolean {
+                    return retryCallLogJobAfterStop {
+                        CallLogRuntimeFactoryRegistry.create(applicationContext)
+                    }
+                }
+            }
+        """
+        good_expression = """
+            class CallLogSyncJobService {
+                override fun onStopJob(params: JobParameters): Boolean =
+                    retryCallLogJobAfterStop {
+                        CallLogRuntimeFactoryRegistry.create(applicationContext)
+                    }
+            }
+        """
+        reject_with_real_body = {
+            "block return with boolean suffix": """
+                class CallLogSyncJobService {
+                    override fun onStopJob(params: JobParameters): Boolean {
+                        return retryCallLogJobAfterStop {
+                            CallLogRuntimeFactoryRegistry.create(applicationContext)
+                        } == true
+                    }
+                }
+            """,
+            "expression body with boolean suffix": """
+                class CallLogSyncJobService {
+                    override fun onStopJob(params: JobParameters): Boolean =
+                        retryCallLogJobAfterStop {
+                            CallLogRuntimeFactoryRegistry.create(applicationContext)
+                        } == true
+                }
+            """,
+            "multiple top-level returns": """
+                class CallLogSyncJobService {
+                    override fun onStopJob(params: JobParameters): Boolean {
+                        if (ready) {
+                            return retryCallLogJobAfterStop {
+                                CallLogRuntimeFactoryRegistry.create(applicationContext)
+                            }
+                        }
+                        return retryCallLogJobAfterStop {
+                            CallLogRuntimeFactoryRegistry.create(applicationContext)
+                        }
+                    }
+                }
+            """,
+            "deny-first body with constructor anonymous object brace": """
+                class CallLogSyncJobService(
+                    val decoy: Object = object : Object() {
+                        override fun toString() = "decoy"
+                    }
+                ) {
+                    override fun onStopJob(params: JobParameters): Boolean {
+                        return retryCallLogJobAfterStop { CallLogRuntime.denyFirst() }
+                    }
+                }
+            """,
+            "factory inside wrong-signature overload only": """
+                class CallLogSyncJobService {
+                    override fun onStopJob(params: JobParameters, extra: Int): Boolean {
+                        return retryCallLogJobAfterStop {
+                            CallLogRuntimeFactoryRegistry.create(applicationContext)
+                        }
+                    }
+                }
+            """,
+            "factory in wrong overload and deny-first in real override": """
+                class CallLogSyncJobService {
+                    override fun onStopJob(params: JobParameters, extra: Int): Boolean {
+                        return retryCallLogJobAfterStop {
+                            CallLogRuntimeFactoryRegistry.create(applicationContext)
+                        }
+                    }
+                    override fun onStopJob(params: JobParameters): Boolean {
+                        return retryCallLogJobAfterStop { CallLogRuntime.denyFirst() }
+                    }
+                }
+            """,
+        }
+        accept_with_real_body = {
+            "constructor anonymous object brace keeps real class body": """
+                class CallLogSyncJobService(
+                    val decoy: Object = object : Object() {
+                        override fun toString() = "decoy"
+                    }
+                ) {
+                    override fun onStopJob(params: JobParameters): Boolean {
+                        return retryCallLogJobAfterStop {
+                            CallLogRuntimeFactoryRegistry.create(applicationContext)
+                        }
+                    }
+                }
+            """,
+        }
+
+        self.assertTrue(_on_stop_job_uses_fresh_runtime_factory(good_block))
+        self.assertTrue(_on_stop_job_uses_fresh_runtime_factory(good_expression))
+        for name, source in reject_with_real_body.items():
+            with self.subTest(name=name):
+                self.assertFalse(_on_stop_job_uses_fresh_runtime_factory(source))
+        for name, source in accept_with_real_body.items():
+            with self.subTest(name=name):
+                self.assertTrue(_on_stop_job_uses_fresh_runtime_factory(source))
 
     def test_no_manifest_declares_forbidden_phone_permissions(self):
         forbidden_permissions = {
