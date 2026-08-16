@@ -140,7 +140,7 @@ class TransportBoundaryTest(unittest.TestCase):
             production_dependencies = re.findall(r"^\s*implementation\((.+)\)", source, re.MULTILINE)
             self.assertNotIn('project(":tailnet-core")', production_dependencies, module)
         transport = (ROOT / "transport" / "build.gradle.kts").read_text(encoding="utf-8")
-        self.assertIn('implementation(project(":tailnet-core"))', transport)
+        self.assertRegex(transport, r'(?:implementation|api)\(project\(":tailnet-core"\)\)')
 
     def test_main_apk_wires_closed_contract_libraries(self):
         """The app must carry the reviewed contracts it will eventually adapt."""
