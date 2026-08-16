@@ -396,6 +396,8 @@ class TransportBoundaryTest {
             return channel
         }
 
+        override suspend fun path(binding: VerifiedPairingTransportBinding): TransportPath = TransportPath.DIRECT
+
         override suspend fun stop() = Unit
     }
 
@@ -457,6 +459,8 @@ class TransportBoundaryTest {
             if (openCalls == failOnOpenCall) throw IllegalStateException("open failed")
             return LifecycleRecordingChannel().also(channels::add)
         }
+
+        override suspend fun path(binding: VerifiedPairingTransportBinding): TransportPath = TransportPath.DIRECT
 
         override suspend fun stop() {
             stopCalls += 1

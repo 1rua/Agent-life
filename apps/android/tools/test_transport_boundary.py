@@ -36,7 +36,7 @@ class TransportBoundaryTest(unittest.TestCase):
             ROOT / "tailnet-core" / "src" / "main" / "kotlin" / "com" / "agentlife" / "tailnet" / "core" / "VerifiedPairingTransportBinding.kt",
             ROOT / "tailnet-core" / "src" / "main" / "kotlin" / "com" / "agentlife" / "tailnet" / "core" / "TailscaleUserspaceCore.kt",
             ROOT / "tailnet-core" / "src" / "main" / "kotlin" / "com" / "agentlife" / "tailnet" / "core" / "PairingReconnectState.kt",
-            ROOT / "transport" / "src" / "main" / "kotlin" / "com" / "agentlife" / "transport" / "FakeUserspaceTransport.kt",
+            ROOT / "transport" / "src" / "testFixtures" / "kotlin" / "com" / "agentlife" / "transport" / "FakeUserspaceTransport.kt",
             ROOT / "transport" / "src" / "main" / "kotlin" / "com" / "agentlife" / "transport" / "TsnetPairedBridgeTransport.kt",
             ROOT / "transport" / "src" / "main" / "kotlin" / "com" / "agentlife" / "transport" / "PairedBridgeSessionCoordinator.kt",
         )
@@ -93,7 +93,7 @@ class TransportBoundaryTest(unittest.TestCase):
         self.assertNotRegex(block, r"\b(host|port|url|socket|route|dns|endpoint)\b")
 
     def test_fake_and_real_adapter_share_pairing_binding_and_generation(self):
-        fake = (ROOT / "transport" / "src" / "main" / "kotlin" / "com" / "agentlife" / "transport" / "FakeUserspaceTransport.kt").read_text(encoding="utf-8")
+        fake = (ROOT / "transport" / "src" / "testFixtures" / "kotlin" / "com" / "agentlife" / "transport" / "FakeUserspaceTransport.kt").read_text(encoding="utf-8")
         real = (ROOT / "transport" / "src" / "main" / "kotlin" / "com" / "agentlife" / "transport" / "TsnetPairedBridgeTransport.kt").read_text(encoding="utf-8")
         for source in (fake, real):
             self.assertIn("PairedBridgeTransport", source)
@@ -147,6 +147,34 @@ class TransportBoundaryTest(unittest.TestCase):
         app_build = (ROOT / "app" / "build.gradle.kts").read_text(encoding="utf-8")
         for module in ("artifact-ports", "capability-ports", "control-ports"):
             self.assertIn(f'implementation(project(":{module}"))', app_build, module)
+
+
+
+class ProductionBoundaryTest(unittest.TestCase):
+    def test_fake_is_never_in_production_sources(self):
+        main_fake = ROOT / "transport" / "src" / "main" / "kotlin" / "com" / "agentlife" / "transport" / "FakeUserspaceTransport.kt"
+        self.assertFalse(main_fake.exists())
+        fixture = ROOT / "transport" / "src" / "testFixtures" / "kotlin" / "com" / "agentlife" / "transport" / "FakeUserspaceTransport.kt"
+        self.assertTrue(fixture.is_file())
+
+    def test_sealed_production_factory_exists(self):
+        factory = ROOT / "transport" / "src" / "main" / "kotlin" / "com" / "agentlife" / "transport" / "ProductionTailnetTransportFactory.kt"
+        self.assertTrue(factory.is_file())
+        text = factory.read_text(encoding="utf-8")
+        self.assertIn("sealed interface ProductionPairedBridgeTransport", text)
+        self.assertIn("ProductionTailnetTransportFactory", text)
+        self.assertNotIn("FakeUserspaceTransport", text)
+
+    def test_native_adapter_is_the_only_generated_import(self):
+        generated = []
+        for path in (ROOT / "tailnet-core" / "src" / "main").rglob("*.kt"):
+            text = path.read_text(encoding="utf-8")
+            if "import tsnetbridge." in text:
+                generated.append(path.relative_to(ROOT).as_posix())
+        self.assertEqual(
+            ["tailnet-core/src/main/kotlin/com/agentlife/tailnet/core/AndroidTsnetBinding.kt"],
+            generated,
+        )
 
 
 if __name__ == "__main__":

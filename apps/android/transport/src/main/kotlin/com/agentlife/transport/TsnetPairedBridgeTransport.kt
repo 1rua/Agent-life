@@ -21,7 +21,6 @@ import com.agentlife.tailnet.core.UserspaceBridgeChannel
 class TsnetPairedBridgeTransport(
     private val core: TailscaleUserspaceCore,
     generationStore: ConnectionGenerationStore = InMemoryConnectionGenerationStore(),
-    private val path: TransportPath = TransportPath.DIRECT,
 ) : PairedBridgeTransport {
     private val state = PairingReconnectStateMachine(generationStore)
     private var active: Session? = null
@@ -31,6 +30,14 @@ class TsnetPairedBridgeTransport(
         val generation = state.beginOpen(binding)
         return try {
             val channel = core.openPairedBridge(binding)
+            val path = core.path(binding)
+            if (path == TransportPath.OFFLINE) {
+                channel.close()
+                if (state.status !is PairingTransportStatus.Failed) {
+                    state.close(TransportCloseReason.FAILURE)
+                }
+                throw IllegalStateException("Tailnet Bridge peer is offline")
+            }
             if (!state.markConnected(generation, path)) {
                 channel.close()
                 error("connection generation was fenced while opening the Bridge session")

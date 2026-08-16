@@ -7,6 +7,11 @@ import com.agentlife.core.model.NotificationOutbox
 import com.agentlife.core.model.NotificationRecordV1
 import com.agentlife.core.model.PairedBridgeTransport
 import com.agentlife.core.model.TransportCloseReason
+import com.agentlife.tailnet.core.FileConnectionGenerationPersistence
+import com.agentlife.tailnet.core.KeystoreEncryptedNoBackupState
+import com.agentlife.tailnet.core.NativeEnrollmentSource
+import com.agentlife.transport.ProductionPairedBridgeTransport
+import com.agentlife.transport.ProductionTailnetTransportFactory
 import com.agentlife.core.model.VerifiedPairingTransportBinding
 import com.agentlife.encrypted.store.AndroidKeystoreOutboxKeyProvider
 import com.agentlife.encrypted.store.CapabilityOutboxStore
@@ -55,7 +60,7 @@ fun interface AuthenticatedBoundEventAckVerifier {
 }
 
 data class PairedNotificationBridgeRuntime(
-    val transport: PairedBridgeTransport,
+    val transport: ProductionPairedBridgeTransport,
     val binding: VerifiedPairingTransportBinding,
     val ackVerifier: AuthenticatedBoundEventAckVerifier,
 )
@@ -81,6 +86,21 @@ class AgentLifeApplication : Application() {
     private lateinit var notificationOutbox: NotificationOutbox
     private lateinit var smsAuthority: PersistentSmsSettingsAuthority
     private lateinit var smsScheduler: SmsJobScheduler
+
+    /** Sealed production composition for the userspace Bridge. */
+    fun createTailnetTransportFactory(
+        enrollmentSource: NativeEnrollmentSource,
+    ): ProductionTailnetTransportFactory = ProductionTailnetTransportFactory(
+        enrollmentSource = enrollmentSource,
+        nodeIdentity = NODE_IDENTITY,
+        nodeState = KeystoreEncryptedNoBackupState(
+            file = File(noBackupFilesDir, NODE_STATE_FILE),
+            alias = NODE_STATE_KEY_ALIAS,
+        ),
+        generationPersistence = FileConnectionGenerationPersistence(
+            File(noBackupFilesDir, CONNECTION_GENERATION_FILE),
+        ),
+    )
 
     override fun onCreate() {
         super.onCreate()
@@ -227,6 +247,10 @@ class AgentLifeApplication : Application() {
     }
 
     private companion object {
+        const val NODE_IDENTITY = "agent-life-android"
+        const val NODE_STATE_FILE = "tailnet-node-state-v1.aesgcm"
+        const val NODE_STATE_KEY_ALIAS = "agent_life_tailnet_node_state_v1"
+        const val CONNECTION_GENERATION_FILE = "tailnet-connection-generation-v1.txt"
         const val SMS_SETTINGS_FILE = "sms-settings-v1.bin"
         const val SMS_OUTBOX_FILE = "sms-outbox-v1.aesgcm"
         const val SMS_OUTBOX_KEY_ALIAS = "agent_life_sms_outbox_v1"

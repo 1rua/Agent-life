@@ -1,9 +1,9 @@
 {
   "artifact": {
     "name": "tsnet-android-1.98.10.aar",
-    "rawAarSha256": "65ad5f10027b82e78b8b8a5c3cb0a1a364330d3c7618ec60c52b7feee834362c",
-    "sha256": "233b8b4de1d31f25ef2464088fbf8d79f4581b2af269618d4755c80af0b187ac",
-    "sizeBytes": 33078875
+    "rawAarSha256": "d00db5872a0b0cc44cc0da0d41fdfd9ced5b83d320e63e2bc96349070909086f",
+    "sha256": "a654e487f88cc35a7baa238666151746f83dec12000a3078f6a83508df791e87",
+    "sizeBytes": 33331528
   },
   "build": {
     "argumentVector": [

@@ -36,13 +36,13 @@ staged_source="$toolchains/tsnet-src-v1.98.10"
 build_root="$toolchains/tsnet-build"
 out_dir="$repo_root/apps/android/tailnet-core/libs"
 
-readonly GO_BIN='/usr/sbin/go'
-readonly GOMOBILE_BIN='/home/djbd/项目/Agent-life/.toolchains/go-workspace/bin/gomobile'
-readonly GOBIND_BIN='/home/djbd/项目/Agent-life/.toolchains/go-workspace/bin/gobind'
 readonly NDK_ROOT="$toolchains/android-sdk/ndk/27.2.12479018"
 readonly JDK_ROOT="$toolchains/jdk-17.0.20+8"
 GOMODCACHE="$toolchains/gomodcache"
 GOCACHE="$toolchains/go-build-cache"
+GO_BIN='/usr/sbin/go'
+GOMOBILE_BIN="$repo_root/.toolchains/go-workspace/bin/gomobile"
+GOBIND_BIN="$repo_root/.toolchains/go-workspace/bin/gobind"
 
 [[ -x "$GO_BIN" ]] || fail "go binary missing: $GO_BIN"
 [[ -x "$GOMOBILE_BIN" ]] || fail "gomobile binary missing: $GOMOBILE_BIN"
@@ -60,7 +60,7 @@ export GOMODCACHE="$GOMODCACHE"
 export GOPROXY="file://$toolchains/gomodcache/cache/download"
 export GOSUMDB='off'
 export GOTOOLCHAIN='local'
-export GOCACHE="$GOCACHE"
+export GOCACHE="$toolchains/tsnet-go-build-cache-aar"
 export ANDROID_HOME="$toolchains/android-sdk"
 export ANDROID_NDK_HOME="$NDK_ROOT"
 export JAVA_HOME="$JDK_ROOT"

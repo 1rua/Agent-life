@@ -1,5 +1,6 @@
 package com.agentlife.tailnet.core
 
+import com.agentlife.core.model.TransportPath
 import com.agentlife.core.model.VerifiedPairingTransportBinding
 
 /**
@@ -9,6 +10,8 @@ import com.agentlife.core.model.VerifiedPairingTransportBinding
 interface TailscaleUserspaceCore {
     suspend fun start(nodeIdentity: String, stateStore: NoBackupTailnetStateStore)
     suspend fun openPairedBridge(binding: VerifiedPairingTransportBinding): UserspaceBridgeChannel
+    suspend fun path(binding: VerifiedPairingTransportBinding): TransportPath =
+        throw UnsupportedOperationException("native path is unavailable")
     suspend fun stop()
 }
 

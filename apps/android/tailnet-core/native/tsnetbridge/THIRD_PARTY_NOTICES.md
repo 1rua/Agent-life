@@ -9,6 +9,7 @@ shipped in the pinned Go module cache.
 | Module | Version | SPDX | License file SHA-256 |
 | --- | --- | --- | --- |
 | `filippo.io/edwards25519` | v1.2.0 | BSD-3-Clause | 2d36597f7117c38b006835ae7f537487207d8ec407aa9d9980794b2030cbc067 |
+| `github.com/coder/websocket` | v1.8.14 | UNKNOWN | cc0975a5f6305145bdd7b41ce9479632fdac3870e6ac4281f28017f18c767c4e |
 | `github.com/creachadair/msync` | v0.8.1 | BSD-3-Clause | 1d45f7789b678c742a045d7a6923c2762f667dc2523b9b4c01fe240d24c83083 |
 | `github.com/fxamacker/cbor/v2` | v2.9.0 | MIT | 78cad457d5ea7318230f3d969d4cdf29cef45524a1fc8ca3a97646da1ad7a841 |
 | `github.com/gaissmai/bart` | v0.26.1 | MIT | 12d27746d111da33969df0ecaa9b799e22c42db7d0b6a5164f383ec934233a41 |
@@ -36,3 +37,8 @@ shipped in the pinned Go module cache.
 | `golang.org/x/time` | v0.15.0 | BSD-3-Clause | 911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad |
 | `gvisor.dev/gvisor` | v0.0.0-20260224225140-573d5e7127a8 | Apache-2.0 | 0fbab5c58efbdf6d31e8085214f2dd821659c03d73cff3ed2b08e98826ea1cd9 |
 | `tailscale.com` | v0.0.0 | BSD-3-Clause | a7ca6186a7963a0a60740f6047760eecd7a0234e8c38bd7e1e0bbcb324bda45b |
+
+## Controller review required
+
+License could not be classified for:
+- `github.com/coder/websocket`

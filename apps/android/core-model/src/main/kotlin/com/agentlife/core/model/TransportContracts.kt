@@ -23,6 +23,8 @@ class VerifiedPairingTransportBinding private constructor(
     val pairingGeneration: ULong,
     val policyAttestationRevision: ULong,
     val enrollmentTicketId: String,
+    val enrollmentTicketDigest: String = "",
+    val policyAttestationDigest: String = "",
 ) {
     init {
         require(deviceId.isNotBlank()) { "device id must not be blank" }
@@ -53,6 +55,8 @@ class VerifiedPairingTransportBinding private constructor(
                 pairingGeneration = expectedPairingGeneration,
                 policyAttestationRevision = policy.revision,
                 enrollmentTicketId = ticket.id,
+                enrollmentTicketDigest = ticket.digest,
+                policyAttestationDigest = policy.digest,
             )
         }
     }
@@ -66,6 +70,7 @@ data class EnrollmentTicket(
     val minimumPolicyRevision: ULong,
     val expiresAtEpochSeconds: Long,
     val used: Boolean = false,
+    val digest: String = "",
 )
 
 data class BridgeIdentity(val fingerprint: String)
@@ -84,6 +89,7 @@ enum class TransportCloseReason {
 enum class TransportPath {
     DIRECT,
     RELAY,
+    OFFLINE,
     CONTROL_UNREACHABLE,
     APPROVAL_REQUIRED,
 }

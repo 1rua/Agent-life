@@ -3,11 +3,18 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
-android { namespace = "com.agentlife.transport" }
+android {
+    namespace = "com.agentlife.transport"
+    sourceSets {
+        getByName("test") {
+            kotlin.srcDir("src/testFixtures/kotlin")
+        }
+    }
+}
 
 dependencies {
     implementation(project(":core-model"))
-    implementation(project(":tailnet-core"))
+    api(project(":tailnet-core"))
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
     testImplementation("junit:junit:4.13.2")
 }

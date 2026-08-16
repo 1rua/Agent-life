@@ -3,7 +3,14 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
-android { namespace = "com.agentlife.notifications" }
+android {
+    namespace = "com.agentlife.notifications"
+    sourceSets {
+        getByName("test") {
+            kotlin.srcDir("../transport/src/testFixtures/kotlin")
+        }
+    }
+}
 dependencies {
     implementation(project(":core-model"))
     implementation(project(":policy-engine"))

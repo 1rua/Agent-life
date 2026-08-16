@@ -7,10 +7,11 @@ import pathlib
 import subprocess
 import sys
 
+_REPO_ROOT = pathlib.Path(__file__).resolve().parents[4]
 TOOLS = {
     "go": "/usr/sbin/go",
-    "gomobile": "/home/djbd/项目/Agent-life/.toolchains/go-workspace/bin/gomobile",
-    "gobind": "/home/djbd/项目/Agent-life/.toolchains/go-workspace/bin/gobind",
+    "gomobile": str(_REPO_ROOT / ".toolchains/go-workspace/bin/gomobile"),
+    "gobind": str(_REPO_ROOT / ".toolchains/go-workspace/bin/gobind"),
 }
 
 

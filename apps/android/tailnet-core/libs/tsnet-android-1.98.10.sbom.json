@@ -4829,7 +4829,7 @@
       "properties": [
         {
           "name": "go:replace",
-          "value": "/home/djbd/\u9879\u76ee/Agent-life/.toolchains/tsnet-src-v1.98.10@"
+          "value": "/mnt/\u6570\u636e/\u9879\u76ee/Agent-life/.toolchains/tsnet-src-v1.98.10@"
         }
       ],
       "purl": "pkg:golang/tailscale.com@v0.0.0",
@@ -4858,7 +4858,7 @@
         },
         {
           "name": "aar:sha256",
-          "value": "233b8b4de1d31f25ef2464088fbf8d79f4581b2af269618d4755c80af0b187ac"
+          "value": "a654e487f88cc35a7baa238666151746f83dec12000a3078f6a83508df791e87"
         }
       ],
       "type": "library",
@@ -4874,11 +4874,11 @@
       {
         "name": "gomobile",
         "vendor": "golang.org/x/mobile",
-        "version": "gomobile version unknown: cannot test gomobile binary: exit status 1, no required module provides package golang.org/x/mobile/cmd/gomobile: go.mod file not found in current directory or any parent directory; see 'go help modules'"
+        "version": "mod\tgolang.org/x/mobile\tv0.0.0-20260813181013-1960c775504c\th1:uNLlt6MIHGsstLAWnforA27sNnos9Bc33SAccQOeNiw="
       }
     ]
   },
-  "serialNumber": "urn:uuid:5891b953-e801-4131-a33f-83da32e5c28f",
+  "serialNumber": "urn:uuid:76102812-22c7-4fe8-92dc-65a106147c9c",
   "specVersion": "1.5",
   "version": 1
 }

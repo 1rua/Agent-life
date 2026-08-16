@@ -35,9 +35,8 @@ class PairedBridgeSessionCoordinator(
     private val nodeIdentity: String,
     private val stateStore: NoBackupTailnetStateStore,
     generationStore: ConnectionGenerationStore,
-    path: TransportPath = TransportPath.DIRECT,
 ) : PairedBridgeTransport {
-    private val transport = TsnetPairedBridgeTransport(core, generationStore, path)
+    private val transport = TsnetPairedBridgeTransport(core, generationStore)
     private val lifecycle = Mutex()
     private var coreStarted = false
 
