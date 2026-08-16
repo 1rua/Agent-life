@@ -16,6 +16,16 @@ import org.junit.Test
 
 class CapabilityOutboxStoreTest {
     @Test
+    fun byte_array_outbox_keys_must_be_exactly_256_bits() {
+        assertThrows(IllegalArgumentException::class.java) {
+            CapabilityOutboxStore(InMemoryOutboxPersistence(), ByteArray(16))
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            CapabilityOutboxStore(InMemoryOutboxPersistence(), ByteArray(24))
+        }
+    }
+
+    @Test
     fun complete_event_wire_is_encrypted_and_restored_after_restart() {
         val persistence = InMemoryOutboxPersistence()
         val key = ByteArray(32) { (it + 1).toByte() }
@@ -99,6 +109,27 @@ class CapabilityOutboxStoreTest {
         assertArrayEquals(byteArrayOf(1, 2, 3), runSuspend { store.recoverUnacknowledged().single() }.eventWire)
         assertArrayEquals(byteArrayOf(1, 2, 3), CapabilityOutboxStore(persistence, ByteArray(32) { 7 })
             .let { runSuspend { it.recoverUnacknowledged().single() } }.eventWire)
+    }
+
+    @Test
+    fun clear_removes_all_events_and_ciphertext_and_rolls_back_memory_on_failure() {
+        val persistence = InMemoryOutboxPersistence()
+        val store = CapabilityOutboxStore(persistence, ByteArray(32) { 7 })
+        runSuspend { store.enqueueAccepted(event()) }
+        runSuspend { store.clear() }
+        assertTrue(runSuspend { store.recoverUnacknowledged() }.isEmpty())
+        assertEquals(null, persistence.bytes)
+
+        val failing = object : EncryptedOutboxPersistence {
+            var bytes: ByteArray? = null
+            override fun read(): ByteArray? = bytes?.copyOf()
+            override fun write(ciphertext: ByteArray) { bytes = ciphertext.copyOf() }
+            override fun clear() = throw IllegalStateException("disk rejected clear")
+        }
+        val retained = CapabilityOutboxStore(failing, ByteArray(32) { 8 })
+        runSuspend { retained.enqueueAccepted(event()) }
+        assertThrows(IllegalStateException::class.java) { runSuspend { retained.clear() } }
+        assertEquals(listOf("sms:42"), runSuspend { retained.recoverUnacknowledged() }.map { it.eventId })
     }
 
     private fun event(

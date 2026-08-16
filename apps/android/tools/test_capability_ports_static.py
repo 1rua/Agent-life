@@ -43,6 +43,16 @@ SMS_CONTRACT_SOURCE = (
     / "capability"
     / "SmsCapabilityContracts.kt"
 )
+CALL_LOG_CONTRACT_SOURCE = (
+    PORT_ROOT
+    / "src"
+    / "main"
+    / "kotlin"
+    / "com"
+    / "agentlife"
+    / "capability"
+    / "CallLogCapabilityContracts.kt"
+)
 
 
 class CapabilityPortsStaticTest(unittest.TestCase):
@@ -93,6 +103,14 @@ class CapabilityPortsStaticTest(unittest.TestCase):
         self.assertIn("data object Sms", source)
         self.assertIn("data object Contacts", source)
 
+    def test_call_filter_is_typed_and_canonical(self):
+        source = self.read_source()
+        self.assertIn("data class Calls", source)
+        self.assertIn("val directions: Set<CallDirection>", source)
+        self.assertIn("val counterpartyAccess: CallCounterpartyAccess", source)
+        self.assertIn("CallDirection.entries.filter(directions::contains)", source)
+        self.assertIn("call directions must not be empty", source)
+
     def test_agent_request_requires_explicit_local_grant(self):
         source = self.read_source()
         self.assertIn("data class AgentDataRequest", source)
@@ -128,6 +146,7 @@ class CapabilityPortsStaticTest(unittest.TestCase):
         """Removing a provider scope check or returning raw content is a security bug."""
         self.assertTrue(PROVIDER_SOURCE.is_file(), PROVIDER_SOURCE)
         source = PROVIDER_SOURCE.read_text(encoding="utf-8")
+        call_log_source = CALL_LOG_CONTRACT_SOURCE.read_text(encoding="utf-8")
 
         for provider, capability, payload in (
             ("SmsCapabilityProvider", "SMS", "SmsPayload"),
@@ -144,7 +163,8 @@ class CapabilityPortsStaticTest(unittest.TestCase):
         ):
             self.assertIn(f"interface {provider}", source)
             self.assertIn(f"MobileDataCapability.{capability}", source)
-            self.assertIn(f"data class {payload}", source)
+            payload_source = call_log_source if payload == "CallsPayload" else source
+            self.assertIn(f"data class {payload}", payload_source)
 
         self.assertIn("data class AuthorizedReadScope internal constructor", source)
         self.assertIn("data class AuthorizedAutoSendScope internal constructor", source)
@@ -201,6 +221,43 @@ class CapabilityPortsStaticTest(unittest.TestCase):
         self.assertIn("enum class SmsSyncInterval", source)
         for interval in ("MANUAL", "MINUTES_15", "MINUTES_30", "MINUTES_60"):
             self.assertRegex(source, rf"\b{interval}\b")
+
+    def test_call_log_contract_is_typed_redacted_and_platform_independent(self):
+        self.assertTrue(CALL_LOG_CONTRACT_SOURCE.is_file(), CALL_LOG_CONTRACT_SOURCE)
+        source = CALL_LOG_CONTRACT_SOURCE.read_text(encoding="utf-8")
+
+        self.assertIn("MAX_CALL_LOG_BATCH_RECORDS: Int = 10_000", source)
+        self.assertIn("MAX_CALL_COUNTERPARTY_UTF8_BYTES: Int = 256", source)
+        self.assertIn("enum class CallDirection { INCOMING, OUTGOING, MISSED, REJECTED }", source)
+        self.assertIn("enum class CallCounterpartyAccess { WITHHELD, NUMBER }", source)
+        self.assertIn("data class CallHistoryPolicy", source)
+        self.assertIn("enum class CallLogSyncInterval(val periodMs: Long?)", source)
+        self.assertIn("Math.addExact(startedAtEpochMs, Math.multiplyExact(durationSeconds, 1_000L))", source)
+        self.assertIn("data class CallsMetadata", source)
+        self.assertIn('Regex("call:[1-9][0-9]*")', source)
+        self.assertIn("data class CallsPayload", source)
+        self.assertIn("counterpartyNumber=<redacted>", source)
+        self.assertIn("fun normalizeCallCounterpartyNumber(", source)
+        self.assertIn("call number normalization requires CALLS scope", source)
+        self.assertIn("class LocalCallLogAutoSendAuthorizer", source)
+        self.assertIn('requestId = "local-call-log-auto-sync"', source)
+        self.assertIn("CallDirection.entries.toSet()", source)
+
+        forbidden = re.compile(
+            r"android\\.|ContentResolver|TelephonyManager|PhoneStateListener|"
+            r"READ_CALL_LOG|READ_PHONE_STATE|Runtime\\.getRuntime|ProcessBuilder|"
+            r"Socket|ServerSocket|DatagramSocket",
+            re.IGNORECASE,
+        )
+        self.assertEqual([], [line for line in source.splitlines() if forbidden.search(line)])
+
+    def test_call_payload_uses_call_specific_normalization_not_generic_content_release(self):
+        source = PROVIDER_SOURCE.read_text(encoding="utf-8")
+        self.assertIn("normalizeCallCounterpartyNumber(raw.content, raw.metadata.numberPresentation, scope)", source)
+        self.assertNotIn("CallsPayload(raw.metadata, normalizeContent(raw.content, scope))", source)
+        self.assertIn("CapabilityFilter.Sms -> true", source)
+        self.assertNotIn("CapabilityFilter.Calls -> true", source)
+        self.assertIn("Released(<redacted>)", source)
 
 
 if __name__ == "__main__":

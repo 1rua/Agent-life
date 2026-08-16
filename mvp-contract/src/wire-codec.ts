@@ -7,6 +7,8 @@
  * identity and authorization facts are never encoded into these records.
  */
 
+import { Ajv2020 } from "ajv/dist/2020.js";
+
 const PACKAGE_NAME = /^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)+$/;
 const MAX_U64 = 18_446_744_073_709_551_615n;
 const MAX_SMS_PROVIDER_ID = 9_223_372_036_854_775_807n;
@@ -479,4 +481,236 @@ export const validateWireAssistantMessage = (value: unknown): value is WireAssis
     && stringValue(value.text) && value.text.length <= 50_000
     && (value.event === "failed" ? stringValue(value.error) && value.error.length > 0 : !Object.hasOwn(value, "error"));
   return false;
+};
+
+export type WireCallRecord = Readonly<{
+  kind: "upsert";
+  record_id: string;
+  source_epoch: string;
+  record_revision: "1";
+  cursor_started_at_epoch_ms: string;
+  cursor_provider_id: string;
+  captured_at_epoch_ms: string;
+  capture_revision: string;
+  policy_revision: string;
+  metadata: Readonly<{
+    direction: "incoming" | "outgoing" | "missed" | "rejected";
+    started_at_epoch_ms: string;
+    ended_at_epoch_ms: string;
+    duration_seconds: string;
+    observed_at_epoch_ms: string;
+    number_presentation: "allowed" | "restricted" | "unknown" | "payphone" | "unavailable";
+  }>;
+  counterparty_number: Readonly<{ state: "withheld" }> | Readonly<{ state: "released"; value: string }>;
+}>;
+
+const MAX_I64 = 9_223_372_036_854_775_807n;
+const CALL_DIRECTIONS = new Set(["incoming", "outgoing", "missed", "rejected"]);
+const CALL_PRESENTATIONS = new Set(["allowed", "restricted", "unknown", "payphone", "unavailable"]);
+const validCallProviderId = (value: unknown): value is string => isPositiveU64(value) && BigInt(value) <= MAX_I64;
+const validNonNegativeI64 = (value: unknown): value is string => isDecimalU64(value) && BigInt(value) <= MAX_I64;
+const validUnicodeScalars = (value: string): boolean => {
+  for (let index = 0; index < value.length; index += 1) {
+    const unit = value.charCodeAt(index);
+    if (unit >= 0xD800 && unit <= 0xDBFF) {
+      const low = value.charCodeAt(index + 1);
+      if (!Number.isInteger(low) || low < 0xDC00 || low > 0xDFFF) return false;
+      index += 1;
+    } else if (unit >= 0xDC00 && unit <= 0xDFFF) return false;
+  }
+  return true;
+};
+
+/**
+ * Compiles a published call-record schema with its registered executable
+ * UTF-8-byte vocabulary. Generic JSON Schema validators do not interpret this
+ * contract extension, so callers must use this factory at the schema boundary.
+ */
+export const createCallRecordSchemaValidator = (schema: object) => {
+  const ajv = new Ajv2020({ strict: false });
+  ajv.addKeyword({
+    keyword: "x-agent-life-maxUtf8Bytes",
+    type: "string",
+    schemaType: "number",
+    validate: (limit: unknown, value: unknown): boolean =>
+      typeof limit === "number" && Number.isSafeInteger(limit) && limit >= 0
+      && typeof value === "string" && validUnicodeScalars(value)
+      && new TextEncoder().encode(value).byteLength <= limit,
+  });
+  return ajv.compile(schema);
+};
+const validCallRecordId = (value: unknown): value is string =>
+  typeof value === "string" && value.startsWith("call:") && validCallProviderId(value.slice(5));
+const validCallMetadata = (value: unknown): value is WireCallRecord["metadata"] => recordObject(value)
+  && exactKeys(value, ["direction", "started_at_epoch_ms", "ended_at_epoch_ms", "duration_seconds", "observed_at_epoch_ms", "number_presentation"])
+  && stringValue(value.direction) && CALL_DIRECTIONS.has(value.direction)
+  && validNonNegativeI64(value.started_at_epoch_ms) && validNonNegativeI64(value.ended_at_epoch_ms)
+  && validNonNegativeI64(value.duration_seconds) && validNonNegativeI64(value.observed_at_epoch_ms)
+  && stringValue(value.number_presentation) && CALL_PRESENTATIONS.has(value.number_presentation)
+  && BigInt(value.ended_at_epoch_ms) === BigInt(value.started_at_epoch_ms) + BigInt(value.duration_seconds) * 1000n;
+const validCallCounterparty = (value: unknown, presentation: unknown): value is WireCallRecord["counterparty_number"] => {
+  if (!recordObject(value)) return false;
+  if (value.state === "withheld") return exactKeys(value, ["state"]);
+  return exactKeys(value, ["state", "value"])
+    && value.state === "released" && presentation === "allowed"
+    && stringValue(value.value) && validUnicodeScalars(value.value) && value.value.length > 0 && new TextEncoder().encode(value.value).byteLength <= 256;
+};
+
+/** Validates the published call-record v1 object as well as its recovery invariants. */
+export const validateWireCallRecord = (value: unknown): value is WireCallRecord => {
+  if (!recordObject(value) || !exactKeys(value, [
+    "kind", "record_id", "source_epoch", "record_revision", "cursor_started_at_epoch_ms", "cursor_provider_id",
+    "captured_at_epoch_ms", "capture_revision", "policy_revision", "metadata", "counterparty_number",
+  ])) return false;
+  if (value.kind !== "upsert" || !validCallRecordId(value.record_id) || !isPositiveU64(value.source_epoch)
+    || value.record_revision !== "1" || !validNonNegativeI64(value.cursor_started_at_epoch_ms)
+    || !validCallProviderId(value.cursor_provider_id) || !validNonNegativeI64(value.captured_at_epoch_ms)
+    || !isDecimalU64(value.capture_revision) || !isDecimalU64(value.policy_revision) || !validCallMetadata(value.metadata)) return false;
+  return value.record_id === `call:${value.cursor_provider_id}`
+    && value.cursor_started_at_epoch_ms === value.metadata.started_at_epoch_ms
+    && value.captured_at_epoch_ms === value.metadata.observed_at_epoch_ms
+    && value.capture_revision === value.policy_revision
+    && validCallCounterparty(value.counterparty_number, value.metadata.number_presentation);
+};
+
+/** Emits a frozen plain object in the schema's fixed field order. */
+export const encodeCallRecord = (record: WireCallRecord): WireCallRecord => {
+  const wire = Object.freeze({
+    kind: record.kind, record_id: record.record_id, source_epoch: record.source_epoch, record_revision: record.record_revision,
+    cursor_started_at_epoch_ms: record.cursor_started_at_epoch_ms, cursor_provider_id: record.cursor_provider_id,
+    captured_at_epoch_ms: record.captured_at_epoch_ms, capture_revision: record.capture_revision, policy_revision: record.policy_revision,
+    metadata: Object.freeze({
+      direction: record.metadata.direction, started_at_epoch_ms: record.metadata.started_at_epoch_ms,
+      ended_at_epoch_ms: record.metadata.ended_at_epoch_ms, duration_seconds: record.metadata.duration_seconds,
+      observed_at_epoch_ms: record.metadata.observed_at_epoch_ms, number_presentation: record.metadata.number_presentation,
+    }),
+    counterparty_number: record.counterparty_number.state === "withheld"
+      ? Object.freeze({ state: "withheld" as const })
+      : Object.freeze({ state: "released" as const, value: record.counterparty_number.value }),
+  });
+  if (!validateWireCallRecord(wire)) throw new Error("WIRE_RECORD_UNREPRESENTABLE");
+  return wire;
+};
+
+class StrictJsonReader {
+  private index = 0;
+  private readonly objectOrders = new WeakMap<Record<string, unknown>, readonly string[]>();
+  constructor(private readonly text: string) {}
+
+  readDocument(): unknown {
+    this.skipWhitespace();
+    const value = this.readValue();
+    if (this.index !== this.text.length) this.fail();
+    return value;
+  }
+
+  hasObjectOrder(value: unknown, expected: readonly string[]): boolean {
+    if (!recordObject(value)) return false;
+    const order = this.objectOrders.get(value);
+    return order !== undefined && order.length === expected.length && order.every((key, index) => key === expected[index]);
+  }
+
+  private readValue(): unknown {
+    const current = this.text[this.index];
+    if (current === "{") return this.readObject();
+    if (current === "[") return this.readArray();
+    if (current === '"') return this.readString();
+    if (current === "t" && this.take("true")) return true;
+    if (current === "f" && this.take("false")) return false;
+    if (current === "n" && this.take("null")) return null;
+    if (current === "-" || (current !== undefined && current >= "0" && current <= "9")) return this.readNumber();
+    this.fail();
+  }
+
+  private readObject(): Record<string, unknown> {
+    this.expect("{"); this.skipWhitespace();
+    const result: Record<string, unknown> = {};
+    const keys = new Set<string>();
+    if (this.text[this.index] === "}") { this.index += 1; this.objectOrders.set(result, []); return result; }
+    while (true) {
+      if (this.text[this.index] !== '"') this.fail();
+      const key = this.readString();
+      if (keys.has(key)) this.fail();
+      keys.add(key); this.skipWhitespace(); this.expect(":"); this.skipWhitespace();
+      result[key] = this.readValue(); this.skipWhitespace();
+      if (this.text[this.index] === "}") { this.index += 1; this.objectOrders.set(result, [...keys]); return result; }
+      this.expect(","); this.skipWhitespace();
+    }
+  }
+
+  private readArray(): unknown[] {
+    this.expect("["); this.skipWhitespace(); const result: unknown[] = [];
+    if (this.text[this.index] === "]") { this.index += 1; return result; }
+    while (true) {
+      result.push(this.readValue()); this.skipWhitespace();
+      if (this.text[this.index] === "]") { this.index += 1; return result; }
+      this.expect(","); this.skipWhitespace();
+    }
+  }
+
+  private readString(): string {
+    this.expect('"'); let result = "";
+    while (true) {
+      const value = this.text[this.index++];
+      if (value === undefined) this.fail();
+      if (value === '"') return result;
+      if (value === "\\") {
+        const escape = this.text[this.index++];
+        if (escape === '"' || escape === "\\" || escape === "/") { result += escape; continue; }
+        if (escape === "b") { result += "\b"; continue; }
+        if (escape === "f") { result += "\f"; continue; }
+        if (escape === "n") { result += "\n"; continue; }
+        if (escape === "r") { result += "\r"; continue; }
+        if (escape === "t") { result += "\t"; continue; }
+        if (escape !== "u") this.fail();
+        const code = this.readHex();
+        if (code >= 0xD800 && code <= 0xDBFF) {
+          if (this.text[this.index++] !== "\\" || this.text[this.index++] !== "u") this.fail();
+          const low = this.readHex(); if (low < 0xDC00 || low > 0xDFFF) this.fail();
+          result += String.fromCodePoint(0x10000 + (code - 0xD800) * 0x400 + low - 0xDC00);
+        } else { if (code >= 0xDC00 && code <= 0xDFFF) this.fail(); result += String.fromCharCode(code); }
+        continue;
+      }
+      if (value.charCodeAt(0) < 0x20) this.fail();
+      const unit = value.charCodeAt(0);
+      if (unit >= 0xD800 && unit <= 0xDBFF) {
+        const low = this.text[this.index];
+        if (low === undefined || low.charCodeAt(0) < 0xDC00 || low.charCodeAt(0) > 0xDFFF) this.fail();
+        result += value + low; this.index += 1; continue;
+      }
+      if (unit >= 0xDC00 && unit <= 0xDFFF) this.fail();
+      result += value;
+    }
+  }
+
+  private readNumber(): number {
+    const start = this.index;
+    if (this.text[this.index] === "-") this.index += 1;
+    if (this.text[this.index] === "0") this.index += 1;
+    else { if (!this.digit()) this.fail(); while (this.digit()) this.index += 1; }
+    if (this.text[this.index] === ".") { this.index += 1; if (!this.digit()) this.fail(); while (this.digit()) this.index += 1; }
+    if (this.text[this.index] === "e" || this.text[this.index] === "E") { this.index += 1; if (this.text[this.index] === "+" || this.text[this.index] === "-") this.index += 1; if (!this.digit()) this.fail(); while (this.digit()) this.index += 1; }
+    return Number(this.text.slice(start, this.index));
+  }
+  private readHex(): number { const raw = this.text.slice(this.index, this.index + 4); if (!/^[0-9a-fA-F]{4}$/.test(raw)) this.fail(); this.index += 4; return Number.parseInt(raw, 16); }
+  private digit(): boolean { const current = this.text[this.index]; return current !== undefined && current >= "0" && current <= "9"; }
+  private take(value: string): boolean { if (!this.text.startsWith(value, this.index)) return false; this.index += value.length; return true; }
+  private expect(value: string): void { if (this.text[this.index] !== value) this.fail(); this.index += 1; }
+  private skipWhitespace(): void { while (this.text[this.index] === " " || this.text[this.index] === "\n" || this.text[this.index] === "\r" || this.text[this.index] === "\t") this.index += 1; }
+  private fail(): never { throw new Error("WIRE_RECORD_UNREPRESENTABLE"); }
+}
+
+/** Decodes JSON only after a recursive byte-safe duplicate-key scan. */
+export const decodeCallRecordJson = (wire: Uint8Array): WireCallRecord => {
+  let decoded: unknown;
+  let reader: StrictJsonReader;
+  try { reader = new StrictJsonReader(new TextDecoder("utf-8", { fatal: true }).decode(wire)); decoded = reader.readDocument(); }
+  catch (_error) { throw new Error("WIRE_RECORD_UNREPRESENTABLE"); }
+  if (!validateWireCallRecord(decoded)) throw new Error("WIRE_RECORD_UNREPRESENTABLE");
+  const expectedRoot = ["kind", "record_id", "source_epoch", "record_revision", "cursor_started_at_epoch_ms", "cursor_provider_id", "captured_at_epoch_ms", "capture_revision", "policy_revision", "metadata", "counterparty_number"];
+  const expectedMetadata = ["direction", "started_at_epoch_ms", "ended_at_epoch_ms", "duration_seconds", "observed_at_epoch_ms", "number_presentation"];
+  const expectedCounterparty = decoded.counterparty_number.state === "withheld" ? ["state"] : ["state", "value"];
+  if (!reader.hasObjectOrder(decoded, expectedRoot) || !reader.hasObjectOrder(decoded.metadata, expectedMetadata)
+    || !reader.hasObjectOrder(decoded.counterparty_number, expectedCounterparty)) throw new Error("WIRE_RECORD_UNREPRESENTABLE");
+  return encodeCallRecord(decoded);
 };

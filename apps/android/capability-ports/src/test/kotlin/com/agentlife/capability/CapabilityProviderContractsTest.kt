@@ -73,12 +73,18 @@ class CapabilityProviderContractsTest {
             requestId = "calls-read",
             capability = MobileDataCapability.CALLS,
             mode = DataSyncMode.ON_DEMAND,
-            filter = CapabilityFilter.Calls,
+            filter = CapabilityFilter.Calls(
+                directions = setOf(CallDirection.INCOMING),
+                counterpartyAccess = CallCounterpartyAccess.WITHHELD,
+            ),
             policyRevision = 7u,
         )
         val grant = CapabilityGrant(
             capability = MobileDataCapability.CALLS,
-            filter = CapabilityFilter.Calls,
+            filter = CapabilityFilter.Calls(
+                directions = setOf(CallDirection.INCOMING),
+                counterpartyAccess = CallCounterpartyAccess.WITHHELD,
+            ),
             onDemandEnabled = true,
             autoSendEnabled = false,
             agentMayRequest = true,

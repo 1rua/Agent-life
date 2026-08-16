@@ -22,6 +22,8 @@ import com.agentlife.core.model.PairedBridgeTransport
 import com.agentlife.core.model.TransportCloseReason
 import com.agentlife.core.model.VerifiedPairingTransportBinding
 import com.agentlife.tailnet.core.VerifiedPairingTransportBindingFactory
+import com.agentlife.sync.CapabilityEventEgressGate
+import com.agentlife.sync.CapabilityPairedBridgeBindingSource
 import com.agentlife.core.model.BridgeIdentity
 import com.agentlife.core.model.EnrollmentTicket
 import com.agentlife.core.model.PolicyAttestation
@@ -46,7 +48,7 @@ class SmsAutoSyncCoordinatorTest {
             outbox = outbox,
             cursor = cursor,
             transport = transport,
-            egressGate = SmsAutoSendEgressGate { true },
+            egressGate = CapabilityEventEgressGate { true },
         )
 
         val result = runSuspend { coordinator.runOnce(subscription()) }
@@ -72,7 +74,7 @@ class SmsAutoSyncCoordinatorTest {
             outbox = transportOutbox,
             cursor = InMemorySmsCursorStore(),
             transport = RecordingTransport(sendFailure = IllegalArgumentException("transport validation failure")),
-            egressGate = SmsAutoSendEgressGate { true },
+            egressGate = CapabilityEventEgressGate { true },
         )
 
         val transportResult = runSuspend { transportFailure.runOnce(subscription()) }
@@ -86,7 +88,7 @@ class SmsAutoSyncCoordinatorTest {
             outbox = ackOutbox,
             cursor = InMemorySmsCursorStore(),
             transport = RecordingTransport(),
-            egressGate = SmsAutoSendEgressGate { true },
+            egressGate = CapabilityEventEgressGate { true },
         )
         val ackResult = runSuspend { ackFailure.runOnce(subscription()) }
 
@@ -105,7 +107,7 @@ class SmsAutoSyncCoordinatorTest {
             outbox = outbox,
             cursor = InMemorySmsCursorStore(),
             transport = transport,
-            egressGate = SmsAutoSendEgressGate { egressAllowed },
+            egressGate = CapabilityEventEgressGate { egressAllowed },
         )
 
         val result = runSuspend { coordinator.runOnce(subscription()) }
@@ -126,7 +128,7 @@ class SmsAutoSyncCoordinatorTest {
             outbox = outbox,
             cursor = InMemorySmsCursorStore(),
             transport = transport,
-            egressGate = SmsAutoSendEgressGate { egressAllowed },
+            egressGate = CapabilityEventEgressGate { egressAllowed },
         )
 
         val result = runSuspend { coordinator.runOnce(subscription()) }
@@ -155,7 +157,7 @@ class SmsAutoSyncCoordinatorTest {
                 override fun advance(cursor: SmsCursor): Boolean = false
             },
             transport = transport,
-            egressGate = SmsAutoSendEgressGate { true },
+            egressGate = CapabilityEventEgressGate { true },
         )
 
         val result = runSuspend { coordinator.runOnce(subscription()) }
@@ -178,7 +180,7 @@ class SmsAutoSyncCoordinatorTest {
                 override fun advance(cursor: SmsCursor): Boolean = throw IllegalStateException("cursor storage unavailable")
             },
             transport = transport,
-            egressGate = SmsAutoSendEgressGate { true },
+            egressGate = CapabilityEventEgressGate { true },
         )
 
         val result = runSuspend { coordinator.runOnce(subscription()) }
@@ -200,7 +202,7 @@ class SmsAutoSyncCoordinatorTest {
             outbox = outbox,
             cursor = InMemorySmsCursorStore(),
             transport = RecordingTransport(),
-            egressGate = SmsAutoSendEgressGate { true },
+            egressGate = CapabilityEventEgressGate { true },
         )
 
         val result = runSuspend { coordinator.runOnce(subscription()) }
@@ -227,7 +229,7 @@ class SmsAutoSyncCoordinatorTest {
             outbox = outbox,
             cursor = InMemorySmsCursorStore(),
             transport = transport,
-            egressGate = SmsAutoSendEgressGate { event -> gateEvents += event.eventId; true },
+            egressGate = CapabilityEventEgressGate { event -> gateEvents += event.eventId; true },
         )
 
         val result = runSuspend { coordinator.runOnce(subscription()) }
@@ -244,14 +246,14 @@ class SmsAutoSyncCoordinatorTest {
         outbox: CapabilityOutbox,
         cursor: SmsCursorStore,
         transport: PairedBridgeTransport,
-        egressGate: SmsAutoSendEgressGate,
+        egressGate: CapabilityEventEgressGate,
     ) = SmsAutoSyncCoordinator(
         provider = provider,
         outbox = outbox,
         cursorStore = cursor,
         eventEncoder = SmsEventEncoder { eventId, _, _ -> eventId.encodeToByteArray() },
         transport = transport,
-        bindingSource = SmsPairedBridgeBindingSource { validBinding() },
+        bindingSource = CapabilityPairedBridgeBindingSource { validBinding() },
         egressGate = egressGate,
         maxAttempts = 1,
     )
@@ -334,6 +336,10 @@ class SmsAutoSyncCoordinatorTest {
         }
 
         override suspend fun recoverUnacknowledged(): List<CapabilityDurableEvent> = entries.values.toList()
+
+        override suspend fun clear() {
+            entries.clear()
+        }
     }
 
     private class RecordingTransport(

@@ -37,17 +37,17 @@ import com.agentlife.sms.FileSmsCursorStore
 import com.agentlife.sms.InMemorySmsSettingsPersistence
 import com.agentlife.sms.LocalSmsSettingsController
 import com.agentlife.sms.PersistentSmsSettingsAuthority
-import com.agentlife.sms.SmsAutoSendEgressGate
 import com.agentlife.sms.SmsAutoSyncCoordinator
 import com.agentlife.sms.SmsAutoSyncRunner
 import com.agentlife.sms.SmsJobScheduler
-import com.agentlife.sms.SmsPairedBridgeBindingSource
 import com.agentlife.sms.SmsRuntime
 import com.agentlife.sms.SmsRuntimeFactory
 import com.agentlife.sms.SmsRuntimeFactoryRegistry
 import com.agentlife.sms.SmsSettingsPersistence
 import com.agentlife.sms.SmsSettingsSnapshot
 import com.agentlife.sms.SmsWireCodec
+import com.agentlife.sync.CapabilityEventEgressGate
+import com.agentlife.sync.CapabilityPairedBridgeBindingSource
 import java.io.File
 
 /**
@@ -232,10 +232,10 @@ class AgentLifeApplication : Application() {
             cursorStore = cursorStore,
             eventEncoder = SmsWireCodec(),
             transport = RegistryPairedBridgeTransport,
-            bindingSource = SmsPairedBridgeBindingSource {
+            bindingSource = CapabilityPairedBridgeBindingSource {
                 PairedNotificationBridgeRegistry.current()?.binding
             },
-            egressGate = SmsAutoSendEgressGate { event ->
+            egressGate = CapabilityEventEgressGate { event ->
                 val settings = smsAuthority.snapshot()
                 !settings.corrupted && settings.granted && settings.autoSendEnabled &&
                     event.policyRevision == settings.policyRevision
