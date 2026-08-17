@@ -93,7 +93,7 @@ export const PACKETS: ReadonlyArray<{
     id: "WP-04",
     label: "fake paired transport and trace harness",
     source: [
-      "apps/android/transport/src/main/kotlin/com/agentlife/transport/FakeUserspaceTransport.kt",
+      "apps/android/transport/src/testFixtures/kotlin/com/agentlife/transport/FakeUserspaceTransport.kt",
       "bridge-contract/src/fake-bridge.ts",
       "bridge-contract/test/fake-bridge.test.ts",
       "bridge-contract/test/notification-flow.trace.test.ts",
