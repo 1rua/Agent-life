@@ -85,20 +85,21 @@ Agent Life 让你的 Android 手机安全连接到自托管 AI Agent，让 Agent
 
 ```
 多位用户的 Android 14+ 手机
-  ├─ 助手/对话界面
-  ├─ 本机授权与风险策略引擎
+  ├─ 助手/对话界面（assistant-holder APK）
+  ├─ 本机授权与风险策略引擎（policy-engine）
   ├─ 数据采集器与能力适配层
-  │    ├─ 标准 Android API
-  │    ├─ Device Owner
-  │    ├─ Shizuku/ADB
-  │    └─ 类型化 Root actions
-  ├─ 加密缓冲、临时附件、审计
+  │    ├─ 通知采集器（notification-collector）
+  │    ├─ SMS 采集器（sms-collector）
+  │    ├─ 通话记录采集器（call-log-collector）
+  │    ├─ 标准 Android API / Device Owner / Shizuku / 类型化 Root
+  │    └─ 能力端口（capability-ports）+ 控制端口（control-ports）
+  ├─ 加密缓冲、临时附件、审计（encrypted-store）
   └─ 出站 transport
-       ├─ 内嵌 Tailscale userspace core
+       ├─ 内嵌 Tailscale userspace core（tailnet-core）
        │    └─ 仅 App→Bridge 的私有通道；DIRECT 或 DERP/RELAY
        └─ 用户手动启用的公网 HTTPS 备用
              │
-       Agent Device Bridge
+       Agent Device Bridge（bridge-runtime）
   ├─ 租户/principal/设备注册与密钥
   ├─ 消息路由、事件、幂等、审计
   ├─ 按用户隔离的数据存储与保留
@@ -113,14 +114,34 @@ Agent Life 让你的 Android 手机安全连接到自托管 AI Agent，让 Agent
 
 | 目录 | 说明 | 技术栈 |
 | --- | --- | --- |
-| `apps/android/` | Android 双 APK（11 个 Gradle 模块） | Kotlin 2.1.20, AGP 8.9.2, SDK 35 |
+| `apps/android/` | Android 双 APK（14 个 Gradle 模块） | Kotlin 2.1.20, AGP 8.9.2, SDK 35 |
+| `protocol/` | 闭合协议契约（注册表、Schema、src、test） | TypeScript, JSON Schema 2020-12 |
 | `bridge-contract/` | Bridge 服务契约（配对/通知/订阅/操作/对话） | TypeScript |
 | `bridge-runtime/` | Bridge 运行时适配器与部署模板 | TypeScript, Docker, systemd |
 | `artifact-contract/` | 附件 ticket/PoP/提交契约 | TypeScript |
-| `mvp-contract/` | 闭合 JSON Schema v1 与 wire codec | TypeScript, JSON Schema |
+| `mvp-contract/` | MVP 垂直切片契约（通知/SMS/通话/助手）与 wire codec | TypeScript, JSON Schema |
 | `integrations/` | Hermes / OpenClaw 适配器与 skill | TypeScript |
 | `e2e/` | 端到端 smoke 与 readiness 检查 | Shell, Python |
 | `docs/` | 设计规格、实施计划、准备度报告与门禁决策 | Markdown |
+
+### Android 模块
+
+| 模块 | 说明 |
+| --- | --- |
+| `app` | 主 APK（通知、SMS、通话记录、策略引擎、传输） |
+| `assistant-holder` | 助手 APK（语音交互、附件选择、对话界面） |
+| `artifact-ports` | 附件 ticket/PoP 提交端口 |
+| `capability-ports` | 能力定义契约（类型化 action 与 grant） |
+| `capability-sync-runtime` | 能力同步运行时 |
+| `core-model` | 共享领域模型 |
+| `control-ports` | 控制端口（后台命令、受限 shell） |
+| `policy-engine` | 本地授权与风险策略引擎 |
+| `notification-collector` | 通知采集器（策略驱动、加密 outbox） |
+| `sms-collector` | SMS 采集器（fail-closed 调度、重启恢复） |
+| `call-log-collector` | 通话记录采集器 |
+| `tailnet-core` | Tailscale userspace AAR（tsnet bridge） |
+| `transport` | 出站传输层（内嵌 Tailscale / HTTPS 备用） |
+| `encrypted-store` | 加密缓冲与持久化存储 |
 
 ## 快速开始
 
@@ -135,11 +156,16 @@ npm run mvp:lock:check
 ### Bridge 契约测试
 
 ```bash
+# 协议契约（32 files / 334 tests）
+npx vitest --root . run protocol/test/
+npx tsc --noEmit --strict
+
+# Bridge 契约与运行时
 npx vitest --root . run bridge-contract/test/
 npx vitest --root . run bridge-runtime/test/
 npx vitest --root . run artifact-contract/test/
-npx tsc --noEmit --strict bridge-contract/src/*.ts
-npx tsc --noEmit --strict bridge-runtime/src/*.ts
+npx tsc --noEmit --strict -p bridge-contract/tsconfig.json
+npx tsc --noEmit --strict -p bridge-runtime/tsconfig.json
 ```
 
 ### Android 构建
@@ -158,12 +184,13 @@ cd apps/android
 | 协议契约测试 | ✅ 32 files / 334 tests, typecheck GREEN |
 | Bridge/集成/MVP 联调 | ✅ 16 files / 98 tests |
 | Android SDK-free 静态门禁 | ✅ 48 tests |
-| 依赖锁（7 行） | ⏳ PENDING |
-| Android 生产构建 | ⏳ PENDING |
-| Tailscale AAR 集成 | ⏳ PENDING |
-| Bridge 生产部署 | ⏳ PENDING |
+| 依赖锁（7 行） | ✅ PASS（Tailscale v1.98.10, AGP 8.9.2, Hermes v0.9.0, OpenClaw v0.9.0） |
+| Tailscale AAR 集成 | ⚠️ AAR 已验证（arm64-v8a + x86_64），NDK 工具链摘要 provisional |
+| Android 生产构建 | ⏳ PENDING（缺少锁定的 Gradle 分发、NDK 完整安装与参考设备） |
+| Bridge 生产部署 | ⏳ PENDING（缺少 SQLite 驱动、secret store、lease 协调器与数据库部署） |
 
 > 详细准备度报告见 [docs/mvp/mvp-readiness-report.md](docs/mvp/mvp-readiness-report.md)
+> 依赖锁审计见 [docs/mvp/mvp-dependency-lock-audit-2026-08-17.md](docs/mvp/mvp-dependency-lock-audit-2026-08-17.md)
 
 ## 关键设计决策
 
