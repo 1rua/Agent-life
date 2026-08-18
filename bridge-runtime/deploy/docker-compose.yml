@@ -1,21 +1,42 @@
 services:
+  ingress:
+    build:
+      context: ../..
+      dockerfile: bridge-runtime/deploy/Dockerfile.ingress
+    init: true
+    restart: unless-stopped
+    environment:
+      AGENT_LIFE_RUNTIME_SOCKET: /run/agent-life/runtime.sock
+      AGENT_LIFE_TSNET_STATE_DIR: /var/lib/agent-life-ingress
+      AGENT_LIFE_TSNET_HOSTNAME: ${AGENT_LIFE_TSNET_HOSTNAME:-agent-life-bridge}
+      AGENT_LIFE_TSNET_CONTROL_URL: ${AGENT_LIFE_TSNET_CONTROL_URL:-https://controlplane.tailscale.com}
+      AGENT_LIFE_TSNET_PORT: "443"
+    volumes:
+      - ingress-state:/var/lib/agent-life-ingress
+      - runtime-socket:/run/agent-life
+
   bridge:
     build:
-      context: ..
-      dockerfile: deploy/Dockerfile
-    ports:
-      - "3000:3000"
+      context: ../..
+      dockerfile: bridge-runtime/deploy/Dockerfile
+    init: true
+    depends_on:
+      - ingress
+    # Both processes share one private userspace network namespace. No host,
+    # Docker, Funnel, or public wildcard port is published.
+    network_mode: "service:ingress"
+    restart: unless-stopped
     environment:
-      NODE_ENV: production
-      BRIDGE_INGRESS_PORT: "3000"
+      AGENT_LIFE_DATABASE: /var/lib/agent-life-bridge/bridge.sqlite
+      AGENT_LIFE_PAIRING_PUBLIC_KEY: /var/lib/agent-life-bridge/secrets/pairing-ticket-public.pem
+      AGENT_LIFE_RUNTIME_SOCKET: /run/agent-life/runtime.sock
+      AGENT_LIFE_LEASE_TTL_MS: "60000"
     volumes:
       - bridge-state:/var/lib/agent-life-bridge
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
+      - runtime-socket:/run/agent-life
+      - ./secrets/pairing-ticket-public.pem:/var/lib/agent-life-bridge/secrets/pairing-ticket-public.pem:ro
 
 volumes:
+  ingress-state:
   bridge-state:
+  runtime-socket:

@@ -40,7 +40,7 @@ or SDK-free result is promoted to a release pass.
 | WP-03 | PASS | PENDING | Policy/collector/outbox plus lifecycle/runtime outbox composition, closed capability/control-port and typed provider-contract sources and host/static seams exist; Android providers/tests need the toolchain/device. |
 | WP-04 | PASS | PASS (SDK-free) | Fake paired transport and cross-layer trace tests run in the host smoke. |
 | WP-05 | PASS | PENDING | Userspace transport seam exists; no locked AAR or physical P0t evidence. |
-| WP-06 | PASS | PENDING | Runtime durable repositories cover pairing, notification cursors, subscriptions/events, ACKs, operation claims and replay associations; fenced composition and backup/restore drill seams fail closed on missing external ports. Locked SQLite/secret/lease/tsnet adapters and production deployment evidence remain pending. |
+| WP-06 | PASS | PARTIAL PASS | The locked single-host Node SQLite/lease/Ed25519/tsnet runtime has 21 focused files (127 tests), a real 11-namespace backup/restore drill, Go sidecar build/test, and verified systemd/static deployment templates. Docker image build PASS; physical Tailnet/E2E remain blocked. |
 | WP-07 | PASS | PENDING | Hermes/OpenClaw adapter/manifest/skill seams exist; official release/profile locks are pending. |
 | WP-08 | PASS | PENDING | Isolated holder source plus shared bounded text/opaque-grant hand-off and a default-deny main-APK gate exist; Android/model lock and connected tests are pending. |
 | WP-09 | PASS | PENDING | SDK-free harness exists; physical Android/Bridge/plugin E2E cannot run yet. |
@@ -82,13 +82,12 @@ P0t, AAR, or production-Bridge requirement.
   locked Gradle 8.9 distribution was not downloaded, the NDK install is only a
   stub, and no reference device is connected; `apps/android/gradlew --no-daemon
   check` therefore cannot establish a build or P0t result.
-- No locked Tailscale userspace AAR/resource artifact or production Bridge
-  runtime/database deployment is present. `bridge-runtime/` now contains
-  source-level SQLite adapter/migration and userspace-ingress/health ports in
-  addition to the deterministic local `fs/promises` adapter, durable state
-  repositories and operation/replay dispatcher. The fenced composition and
-  backup/restore drill are source/test seams until locked SQLite, secret-store,
-  lease and authenticated tsnet adapters plus deployment evidence are supplied.
+- The single-host Bridge storage/runtime stack is implemented and locally
+  verified: Node SQLite, same-DB lease fencing, Ed25519 verifier, Unix-socket
+  runtime, Go tsnet sidecar build, systemd template verification, and a real
+  backup/restore/recover drill. Both Docker images
+  (`deploy-bridge`, `deploy-ingress`) built successfully, but the sidecar has
+  not joined a real Tailnet and physical Android/Bridge E2E remains pending.
 - The Android capability/control ports are source-only contracts. SMS, calls,
   contacts, clipboard, location, Health Connect, sensors, calendar, alarms,
   Accessibility and MediaProjection adapters still require their own
@@ -106,32 +105,28 @@ These are explicit fail-closed states, not test failures hidden by the
 SDK-free report. The current implementation is therefore suitable for
 contract/static iteration only and is not production-ready.
 
-## WP-06 local adapter evidence
+## WP-06 production-stack evidence
 
-The repository now includes `bridge-runtime/`, a deterministic local
-`fs/promises` implementation of the reviewed `DurableBridgeStore` port, durable
-state repositories, operation/replay dispatcher, fenced composition port and
-backup/restore verification seam. Its focused evidence is:
+`bridge-runtime/` retains the deterministic local `fs/promises` development
+adapter, but production no longer relies on it. The current locked stack uses
+Node `24.18.0` built-in SQLite `3.53.1`, same-database lease fencing, a local
+read-only Ed25519 pairing verifier, a Unix-socket Node runtime, and a Go
+tsnet `v1.98.10` sidecar.
+
+Current evidence:
 
 ```text
-bridge-runtime/test/file-backed-store.test.ts: 9 tests passed
-bridge-runtime/test/durable-operation-dispatcher.test.ts: 8 tests passed
-bridge-runtime/test/durable-state-repositories.test.ts: 6 tests passed
-bridge-runtime/test/production-composition.test.ts: 3 tests passed
-bridge-runtime/test/backup-restore-drill.test.ts: 1 test passed
-bridge-runtime/test/migration-runner.test.ts: 5 tests passed
-bridge-runtime/test/ingress-health.test.ts: 7 tests passed
-bridge-contract/test/persistence-contract.test.ts: 3 tests passed
-strict TypeScript check of bridge-runtime/src: passed with the workspace Node types
+bridge-contract + bridge-runtime: 21 files / 127 tests passed
+bridge-runtime strict TypeScript/build: passed
+real SQLite backup/restore/recover: schema 1, 11/11 namespaces,
+  sha256:dbde3f8b1f8f1073580eee8090077b1cc60b1ea53cad8a9c03f6ac066126d0b8
+Go ingress module verify/test/build: passed
+systemd-analyze template verification: passed
+static Docker/Compose checks: passed
 ```
 
-The tests cover versioned manifest creation, temp-file-plus-rename publication,
-rollback, serialized transactions, closed namespaces, deterministic scans,
-orphan/temp cleanup, and recovery from a missing/invalid manifest. This is a
-source/test artifact only. It does not satisfy the production `MVP-DEP-BRIDGE`
-lock: the repository has source-level ingress, migration and health ports, but
-no authenticated tsnet adapter, locked SQLite driver, secret store, production
-lease coordinator, database deployment or live backup/restore drill is present.
-The local adapter's `durability: "durable"` value, fake connected-port tests and
-`productionClaim: "source-seam-only"` metadata must not be read as a release
-readiness pass.
+The aggregate `./bridge-runtime/deploy/verify-production.sh` passes all
+local checks, Compose config, and both image builds with
+`BRIDGE_PRODUCTION_VERIFY_PASS`. Physical Tailnet enrollment and Android E2E
+are still not claimed by this stack evidence.
+The file-backed adapter and fake port tests remain development evidence only.

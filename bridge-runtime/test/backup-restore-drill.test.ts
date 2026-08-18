@@ -8,6 +8,7 @@ import {
   type DurableBridgeEntry,
 } from "../../bridge-contract/src/durable-store.js";
 import {
+  NODE_SQLITE_BRIDGE_DRIVER,
   SQLITE_BRIDGE_ADAPTER_PORT,
   type SqliteBridgeAdapterPort,
 } from "../../bridge-contract/src/persistence.js";
@@ -46,7 +47,7 @@ describe("Bridge backup/restore verification seam", () => {
     ): SqliteBridgeAdapterPort => ({
       port: SQLITE_BRIDGE_ADAPTER_PORT,
       backend: "sqlite",
-      driver: "external",
+      driver: NODE_SQLITE_BRIDGE_DRIVER,
       status: "connected",
       databasePath,
       transact: mode === "source"

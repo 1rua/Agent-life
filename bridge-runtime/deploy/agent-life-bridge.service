@@ -1,21 +1,25 @@
 [Unit]
-Description=Agent Life private Bridge (userspace Tailnet ingress)
-After=network-online.target
-Wants=network-online.target
-# The service is intentionally not startable until the controller has supplied
-# an immutable tsnet lock and adapter. The runtime itself also fails closed.
-ConditionPathExists=/etc/agent-life/tsnet.locked
+Description=Agent Life durable Bridge runtime
+Requires=agent-life-ingress.service
+After=agent-life-ingress.service
+ConditionPathExists=/etc/agent-life/bridge/pairing-ticket-public.pem
 
 [Service]
 Type=simple
-User=agent-life-bridge
-Group=agent-life-bridge
+User=agent-life-runtime
+Group=agent-life
+SupplementaryGroups=agent-life
 WorkingDirectory=/var/lib/agent-life-bridge
+StateDirectory=agent-life-bridge
+StateDirectoryMode=0750
+RuntimeDirectory=agent-life
+RuntimeDirectoryMode=0750
 Environment=NODE_ENV=production
-Environment=BRIDGE_INGRESS_TRANSPORT=tsnet-userspace
-Environment=BRIDGE_INGRESS_PORT=443
-Environment=BRIDGE_TSNET_LOCK=/etc/agent-life/tsnet.locked
-ExecStart=/usr/bin/node /opt/agent-life-bridge/dist/main.js
+Environment=AGENT_LIFE_DATABASE=/var/lib/agent-life-bridge/bridge.sqlite
+Environment=AGENT_LIFE_PAIRING_PUBLIC_KEY=/etc/agent-life/bridge/pairing-ticket-public.pem
+Environment=AGENT_LIFE_RUNTIME_SOCKET=/run/agent-life/runtime.sock
+Environment=AGENT_LIFE_LEASE_TTL_MS=60000
+ExecStart=/usr/bin/node /opt/agent-life/bridge/dist/bridge-runtime/src/main.js
 Restart=on-failure
 RestartSec=5s
 NoNewPrivileges=true
@@ -23,9 +27,9 @@ PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
 ReadWritePaths=/var/lib/agent-life-bridge
-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
-# No ListenStream/ListenDatagram is declared here: the userspace Tailnet
-# adapter owns the private listener and no public wildcard socket is opened.
+RestrictAddressFamilies=AF_UNIX
+# The runtime accepts only the authenticated ingress sidecar over this Unix
+# socket. It never opens a TCP listener or a public host port.
 
 [Install]
 WantedBy=multi-user.target

@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { DurableBridgeTransaction } from "../../bridge-contract/src/durable-store.js";
 import type { PairingTicket } from "../../bridge-contract/src/pairing-service.js";
 import {
+  NODE_SQLITE_BRIDGE_DRIVER,
   SQLITE_BRIDGE_ADAPTER_PORT,
   type SqliteBridgeAdapterPort,
 } from "../../bridge-contract/src/persistence.js";
@@ -59,7 +60,7 @@ const verifier = (status: PairingTicketVerifierPort["status"] = "connected"): Pa
 const sqlitePort = (store: FileBackedBridgeStore): SqliteBridgeAdapterPort => ({
   port: SQLITE_BRIDGE_ADAPTER_PORT,
   backend: "sqlite",
-  driver: "external",
+  driver: NODE_SQLITE_BRIDGE_DRIVER,
   status: "connected",
   databasePath: "/external/bridge.sqlite",
   transact: store.transact.bind(store),

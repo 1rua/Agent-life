@@ -1,5 +1,5 @@
-/** WP-06 local runtime adapter plus fail-closed ingress/health/migration ports;
- * no real network/auth adapter or production DB claim. */
+/** WP-06 runtime adapters: deterministic development seams plus the locked
+ * single-host Node SQLite production stack. */
 export {
   createFileBackedBridgeStore,
   FileBackedBridgeStore,
@@ -83,3 +83,36 @@ export type {
 } from "./health.js";
 export { MigrationRunner, runBridgeMigrations } from "./migration-runner.js";
 export type { MigrationRunReport, MigrationStep } from "./migration-runner.js";
+export {
+  NODE_SQLITE_BRIDGE_DRIVER,
+} from "../../bridge-contract/src/persistence.js";
+export {
+  NodeSqliteBridgeAdapter,
+  isNodeSqliteLeaseCoordinator,
+  openNodeSqliteBridgeAdapter,
+} from "./node-sqlite-adapter.js";
+export type { NodeSqliteBridgeAdapterOptions } from "./node-sqlite-adapter.js";
+export {
+  LocalPairingTicketVerifier,
+  PAIRING_TICKET_ENVELOPE,
+  openLocalPairingTicketVerifier,
+} from "./local-pairing-ticket-verifier.js";
+export type { LocalPairingTicketVerifierOptions } from "./local-pairing-ticket-verifier.js";
+export {
+  createRuntimeHttpHandler,
+} from "./runtime-http.js";
+export type {
+  RuntimeControl,
+  RuntimeControlRequest,
+  RuntimeHttpHandlerOptions,
+  RuntimeHttpRequest,
+  RuntimeHttpResponse,
+} from "./runtime-http.js";
+export {
+  cleanupRealBridgeBackupRestoreDrill,
+  runRealBridgeBackupRestoreDrill,
+} from "./real-backup-restore-drill.js";
+export type {
+  RealBridgeBackupRestoreDrillOptions,
+  RealBridgeBackupRestoreDrillResult,
+} from "./real-backup-restore-drill.js";

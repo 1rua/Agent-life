@@ -1,34 +1,29 @@
-# Bridge ingress and health deployment seam
+# Bridge ingress and health deployment
 
-Status: source-level seam only; `MVP-DEP-TSNET` and `MVP-DEP-BRIDGE` remain
-pending until the controller records immutable versions, checksums, license
-review and executable verification commands.
+Status: **authenticated tsnet sidecar source/build/image PASS; physical Tailnet enrollment BLOCKED**.
 
-`bridge-runtime/src/ingress.ts` exposes a narrow userspace-bound listener port.
-It deliberately has no host, URL, route, proxy or generic dial/listen argument.
-When the tsnet dependency state is `pending`, `BridgeIngress.start()` returns
-`status=pending` with `MVP-DEP-TSNET_PENDING` and never calls the listener. A
-locked deployment must inject a reviewed userspace adapter; the source package
-does not claim to open a real Tailscale socket.
+The production ingress is now a Go sidecar under `bridge-runtime/ingress/`. It
+imports locked `tailscale.com v1.98.10`, starts an embedded userspace tsnet
+node (hostname 默认 `agent-life-bridge`，control 默认官方
+`https://controlplane.tailscale.com`，auth key 可选、不提供则打印官方登录网址
+交互式登录), listens only on its private tailnet TLS port, authenticates every request
+with LocalClient `WhoIs`, hashes the peer node key, and proxies to Node over a
+Unix socket. It removes inbound forwarding headers and overwrites the peer
+fingerprint header only after successful `WhoIs`.
 
-Before dispatching a control frame, the seam verifies the paired Bridge
-fingerprint, pairing generation, current connection generation and replay key.
-The in-memory replay and generation implementations remain deterministic test
-adapters. The runtime now provides a separate durable
-`executeWithReplay` transaction that associates an already-authenticated replay
-key with its operation claim. It does not verify signatures or rotate keys. A
-production ingress must still delegate those decisions to the accepted P0a
-ports and call the durable association only after authenticated userspace
-admission.
+The Node runtime listens only on `/run/agent-life/runtime.sock`. Health routes
+are unauthenticated and expose only liveness/readiness; control routes require
+a single valid sidecar fingerprint. Pairing ticket signature verification and
+peer-binding comparison happen before the ticket is consumed in SQLite.
 
-`bridge-runtime/src/health.ts` supplies framework-neutral `GET` routes:
+The old `src/ingress.ts` process-local replay/generation classes remain
+development seams. They are not used by `src/main.ts` as proof of durable
+connection generation or replay admission. Durable operation replay association
+remains a separate transaction boundary; full production control protocol and
+Task 9 routing APIs are not claimed by this slice.
 
-- `/health/live` reports process liveness only;
-- `/health/ready` returns `503` until every registered dependency check passes.
-
-The systemd and Compose templates under `bridge-runtime/deploy/` keep the
-listener private: there is no host-port mapping or systemd `ListenStream`, and
-both templates require an explicit tsnet lock. The Compose image digest is a
-placeholder until the controller locks it. Physical Tailscale, locked database,
-secret-store/lease adapters, live migration/backup/restore and Android
-end-to-end evidence are still release gates.
+Docker and systemd templates publish no host socket. Compose config/build has
+been executed and produced the locked base-image `deploy-ingress` image
+(evidence `evidence/bridge/2026-08-18-docker-build.json`). The sidecar still
+has not connected to a real control server or completed DIRECT/DERP/offline
+device evidence; those remain P0t/E2E gates.

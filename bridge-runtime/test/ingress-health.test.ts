@@ -140,16 +140,32 @@ describe("Bridge health", () => {
 });
 
 describe("deployment templates", () => {
-  it("do not publish a public socket and keep the dependency lock explicit", async () => {
+  it("build pinned private ingress/runtime images without a public socket", async () => {
     const root = fileURLToPath(new URL("../deploy/", import.meta.url));
-    const systemd = await readFile(join(root, "agent-life-bridge.service"), "utf8");
-    const compose = await readFile(join(root, "docker-compose.yml"), "utf8");
-    expect(systemd).toContain("BRIDGE_INGRESS_TRANSPORT=tsnet-userspace");
-    expect(systemd).toContain("ConditionPathExists=/etc/agent-life/tsnet.locked");
-    expect(systemd).not.toContain("ListenStream=");
-    expect(systemd).not.toContain("0.0.0.0");
-    expect(compose).toContain("REPLACE_WITH_LOCKED_DIGEST");
+    const read = async (name: string) => readFile(join(root, name), "utf8");
+    const runtime = await read("agent-life-bridge.service");
+    const ingress = await read("agent-life-ingress.service");
+    const runtimeImage = await read("Dockerfile");
+    const ingressImage = await read("Dockerfile.ingress");
+    const compose = await read("docker-compose.yml");
+
+    expect(runtimeImage).toContain("node:24.18.0-bookworm-slim@sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d");
+    expect(ingressImage).toContain("golang:1.26.5-bookworm@sha256:53eeac89074db483fdf0ab3be1df32bf6e47562263d2d0d6baa7f26acb4957dd");
+    expect(ingressImage).toContain("CGO_ENABLED=0");
+    expect(compose).toContain("network_mode: \"service:ingress\"");
     expect(compose).not.toContain("ports:");
     expect(compose).not.toContain("0.0.0.0");
+    expect(compose).not.toContain("REPLACE_WITH_LOCKED_DIGEST");
+    expect(compose).toContain(":ro");
+    expect(compose).not.toContain("AGENT_LIFE_TSNET_AUTHKEY_FILE");
+    expect(ingress).not.toContain("AGENT_LIFE_TSNET_AUTHKEY_FILE");
+    expect(ingress).toContain("AGENT_LIFE_TSNET_HOSTNAME=agent-life-bridge");
+    expect(ingress).toContain("https://controlplane.tailscale.com");
+    for (const unit of [runtime, ingress]) {
+      expect(unit).not.toContain("ListenStream=");
+      expect(unit).not.toContain("ListenDatagram=");
+      expect(unit).not.toContain("0.0.0.0");
+      expect(unit).toContain("ProtectSystem=strict");
+    }
   });
 });

@@ -49,3 +49,8 @@ Thumbs.db
 *.swo
 *~
 *.bak
+/.toolchains
+/node_modules
+/bridge-runtime/dist/
+/bridge-runtime/ingress/agent-life-tsnet
+/bridge-runtime/node_modules
