@@ -24,7 +24,7 @@ SQLite databases, writes all 11 closed namespaces, performs a real backup and
 restore, executes recovery, compares canonical content, and removes temporary
 artifacts. Evidence:
 [2026-08-18 Node SQLite drill](evidence/bridge/2026-08-18-node-sqlite.json),
-digest `sha256:5f4ddabcb1903efecc8ec265309c77b53eeaa928403d4180c03d6fa4267a610c`.
+digest `sha256:dbde3f8b1f8f1073580eee8090077b1cc60b1ea53cad8a9c03f6ac066126d0b8`.
 
 Focused current evidence:
 

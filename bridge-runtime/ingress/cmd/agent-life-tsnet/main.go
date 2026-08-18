@@ -107,11 +107,17 @@ func readConfig() (config, error) {
 	hostname := os.Getenv("AGENT_LIFE_TSNET_HOSTNAME")
 	control := os.Getenv("AGENT_LIFE_TSNET_CONTROL_URL")
 	portText := os.Getenv("AGENT_LIFE_TSNET_PORT")
-	if socket == "" || stateDir == "" || hostname == "" || control == "" {
-		return config{}, errors.New("runtime socket, tsnet state, hostname, and control URL are required")
+	if socket == "" || stateDir == "" {
+		return config{}, errors.New("runtime socket and tsnet state directory are required")
 	}
 	if !filepath.IsAbs(socket) || !filepath.IsAbs(stateDir) {
 		return config{}, errors.New("runtime socket and tsnet state paths must be absolute")
+	}
+	if hostname == "" {
+		hostname = "agent-life-bridge"
+	}
+	if control == "" {
+		control = "https://controlplane.tailscale.com"
 	}
 	controlURL, err := url.Parse(control)
 	if err != nil {
@@ -128,16 +134,23 @@ func readConfig() (config, error) {
 		}
 		port = uint16(value)
 	}
-	key, err := readAuthKey(os.Getenv("AGENT_LIFE_TSNET_AUTHKEY_FILE"))
-	if err != nil {
-		return config{}, err
+	// Auth key is optional. When absent, tsnet prints an interactive login
+	// URL through UserLogf and waits for the operator to authorize the node.
+	authKeyPath := os.Getenv("AGENT_LIFE_TSNET_AUTHKEY_FILE")
+	var authKey string
+	if authKeyPath != "" {
+		var authErr error
+		authKey, authErr = readAuthKey(authKeyPath)
+		if authErr != nil {
+			return config{}, authErr
+		}
 	}
-	return config{stateDir, socket, hostname, control, key, port}, nil
+	return config{stateDir, socket, hostname, control, authKey, port}, nil
 }
 
 func readAuthKey(path string) (string, error) {
 	if path == "" {
-		return "", errors.New("tsnet auth key credential is required")
+		return "", nil
 	}
 	info, err := os.Lstat(path)
 	if err != nil {

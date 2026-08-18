@@ -2,11 +2,9 @@
 Description=Agent Life authenticated tsnet ingress
 After=network-online.target
 Wants=network-online.target
-ConditionPathExists=/etc/agent-life/ingress/tsnet-auth-key
-ConditionPathExists=/etc/agent-life/ingress/ingress.env
 
 [Service]
-EnvironmentFile=/etc/agent-life/ingress/ingress.env
+EnvironmentFile=-/etc/agent-life/ingress/ingress.env
 Type=simple
 User=agent-life-ingress
 Group=agent-life
@@ -18,10 +16,9 @@ RuntimeDirectory=agent-life-ingress
 RuntimeDirectoryMode=0750
 Environment=AGENT_LIFE_RUNTIME_SOCKET=/run/agent-life/runtime.sock
 Environment=AGENT_LIFE_TSNET_STATE_DIR=/var/lib/agent-life-ingress
-Environment=AGENT_LIFE_TSNET_HOSTNAME=${AGENT_LIFE_TSNET_HOSTNAME}
-Environment=AGENT_LIFE_TSNET_CONTROL_URL=${AGENT_LIFE_TSNET_CONTROL_URL}
+Environment=AGENT_LIFE_TSNET_HOSTNAME=agent-life-bridge
+Environment=AGENT_LIFE_TSNET_CONTROL_URL=https://controlplane.tailscale.com
 Environment=AGENT_LIFE_TSNET_PORT=443
-Environment=AGENT_LIFE_TSNET_AUTHKEY_FILE=/etc/agent-life/ingress/tsnet-auth-key
 ExecStart=/opt/agent-life/ingress/agent-life-tsnet
 Restart=on-failure
 RestartSec=5s

@@ -42,12 +42,8 @@ DRY_ROOT=$(mktemp -d /tmp/agent-life-install-verify.XXXXXX)
 DRY_INPUT=$(mktemp -d /tmp/agent-life-install-input.XXXXXX)
 trap 'rm -rf "$DRY_ROOT" "$DRY_INPUT"' EXIT
 printf '%s\n' verify-public-key > "$DRY_INPUT/public.pem"
-printf '%s\n' verify-auth-key > "$DRY_INPUT/auth-key"
 INSTALL_ROOT="$DRY_ROOT" \
-  AGENT_LIFE_TSNET_HOSTNAME=verify \
-  AGENT_LIFE_TSNET_CONTROL_URL=https://control.invalid \
   AGENT_LIFE_PAIRING_PUBLIC_KEY="$DRY_INPUT/public.pem" \
-  AGENT_LIFE_TSNET_AUTHKEY_FILE="$DRY_INPUT/auth-key" \
   "$ROOT_DIR/bridge-runtime/deploy/install-systemd.sh"
 
 export DOCKER_TEST_HOSTNAME=${AGENT_LIFE_TSNET_HOSTNAME:-agent-life-verify}

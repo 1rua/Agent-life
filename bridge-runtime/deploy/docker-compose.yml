@@ -8,14 +8,12 @@ services:
     environment:
       AGENT_LIFE_RUNTIME_SOCKET: /run/agent-life/runtime.sock
       AGENT_LIFE_TSNET_STATE_DIR: /var/lib/agent-life-ingress
-      AGENT_LIFE_TSNET_HOSTNAME: ${AGENT_LIFE_TSNET_HOSTNAME:?controller hostname required}
-      AGENT_LIFE_TSNET_CONTROL_URL: ${AGENT_LIFE_TSNET_CONTROL_URL:?https control URL required}
+      AGENT_LIFE_TSNET_HOSTNAME: ${AGENT_LIFE_TSNET_HOSTNAME:-agent-life-bridge}
+      AGENT_LIFE_TSNET_CONTROL_URL: ${AGENT_LIFE_TSNET_CONTROL_URL:-https://controlplane.tailscale.com}
       AGENT_LIFE_TSNET_PORT: "443"
-      AGENT_LIFE_TSNET_AUTHKEY_FILE: /run/agent-life-secrets/tsnet-auth-key
     volumes:
       - ingress-state:/var/lib/agent-life-ingress
       - runtime-socket:/run/agent-life
-      - ./secrets/tsnet-auth-key:/run/agent-life-secrets/tsnet-auth-key:ro
 
   bridge:
     build:

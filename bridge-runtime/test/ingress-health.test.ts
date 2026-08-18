@@ -157,6 +157,10 @@ describe("deployment templates", () => {
     expect(compose).not.toContain("0.0.0.0");
     expect(compose).not.toContain("REPLACE_WITH_LOCKED_DIGEST");
     expect(compose).toContain(":ro");
+    expect(compose).not.toContain("AGENT_LIFE_TSNET_AUTHKEY_FILE");
+    expect(ingress).not.toContain("AGENT_LIFE_TSNET_AUTHKEY_FILE");
+    expect(ingress).toContain("AGENT_LIFE_TSNET_HOSTNAME=agent-life-bridge");
+    expect(ingress).toContain("https://controlplane.tailscale.com");
     for (const unit of [runtime, ingress]) {
       expect(unit).not.toContain("ListenStream=");
       expect(unit).not.toContain("ListenDatagram=");

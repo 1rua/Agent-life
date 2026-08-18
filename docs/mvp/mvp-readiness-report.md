@@ -119,7 +119,7 @@ Current evidence:
 bridge-contract + bridge-runtime: 21 files / 127 tests passed
 bridge-runtime strict TypeScript/build: passed
 real SQLite backup/restore/recover: schema 1, 11/11 namespaces,
-  sha256:5f4ddabcb1903efecc8ec265309c77b53eeaa928403d4180c03d6fa4267a610c
+  sha256:dbde3f8b1f8f1073580eee8090077b1cc60b1ea53cad8a9c03f6ac066126d0b8
 Go ingress module verify/test/build: passed
 systemd-analyze template verification: passed
 static Docker/Compose checks: passed

@@ -36,7 +36,6 @@ install -m 0755 /dev/stdin "$STAGING_DIR/usr/bin/node" <<'NODE_SH'
 exec /usr/bin/env node "$@"
 NODE_SH
 printf 'staging\n' > "$STAGING_DIR/etc/agent-life/bridge/pairing-ticket-public.pem"
-printf 'staging\n' > "$STAGING_DIR/etc/agent-life/ingress/tsnet-auth-key"
 printf 'AGENT_LIFE_TSNET_HOSTNAME=staging\nAGENT_LIFE_TSNET_CONTROL_URL=https://staging.invalid\n' > "$STAGING_DIR/etc/agent-life/ingress/ingress.env"
 
 systemd-analyze --root="$STAGING_DIR" verify \

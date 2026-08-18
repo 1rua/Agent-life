@@ -30,6 +30,7 @@ require ':ro' "$SCRIPT_DIR/docker-compose.yml"
 forbid '^[[:space:]]*ports:' "$SCRIPT_DIR/docker-compose.yml"
 forbid 'Listen(Stream|Datagram)=' "$SCRIPT_DIR/agent-life-bridge.service" "$SCRIPT_DIR/agent-life-ingress.service"
 forbid '(^|[[:space:]])(0\.0\.0\.0|::/0)|network_mode:[[:space:]]*(")?host' "$SCRIPT_DIR/docker-compose.yml" "$SCRIPT_DIR/agent-life-bridge.service" "$SCRIPT_DIR/agent-life-ingress.service"
+forbid 'AGENT_LIFE_TSNET_AUTHKEY_FILE' "$SCRIPT_DIR/docker-compose.yml" "$SCRIPT_DIR/agent-life-ingress.service"
 forbid 'REPLACE_WITH_LOCKED_DIGEST' "$SCRIPT_DIR/Dockerfile" "$SCRIPT_DIR/Dockerfile.ingress" "$SCRIPT_DIR/docker-compose.yml"
 forbid '^/(\.toolchains|node_modules|\.worktrees)' $SCRIPT_DIR/../../.dockerignore
 

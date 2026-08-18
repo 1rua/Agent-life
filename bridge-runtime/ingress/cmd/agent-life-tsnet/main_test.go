@@ -94,6 +94,28 @@ func TestProxyRewriteRemovesForwardingHeaders(t *testing.T) {
 	}
 }
 
+func TestReadConfigDefaults(t *testing.T) {
+	t.Setenv("AGENT_LIFE_RUNTIME_SOCKET", "/run/agent-life/runtime.sock")
+	t.Setenv("AGENT_LIFE_TSNET_STATE_DIR", "/var/lib/agent-life-ingress")
+	t.Setenv("AGENT_LIFE_TSNET_HOSTNAME", "")
+	t.Setenv("AGENT_LIFE_TSNET_CONTROL_URL", "")
+	t.Setenv("AGENT_LIFE_TSNET_PORT", "")
+	t.Setenv("AGENT_LIFE_TSNET_AUTHKEY_FILE", "")
+	cfg, err := readConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.hostname != "agent-life-bridge" {
+		t.Fatalf("hostname = %q", cfg.hostname)
+	}
+	if cfg.control != "https://controlplane.tailscale.com" {
+		t.Fatalf("control = %q", cfg.control)
+	}
+	if cfg.port != 443 || cfg.authKey != "" {
+		t.Fatalf("cfg = %+v", cfg)
+	}
+}
+
 func TestReadConfigRequiresHTTPSAndSafeCredential(t *testing.T) {
 	t.Setenv("AGENT_LIFE_RUNTIME_SOCKET", "/run/agent-life/runtime.sock")
 	t.Setenv("AGENT_LIFE_TSNET_STATE_DIR", "/var/lib/agent-life-ingress")

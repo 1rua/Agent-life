@@ -4,7 +4,9 @@ Status: **authenticated tsnet sidecar source/build/image PASS; physical Tailnet 
 
 The production ingress is now a Go sidecar under `bridge-runtime/ingress/`. It
 imports locked `tailscale.com v1.98.10`, starts an embedded userspace tsnet
-node, listens only on its private tailnet TLS port, authenticates every request
+node (hostname 默认 `agent-life-bridge`，control 默认官方
+`https://controlplane.tailscale.com`，auth key 可选、不提供则打印官方登录网址
+交互式登录), listens only on its private tailnet TLS port, authenticates every request
 with LocalClient `WhoIs`, hashes the peer node key, and proxies to Node over a
 Unix socket. It removes inbound forwarding headers and overwrites the peer
 fingerprint header only after successful `WhoIs`.

@@ -41,7 +41,7 @@ Executed on 2026-08-18:
 bridge-contract + bridge-runtime Vitest: 21 files / 127 tests PASS
 bridge-runtime typecheck: PASS
 bridge-runtime build: PASS
-real SQLite drill: schema 1, 11/11 namespaces, digest sha256:5f4ddabcb1903efecc8ec265309c77b53eeaa928403d4180c03d6fa4267a610c
+real SQLite drill: schema 1, 11/11 namespaces, digest sha256:dbde3f8b1f8f1073580eee8090077b1cc60b1ea53cad8a9c03f6ac066126d0b8
 go mod verify: all modules verified
 go test ./...: PASS
 systemd-analyze root template verification: PASS
@@ -58,9 +58,9 @@ BRIDGE_PRODUCTION_VERIFY_PASS
 
 Image evidence: `docs/mvp/evidence/bridge/2026-08-18-docker-build.json`
 - `docker.io/library/deploy-bridge:latest`
-  manifest list `sha256:d6a1c184bd54fc5e83c8154655c8936a910382247c01a995857d09e905b393c8`
+  manifest list `sha256:0a066e05a34d72440644ec6bb3b5140924b49bf823b8b55f327266764e24bd95`
 - `docker.io/library/deploy-ingress:latest`
-  manifest list `sha256:f0d5424fbe887bc15037ada61f5ee29bc95d041b270962d6fdf34027201c39c0`
+  manifest list `sha256:fdfe81c1211e19652260b6180b0b2044fb53d00c4487caaf18a9bd37d165dc5c`
 
 The physical Tailnet and Android/Bridge E2E blockers remain; no such pass is
 claimed from image build success alone.
@@ -79,8 +79,8 @@ Operators must provide:
 
 - `/var/lib/agent-life-bridge` state volume;
 - read-only `pairing-ticket-public.pem`;
-- tsnet state directory and one-time auth key credential;
-- hostname and HTTPS control URL;
+- tsnet state directory（auth key 可选，不提供则通过日志里的官方登录网址交互式登录）;
+- hostname（默认 `agent-life-bridge`）和 HTTPS control URL（默认官方 `https://controlplane.tailscale.com`）；
 - a running Docker daemon or a host with the systemd users/directories provisioned.
 
 The template intentionally does not include pairing private keys or Android

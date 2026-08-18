@@ -43,7 +43,10 @@ lease、只监听 Unix socket，并提供 `/health/live` 与 `/health/ready`。
 - 每个连接通过 LocalClient `WhoIs` 认证；
 - 将 peer node key 的 SHA-256 fingerprint 写入仅由 runtime 信任的 sidecar
   header；
-- 通过 Unix socket 反向代理到 Node runtime。
+- 通过 Unix socket 反向代理到 Node runtime；
+- hostname 默认 `agent-life-bridge`；
+- control 服务器默认官方 `https://controlplane.tailscale.com`；
+- auth key 可选：不提供时会在日志里打印官方登录网址，由操作员交互式登录。
 
 `src/runtime-http.ts` 对直接进入 runtime 的请求强制要求单一合法 fingerprint
 header。真实网络身份仍以 Go sidecar 的 `WhoIs` 为准；外部客户端伪造的
