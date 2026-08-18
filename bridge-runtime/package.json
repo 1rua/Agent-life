@@ -4,11 +4,14 @@
   "type": "module",
   "scripts": {
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.build.json",
+    "drill": "node --import tsx tools/run-backup-restore-drill.ts"
   },
   "devDependencies": {
     "@types/node": "24.13.3",
     "typescript": "7.0.2",
-    "vitest": "4.1.10"
+    "vitest": "4.1.10",
+    "tsx": "4.23.1"
   }
 }

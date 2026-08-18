@@ -1,0 +1,80 @@
+{
+  "verified": true,
+  "recordedAt": "2026-08-18T06:24:57.844Z",
+  "driver": {
+    "backend": "node:sqlite",
+    "id": "node:sqlite@24.18.0/sqlite@3.53.1",
+    "node": "24.18.0",
+    "sqlite": "3.53.1"
+  },
+  "database": {
+    "source": "/tmp/agent-life-bridge-drill-55DCSm/source.sqlite",
+    "restoreTarget": "/tmp/agent-life-bridge-drill-55DCSm/restore.sqlite",
+    "backupArtifact": "/tmp/agent-life-bridge-drill-55DCSm/backup.sqlite",
+    "schemaVersion": 1
+  },
+  "report": {
+    "verified": true,
+    "schemaVersion": 1,
+    "digest": "sha256:9194163dc437e5aa9954818ca39ac65deade7f7879035bef69075010c545382f",
+    "namespaces": [
+      {
+        "namespace": "pairing.tickets",
+        "entries": 1
+      },
+      {
+        "namespace": "pairing.bindings",
+        "entries": 1
+      },
+      {
+        "namespace": "authorization.grants",
+        "entries": 1
+      },
+      {
+        "namespace": "authorization.revisions",
+        "entries": 1
+      },
+      {
+        "namespace": "notification.records",
+        "entries": 1
+      },
+      {
+        "namespace": "notification.positions",
+        "entries": 1
+      },
+      {
+        "namespace": "subscription.bindings",
+        "entries": 1
+      },
+      {
+        "namespace": "subscription.events",
+        "entries": 1
+      },
+      {
+        "namespace": "operation.claims",
+        "entries": 1
+      },
+      {
+        "namespace": "operation.replay-associations",
+        "entries": 1
+      },
+      {
+        "namespace": "assistant.metadata",
+        "entries": 1
+      }
+    ]
+  },
+  "cleanup": {
+    "removedPaths": [
+      "/tmp/agent-life-bridge-drill-55DCSm/source.sqlite",
+      "/tmp/agent-life-bridge-drill-55DCSm/source.sqlite-wal",
+      "/tmp/agent-life-bridge-drill-55DCSm/source.sqlite-shm",
+      "/tmp/agent-life-bridge-drill-55DCSm/restore.sqlite",
+      "/tmp/agent-life-bridge-drill-55DCSm/restore.sqlite-wal",
+      "/tmp/agent-life-bridge-drill-55DCSm/restore.sqlite-shm",
+      "/tmp/agent-life-bridge-drill-55DCSm/backup.sqlite",
+      "/tmp/agent-life-bridge-drill-55DCSm/backup.sqlite-wal",
+      "/tmp/agent-life-bridge-drill-55DCSm/backup.sqlite-shm"
+    ]
+  }
+}

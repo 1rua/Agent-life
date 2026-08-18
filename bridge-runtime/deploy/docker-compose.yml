@@ -1,34 +1,44 @@
 services:
-  # Controller must replace this placeholder with the pinned tsnet userspace
-  # image/build and provide the app-scoped state directory before production.
-  tailscale:
-    image: tailscale/tailscale:REPLACE_WITH_LOCKED_DIGEST
-    profiles: ["pending-tsnet-lock"]
-    command: ["true"]
+  ingress:
+    build:
+      context: ../..
+      dockerfile: bridge-runtime/deploy/Dockerfile.ingress
+    init: true
+    restart: unless-stopped
+    environment:
+      AGENT_LIFE_RUNTIME_SOCKET: /run/agent-life/runtime.sock
+      AGENT_LIFE_TSNET_STATE_DIR: /var/lib/agent-life-ingress
+      AGENT_LIFE_TSNET_HOSTNAME: ${AGENT_LIFE_TSNET_HOSTNAME:?controller hostname required}
+      AGENT_LIFE_TSNET_CONTROL_URL: ${AGENT_LIFE_TSNET_CONTROL_URL:?https control URL required}
+      AGENT_LIFE_TSNET_PORT: "443"
+      AGENT_LIFE_TSNET_AUTHKEY_FILE: /run/agent-life-secrets/tsnet-auth-key
+    volumes:
+      - ingress-state:/var/lib/agent-life-ingress
+      - runtime-socket:/run/agent-life
+      - ./secrets/tsnet-auth-key:/run/agent-life-secrets/tsnet-auth-key:ro
 
   bridge:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ../..
+      dockerfile: bridge-runtime/deploy/Dockerfile
+    init: true
     depends_on:
-      - tailscale
-    # Sharing the private userspace namespace is deliberate. No host-port
-    # publication, host networking, Funnel, or public wildcard is enabled.
-    network_mode: "service:tailscale"
+      - ingress
+    # Both processes share one private userspace network namespace. No host,
+    # Docker, Funnel, or public wildcard port is published.
+    network_mode: "service:ingress"
+    restart: unless-stopped
     environment:
-      NODE_ENV: production
-      BRIDGE_INGRESS_TRANSPORT: tsnet-userspace
-      BRIDGE_INGRESS_PORT: "443"
-      BRIDGE_TSNET_LOCK: /run/agent-life/tsnet.locked
+      AGENT_LIFE_DATABASE: /var/lib/agent-life-bridge/bridge.sqlite
+      AGENT_LIFE_PAIRING_PUBLIC_KEY: /var/lib/agent-life-bridge/secrets/pairing-ticket-public.pem
+      AGENT_LIFE_RUNTIME_SOCKET: /run/agent-life/runtime.sock
+      AGENT_LIFE_LEASE_TTL_MS: "60000"
     volumes:
       - bridge-state:/var/lib/agent-life-bridge
-      - ./tsnet.locked:/run/agent-life/tsnet.locked:ro
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:443/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
+      - runtime-socket:/run/agent-life
+      - ./secrets/pairing-ticket-public.pem:/var/lib/agent-life-bridge/secrets/pairing-ticket-public.pem:ro
 
 volumes:
+  ingress-state:
   bridge-state:
+  runtime-socket:

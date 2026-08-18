@@ -127,12 +127,31 @@ export const PACKETS: ReadonlyArray<{
       "bridge-runtime/src/durable-operation-dispatcher.ts",
       "bridge-runtime/src/composition.ts",
       "bridge-runtime/src/migration-runner.ts",
+      "bridge-runtime/src/node-sqlite-adapter.ts",
+      "bridge-runtime/src/local-pairing-ticket-verifier.ts",
+      "bridge-runtime/src/runtime-http.ts",
+      "bridge-runtime/src/main.ts",
+      "bridge-runtime/src/real-backup-restore-drill.ts",
       "bridge-runtime/src/ingress.ts",
       "bridge-runtime/src/health.ts",
+      "bridge-runtime/ingress/go.mod",
+      "bridge-runtime/ingress/cmd/agent-life-tsnet/main.go",
+      "bridge-runtime/deploy/Dockerfile",
+      "bridge-runtime/deploy/Dockerfile.ingress",
+      "bridge-runtime/deploy/docker-compose.yml",
+      "bridge-runtime/deploy/agent-life-bridge.service",
+      "bridge-runtime/deploy/agent-life-ingress.service",
       "bridge-runtime/test/durable-operation-dispatcher.test.ts",
       "bridge-runtime/test/migration-runner.test.ts",
       "bridge-runtime/test/ingress-health.test.ts",
+      "bridge-runtime/test/node-sqlite-adapter.test.ts",
+      "bridge-runtime/test/node-sqlite-lease.test.ts",
+      "bridge-runtime/test/local-pairing-ticket-verifier.test.ts",
+      "bridge-runtime/test/runtime-http.test.ts",
+      "bridge-runtime/test/production-runtime-main.test.ts",
+      "bridge-runtime/test/real-backup-restore-drill.test.ts",
       "docs/mvp/bridge-persistence-readiness.md",
+      "docs/mvp/bridge-production-readiness.md",
       "docs/mvp/bridge-ingress-health.md",
       "bridge-runtime/README.md",
     ],
@@ -289,22 +308,38 @@ export const auditReleaseBlockers = (): ReleaseBlocker[] => {
   if (!existsSync(bridgeRuntimeRoot)) {
     blockers.push({ code: "BRIDGE-RUNTIME", detail: "durable Bridge runtime/migration wiring is not present" });
   } else {
-    // A local file adapter is useful for deterministic crash/recovery tests,
-    // but it is not an authenticated ingress, migration set, health command,
-    // or deployable production Bridge. Keep that distinction machine-visible
-    // even after the source directory exists.
+    // Keep the local development seam and the single-host deployment gate
+    // separately observable. The real SQLite stack and drill are now present,
+    // but image build and physical Tailnet/E2E evidence are still required.
     const runtimeReadme = readText(resolve(bridgeRuntimeRoot, "README.md"));
-    if (runtimeReadme === null || !/not evidence of production readiness/i.test(runtimeReadme)) {
+    const productionPaths = [
+      "src/node-sqlite-adapter.ts",
+      "src/local-pairing-ticket-verifier.ts",
+      "src/main.ts",
+      "src/real-backup-restore-drill.ts",
+      "ingress/go.mod",
+      "ingress/cmd/agent-life-tsnet/main.go",
+      "deploy/Dockerfile",
+      "deploy/Dockerfile.ingress",
+      "deploy/docker-compose.yml",
+      "deploy/agent-life-bridge.service",
+      "deploy/agent-life-ingress.service",
+      "deploy/verify-production.sh",
+    ].filter((path) => !existsSync(resolve(bridgeRuntimeRoot, path)));
+    if (runtimeReadme === null || !/not evidence of production readiness/i.test(runtimeReadme) || productionPaths.length > 0) {
       blockers.push({
         code: "BRIDGE-RUNTIME-PRODUCTION",
-        detail: "Bridge runtime exists without an explicit production-boundary declaration",
+        detail: `Bridge production stack is incomplete; missing=${productionPaths.join(",") || "boundary declaration"}`,
       });
     } else {
       blockers.push({
-        code: "BRIDGE-RUNTIME-PRODUCTION",
-        detail: "durable pairing/notification/subscription/ACK/replay repositories plus migration, lease and backup/restore verification ports exist, but locked SQLite, secret-store, lease and authenticated tsnet adapters plus live deployment/drill evidence are pending",
+        code: "BRIDGE-DEPLOYMENT",
+        detail: "single-host Node SQLite/lease/secret/tsnet stack and real drill are present, but Docker image build plus physical Tailnet and Android/Bridge E2E evidence are pending",
       });
     }
+  }
+  if (!commandAvailable("docker")) {
+    blockers.push({ code: "DOCKER-BUILD", detail: "Docker CLI/daemon unavailable for Compose config/build" });
   }
   if (!hasFileWithExtension(resolve(ROOT, "apps/android"), ".aar")) {
     blockers.push({ code: "TSNET-AAR", detail: "locked Tailscale userspace AAR/resource artifact is not present" });

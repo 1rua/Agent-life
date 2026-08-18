@@ -11,6 +11,8 @@ export type BridgeLease = Readonly<{
   /** Adapter-issued, monotonically increasing token for this scope. */
   fencingToken: bigint;
   expiresAtMs: number;
+  /** Retention hint used by renew implementations; optional for legacy port fakes. */
+  ttlMs?: number;
 }>;
 
 /**
@@ -71,7 +73,8 @@ export const assertBridgeLease = (value: unknown, expected: Readonly<{ scope: st
   const lease = value as Partial<BridgeLease>;
   if (lease.scope !== expected.scope || lease.ownerId !== expected.ownerId
     || typeof lease.fencingToken !== "bigint" || lease.fencingToken < 1n
-    || typeof lease.expiresAtMs !== "number" || !Number.isFinite(lease.expiresAtMs)) {
+    || typeof lease.expiresAtMs !== "number" || !Number.isFinite(lease.expiresAtMs)
+    || (lease.ttlMs !== undefined && (!Number.isSafeInteger(lease.ttlMs) || lease.ttlMs < 1))) {
     throw new BridgeServiceError("BRIDGE_LEASE_INVALID");
   }
   return Object.freeze({
@@ -79,5 +82,6 @@ export const assertBridgeLease = (value: unknown, expected: Readonly<{ scope: st
     ownerId: lease.ownerId,
     fencingToken: lease.fencingToken,
     expiresAtMs: lease.expiresAtMs,
+    ...(lease.ttlMs === undefined ? {} : { ttlMs: lease.ttlMs }),
   });
 };

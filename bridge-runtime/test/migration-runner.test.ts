@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { MigrationRunner, type MigrationStep } from "../src/migration-runner.js";
 import type { DurableBridgeTransaction } from "../../bridge-contract/src/durable-store.js";
 import {
+  NODE_SQLITE_BRIDGE_DRIVER,
   SQLITE_BRIDGE_ADAPTER_PORT,
   type SqliteBridgeAdapterPort,
 } from "../../bridge-contract/src/persistence.js";
@@ -22,7 +23,7 @@ const fakeAdapter = (initial = 0): SqliteBridgeAdapterPort & { applied: string[]
   return {
     port: SQLITE_BRIDGE_ADAPTER_PORT,
     backend: "sqlite",
-    driver: "external",
+    driver: NODE_SQLITE_BRIDGE_DRIVER,
     status: "external-driver-required",
     databasePath: ":memory:",
     transact: async (_scope, work) => work(tx()),

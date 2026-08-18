@@ -35,6 +35,7 @@ const assertVersion = (value: unknown): number => {
 
 const canonical = (value: unknown, seen = new WeakSet<object>()): string => {
   if (value === null || typeof value === "string" || typeof value === "boolean") return JSON.stringify(value);
+  if (typeof value === "bigint") return JSON.stringify({ "$agentLifeBigint": value.toString(10) });
   if (typeof value === "number" && Number.isFinite(value)) return JSON.stringify(Object.is(value, -0) ? 0 : value);
   if (typeof value !== "object" || value === null || seen.has(value)) throw drillError("BACKUP_RESTORE_STATE_INVALID");
   seen.add(value);

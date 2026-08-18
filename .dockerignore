@@ -1,0 +1,16 @@
+*
+!bridge-contract/
+!bridge-contract/src/
+!bridge-contract/src/**
+!bridge-runtime/
+!bridge-runtime/deploy/
+!bridge-runtime/ingress/
+!bridge-runtime/ingress/cmd/
+!bridge-runtime/ingress/cmd/**
+!bridge-runtime/ingress/go.mod
+!bridge-runtime/ingress/go.sum
+!bridge-runtime/package.json
+!bridge-runtime/package-lock.json
+!bridge-runtime/tsconfig.json
+!bridge-runtime/tsconfig.build.json
+!bridge-runtime/src/**

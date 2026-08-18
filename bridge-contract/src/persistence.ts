@@ -8,6 +8,9 @@ import { BridgeServiceError } from "./service-types.js";
 /** Stable identity for the SQLite-backed Bridge adapter boundary. */
 export const SQLITE_BRIDGE_ADAPTER_PORT = "agent-life.bridge-sqlite-adapter.v1" as const;
 
+/** Immutable Node-built-in SQLite driver selected by MVP-DEP-BRIDGE. */
+export const NODE_SQLITE_BRIDGE_DRIVER = "node:sqlite@24.18.0/sqlite@3.53.1" as const;
+
 /**
  * Closed state partitions that a production persistence adapter may expose.
  * The list is deliberately shared with the generic durable-store contract so
@@ -55,10 +58,9 @@ export type SqliteMigrationWork =
   (transaction: DurableBridgeTransaction) => Promise<void> | void;
 
 /**
- * Explicit port for a SQLite driver. This repository intentionally ships no
- * SQLite dependency or implementation. `status` therefore remains
- * `external-driver-required` until the controller locks a driver and a
- * deployment wires one at this boundary.
+ * Explicit port for the locked Node-built-in SQLite driver. The production
+ * adapter in `bridge-runtime` implements this boundary; test fakes may only
+ * represent the pending state and cannot be marked connected.
  *
  * `runMigration` must atomically execute the callback and publish `toVersion`
  * in the same SQLite transaction. A driver that cannot provide that guarantee
@@ -67,7 +69,7 @@ export type SqliteMigrationWork =
 export interface SqliteBridgeAdapterPort {
   readonly port: typeof SQLITE_BRIDGE_ADAPTER_PORT;
   readonly backend: "sqlite";
-  readonly driver: "external";
+  readonly driver: typeof NODE_SQLITE_BRIDGE_DRIVER;
   readonly status: "external-driver-required" | "connected";
   readonly databasePath: string;
   readonly transact: DurableBridgeStore["transact"];
@@ -96,7 +98,7 @@ export const isSqliteBridgeAdapterPort = (value: unknown): value is SqliteBridge
   const candidate = value as Partial<SqliteBridgeAdapterPort>;
   return candidate.port === SQLITE_BRIDGE_ADAPTER_PORT
     && candidate.backend === "sqlite"
-    && candidate.driver === "external"
+    && candidate.driver === NODE_SQLITE_BRIDGE_DRIVER
     && (candidate.status === "external-driver-required" || candidate.status === "connected")
     && typeof candidate.databasePath === "string"
     && candidate.databasePath.length > 0

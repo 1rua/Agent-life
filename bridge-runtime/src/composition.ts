@@ -5,6 +5,8 @@ import {
   type DurableBridgeTransaction,
 } from "../../bridge-contract/src/durable-store.js";
 import { assertConnectedSqliteBridgeAdapter, type SqliteBridgeAdapterPort } from "../../bridge-contract/src/persistence.js";
+import { isNodeSqliteLeaseCoordinator, NodeSqliteBridgeAdapter } from "./node-sqlite-adapter.js";
+import { LocalPairingTicketVerifier } from "./local-pairing-ticket-verifier.js";
 import type { PairingTicket, PairingTicketInput } from "../../bridge-contract/src/pairing-service.js";
 import {
   NotificationService,
@@ -153,8 +155,8 @@ export type FencedDurableBridgeComposition = Readonly<{
     "operation.claims",
     "operation.replay-associations",
   ];
-  productionClaim: "source-seam-only";
-  pendingDependencyLocks: readonly ["MVP-DEP-BRIDGE", "MVP-DEP-TSNET"];
+  productionClaim: "single-host-production" | "source-seam-only";
+  pendingDependencyLocks: readonly string[];
   renewLease(): Promise<BridgeLease>;
   close(): Promise<void>;
 }>;
@@ -175,6 +177,9 @@ export const createFencedDurableBridgeComposition = async (
   const pairingVerifier: PairingTicketVerifierPort = assertConnectedPairingTicketVerifier(options.pairingVerifier);
   if (typeof options.ownerId !== "string" || options.ownerId.length === 0) throw new BridgeServiceError("BRIDGE_LEASE_OWNER_INVALID");
   if (!Number.isSafeInteger(options.leaseTtlMs) || options.leaseTtlMs < 1) throw new BridgeServiceError("BRIDGE_LEASE_TTL_INVALID");
+  const productionStack = persistence instanceof NodeSqliteBridgeAdapter
+    && pairingVerifier instanceof LocalPairingTicketVerifier
+    && isNodeSqliteLeaseCoordinator(leases);
   const acquired = assertBridgeLease(await leases.acquire({
     scope: FENCED_COMPOSITION_SCOPE,
     ownerId: options.ownerId,
@@ -208,8 +213,8 @@ export const createFencedDurableBridgeComposition = async (
         "operation.claims",
         "operation.replay-associations",
       ] as const),
-      productionClaim: "source-seam-only" as const,
-      pendingDependencyLocks: Object.freeze(["MVP-DEP-BRIDGE", "MVP-DEP-TSNET"] as const),
+      productionClaim: productionStack ? "single-host-production" as const : "source-seam-only" as const,
+      pendingDependencyLocks: Object.freeze(productionStack ? [] : ["MVP-DEP-BRIDGE"] as const),
       renewLease: fencedStore.renew.bind(fencedStore),
       close: fencedStore.close.bind(fencedStore),
     });

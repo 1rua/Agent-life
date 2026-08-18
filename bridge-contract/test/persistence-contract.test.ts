@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   BRIDGE_PERSISTENCE_NAMESPACES,
+  NODE_SQLITE_BRIDGE_DRIVER,
   SQLITE_BRIDGE_ADAPTER_PORT,
   assertConnectedSqliteBridgeAdapter,
   isSqliteBridgeAdapterPort,
@@ -32,14 +33,14 @@ describe("Bridge persistence contract", () => {
     expect(isSqliteBridgeAdapterPort({
       port: SQLITE_BRIDGE_ADAPTER_PORT,
       backend: "sqlite",
-      driver: "external",
+      driver: NODE_SQLITE_BRIDGE_DRIVER,
       status: "external-driver-required",
       databasePath: "",
     })).toBe(false);
     const adapter = {
       port: SQLITE_BRIDGE_ADAPTER_PORT,
       backend: "sqlite",
-      driver: "external",
+      driver: NODE_SQLITE_BRIDGE_DRIVER,
       status: "external-driver-required",
       databasePath: "/var/lib/agent-life/bridge.sqlite",
       transact: async () => undefined,
@@ -57,7 +58,7 @@ describe("Bridge persistence contract", () => {
     const adapter: SqliteBridgeAdapterPort = {
       port: SQLITE_BRIDGE_ADAPTER_PORT,
       backend: "sqlite",
-      driver: "external",
+      driver: NODE_SQLITE_BRIDGE_DRIVER,
       status: "external-driver-required",
       databasePath: ":memory:",
       transact: async () => undefined,
