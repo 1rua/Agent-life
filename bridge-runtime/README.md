@@ -1,5 +1,7 @@
 # bridge-runtime（WP-06）
 
+<!-- 本文件描述的本地验证/镜像构建结果，not evidence of production readiness，不替代物理 Tailnet enrollment 与 Android/Bridge 物理 E2E。 -->
+
 `bridge-runtime` 现在包含两个明确分开的层次：
 
 1. **确定性开发 seam**：`file-backed-store.ts`、原 ingress/fake replay
@@ -94,6 +96,9 @@ bind mount。systemd 模板同样没有 socket activation 或 host listener，�
 
 ## 边界
 
+> **边界声明**：本文件描述的本地验证/镜像构建结果，not evidence of production readiness，
+> 不替代物理 Tailnet enrollment 与 Android/Bridge 物理 E2E。
+
 - 首版只支持单主机、单 SQLite 文件；
 - 不支持跨主机 lease/failover；
 - 不启用公网 ingress/Funnel；
@@ -102,5 +107,4 @@ bind mount。systemd 模板同样没有 socket activation 或 host listener，�
   DIRECT/DERP/offline 矩阵证据；
 - Docker 镜像构建已执行（deploy-bridge / deploy-ingress），证据见 `docs/mvp/evidence/bridge/2026-08-18-docker-build.json`；
 - source seam/fake tests 不提升为生产证据。
-The deterministic file-backed store and fake port tests are not evidence of
-production readiness.
+The deterministic file-backed store and fake port tests are not evidence of production readiness.
