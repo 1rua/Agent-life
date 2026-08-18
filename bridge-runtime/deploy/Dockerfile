@@ -17,4 +17,4 @@ VOLUME ["/var/lib/agent-life-bridge"]
 
 # The production image is only a process image. It does not publish a host
 # port; a locked tsnet userspace adapter supplies the private listener.
-ENTRYPOINT ["node", "dist/main.js"]
+ENTRYPOINT ["node", "dist/bridge-runtime/src/main.js"]
