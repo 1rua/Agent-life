@@ -14,7 +14,7 @@
 | systemd template verification | PASS |
 | Docker Compose static template check | PASS |
 | Docker image config/build | PASS（deploy-bridge + deploy-ingress） |
-| real Tailnet enrollment/traffic | BLOCKED |
+| real Tailnet enrollment / container run | PASS（交互式登录完成，ingress 在线） |
 | Android/Bridge physical E2E | BLOCKED |
 
 ## 已实现的生产边界

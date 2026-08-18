@@ -40,7 +40,7 @@ or SDK-free result is promoted to a release pass.
 | WP-03 | PASS | PENDING | Policy/collector/outbox plus lifecycle/runtime outbox composition, closed capability/control-port and typed provider-contract sources and host/static seams exist; Android providers/tests need the toolchain/device. |
 | WP-04 | PASS | PASS (SDK-free) | Fake paired transport and cross-layer trace tests run in the host smoke. |
 | WP-05 | PASS | PENDING | Userspace transport seam exists; no locked AAR or physical P0t evidence. |
-| WP-06 | PASS | PARTIAL PASS | The locked single-host Node SQLite/lease/Ed25519/tsnet runtime has 21 focused files (127 tests), a real 11-namespace backup/restore drill, Go sidecar build/test, and verified systemd/static deployment templates. Docker image build PASS; physical Tailnet/E2E remain blocked. |
+| WP-06 | PASS | PARTIAL PASS | The locked single-host Node SQLite/lease/Ed25519/tsnet runtime has 21 focused files (127 tests), a real 11-namespace backup/restore drill, Go sidecar build/test, and verified systemd/static deployment templates. Docker image build PASS; 物理容器运行已通过，Android/E2E 仍阻塞. |
 | WP-07 | PASS | PENDING | Hermes/OpenClaw adapter/manifest/skill seams exist; official release/profile locks are pending. |
 | WP-08 | PASS | PENDING | Isolated holder source plus shared bounded text/opaque-grant hand-off and a default-deny main-APK gate exist; Android/model lock and connected tests are pending. |
 | WP-09 | PASS | PENDING | SDK-free harness exists; physical Android/Bridge/plugin E2E cannot run yet. |
