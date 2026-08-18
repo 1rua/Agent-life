@@ -187,7 +187,7 @@ cd apps/android
 | 依赖锁（7 行） | ✅ PASS（Tailscale v1.98.10, AGP 8.9.2, Hermes v0.9.0, OpenClaw v0.9.0） |
 | Tailscale AAR 集成 | ⚠️ AAR 已验证（arm64-v8a + x86_64），NDK 工具链摘要 provisional |
 | Android 生产构建 | ⏳ PENDING（缺少锁定的 Gradle 分发、NDK 完整安装与参考设备） |
-| Bridge 生产栈 | ✅ SQLite/lease/secret/tsnet sidecar 本地验证与真实 drill 通过；⏳ Docker build 与物理 Tailnet/E2E 阻塞 |
+| Bridge 生产栈 | ✅ 本地验证、真实 drill、Docker 两个镜像构建通过；⏳ 物理 Tailnet/E2E 阻塞 |
 
 > 详细准备度报告见 [docs/mvp/mvp-readiness-report.md](docs/mvp/mvp-readiness-report.md)
 > 依赖锁审计见 [docs/mvp/mvp-dependency-lock-audit-2026-08-17.md](docs/mvp/mvp-dependency-lock-audit-2026-08-17.md)

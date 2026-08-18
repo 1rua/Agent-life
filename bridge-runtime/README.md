@@ -72,9 +72,10 @@ bridge-runtime/deploy/verify-deployment-static.sh
 ```
 
 该命令会执行 contract/runtime tests、typecheck/build、真实 SQLite drill、
-Go module verify/test/build、systemd template verify 和静态部署检查；最后
-要求 Docker CLI/daemon 执行 Compose config/build。本机没有 Docker 时输出
-`BRIDGE_PRODUCTION_VERIFY_BLOCKED`，不会伪造镜像构建通过。
+Go module verify/test/build、systemd template verify、静态部署检查，以及
+Docker Compose config 和 `build --pull`。当 Docker 不可用时输出
+`BRIDGE_PRODUCTION_VERIFY_BLOCKED`，不会伪造镜像构建通过；Docker 可用时
+输出 `BRIDGE_PRODUCTION_VERIFY_PASS`。
 
 ## 部署模板
 
@@ -96,7 +97,7 @@ bind mount。systemd 模板同样没有 socket activation 或 host listener，�
 - 不引入远程 KMS/HSM；
 - 本地 Go sidecar 尚未连接真实 Tailnet enrollment，也未获得物理
   DIRECT/DERP/offline 矩阵证据；
-- Docker 镜像构建在当前机器因缺少 Docker CLI/daemon 而未执行；
+- Docker 镜像构建已执行（deploy-bridge / deploy-ingress），证据见 `docs/mvp/evidence/bridge/2026-08-18-docker-build.json`；
 - source seam/fake tests 不提升为生产证据。
 The deterministic file-backed store and fake port tests are not evidence of
 production readiness.

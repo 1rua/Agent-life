@@ -50,10 +50,17 @@ INSTALL_ROOT="$DRY_ROOT" \
   AGENT_LIFE_TSNET_AUTHKEY_FILE="$DRY_INPUT/auth-key" \
   "$ROOT_DIR/bridge-runtime/deploy/install-systemd.sh"
 
+export DOCKER_TEST_HOSTNAME=${AGENT_LIFE_TSNET_HOSTNAME:-agent-life-verify}
+export DOCKER_TEST_CONTROL_URL=${AGENT_LIFE_TSNET_CONTROL_URL:-https://control.invalid}
+
 if ! command -v docker >/dev/null 2>&1; then
   echo 'BRIDGE_PRODUCTION_VERIFY_BLOCKED Docker CLI/daemon unavailable; image config/build not executed' >&2
   exit 1
 fi
-docker compose -f "$ROOT_DIR/bridge-runtime/deploy/docker-compose.yml" config --quiet
-docker compose -f "$ROOT_DIR/bridge-runtime/deploy/docker-compose.yml" build --pull
+AGENT_LIFE_TSNET_HOSTNAME="$DOCKER_TEST_HOSTNAME" \
+  AGENT_LIFE_TSNET_CONTROL_URL="$DOCKER_TEST_CONTROL_URL" \
+  docker compose -f "$ROOT_DIR/bridge-runtime/deploy/docker-compose.yml" config --quiet
+AGENT_LIFE_TSNET_HOSTNAME="$DOCKER_TEST_HOSTNAME" \
+  AGENT_LIFE_TSNET_CONTROL_URL="$DOCKER_TEST_CONTROL_URL" \
+  docker compose -f "$ROOT_DIR/bridge-runtime/deploy/docker-compose.yml" build --pull
 echo 'BRIDGE_PRODUCTION_VERIFY_PASS'

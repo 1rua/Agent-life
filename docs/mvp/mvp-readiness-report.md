@@ -40,7 +40,7 @@ or SDK-free result is promoted to a release pass.
 | WP-03 | PASS | PENDING | Policy/collector/outbox plus lifecycle/runtime outbox composition, closed capability/control-port and typed provider-contract sources and host/static seams exist; Android providers/tests need the toolchain/device. |
 | WP-04 | PASS | PASS (SDK-free) | Fake paired transport and cross-layer trace tests run in the host smoke. |
 | WP-05 | PASS | PENDING | Userspace transport seam exists; no locked AAR or physical P0t evidence. |
-| WP-06 | PASS | PARTIAL PASS | The locked single-host Node SQLite/lease/Ed25519/tsnet runtime has 21 focused files (127 tests), a real 11-namespace backup/restore drill, Go sidecar build/test, and verified systemd/static deployment templates. Docker image build and physical Tailnet/E2E remain blocked. |
+| WP-06 | PASS | PARTIAL PASS | The locked single-host Node SQLite/lease/Ed25519/tsnet runtime has 21 focused files (127 tests), a real 11-namespace backup/restore drill, Go sidecar build/test, and verified systemd/static deployment templates. Docker image build PASS; physical Tailnet/E2E remain blocked. |
 | WP-07 | PASS | PENDING | Hermes/OpenClaw adapter/manifest/skill seams exist; official release/profile locks are pending. |
 | WP-08 | PASS | PENDING | Isolated holder source plus shared bounded text/opaque-grant hand-off and a default-deny main-APK gate exist; Android/model lock and connected tests are pending. |
 | WP-09 | PASS | PENDING | SDK-free harness exists; physical Android/Bridge/plugin E2E cannot run yet. |
@@ -85,9 +85,9 @@ P0t, AAR, or production-Bridge requirement.
 - The single-host Bridge storage/runtime stack is implemented and locally
   verified: Node SQLite, same-DB lease fencing, Ed25519 verifier, Unix-socket
   runtime, Go tsnet sidecar build, systemd template verification, and a real
-  backup/restore/recover drill. The deployment image is not yet built because
-  this host has no Docker CLI/daemon, and the sidecar has not joined a real
-  Tailnet or completed physical Android/Bridge E2E.
+  backup/restore/recover drill. Both Docker images
+  (`deploy-bridge`, `deploy-ingress`) built successfully, but the sidecar has
+  not joined a real Tailnet and physical Android/Bridge E2E remains pending.
 - The Android capability/control ports are source-only contracts. SMS, calls,
   contacts, clipboard, location, Health Connect, sensors, calendar, alarms,
   Accessibility and MediaProjection adapters still require their own
@@ -119,13 +119,14 @@ Current evidence:
 bridge-contract + bridge-runtime: 21 files / 127 tests passed
 bridge-runtime strict TypeScript/build: passed
 real SQLite backup/restore/recover: schema 1, 11/11 namespaces,
-  sha256:9194163dc437e5aa9954818ca39ac65deade7f7879035bef69075010c545382f
+  sha256:5f4ddabcb1903efecc8ec265309c77b53eeaa928403d4180c03d6fa4267a610c
 Go ingress module verify/test/build: passed
 systemd-analyze template verification: passed
 static Docker/Compose checks: passed
 ```
 
-The aggregate `./bridge-runtime/deploy/verify-production.sh` fails closed on
-this host with `BRIDGE_PRODUCTION_VERIFY_BLOCKED Docker CLI/daemon unavailable`.
-No Docker image build, physical Tailnet enrollment, or Android E2E is claimed.
+The aggregate `./bridge-runtime/deploy/verify-production.sh` passes all
+local checks, Compose config, and both image builds with
+`BRIDGE_PRODUCTION_VERIFY_PASS`. Physical Tailnet enrollment and Android E2E
+are still not claimed by this stack evidence.
 The file-backed adapter and fake port tests remain development evidence only.

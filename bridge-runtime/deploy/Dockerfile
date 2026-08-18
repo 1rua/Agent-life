@@ -3,12 +3,13 @@ ARG NODE_IMAGE=node:24.18.0-bookworm-slim@sha256:6f7b03f7c2c8e2e784dcf9295400527
 
 FROM ${NODE_IMAGE} AS build
 WORKDIR /src
-COPY bridge-runtime/package.json bridge-runtime/package-lock.json ./
+COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts
 COPY bridge-contract ./bridge-contract
-COPY bridge-runtime/tsconfig.json bridge-runtime/tsconfig.build.json ./
-COPY bridge-runtime/src ./src
-RUN npm run build
+COPY protocol ./protocol
+COPY bridge-runtime/package.json bridge-runtime/package-lock.json bridge-runtime/tsconfig.json bridge-runtime/tsconfig.build.json ./bridge-runtime/
+COPY bridge-runtime/src ./bridge-runtime/src
+RUN npm --prefix bridge-runtime run build
 
 FROM ${NODE_IMAGE} AS runtime
 ENV NODE_ENV=production \
@@ -21,7 +22,7 @@ RUN groupadd --system --gid 10000 agent-life \
   && chown -R 10002:10000 /var/lib/agent-life-bridge /run/agent-life \
   && chmod 0750 /var/lib/agent-life-bridge /run/agent-life
 WORKDIR /opt/agent-life-bridge
-COPY --from=build --chown=10002:10000 /src/dist ./dist
+COPY --from=build --chown=10002:10000 /src/bridge-runtime/dist ./dist
 USER 10002:10000
 VOLUME ["/var/lib/agent-life-bridge"]
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \

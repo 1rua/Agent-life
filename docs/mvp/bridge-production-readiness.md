@@ -13,7 +13,7 @@
 | Go tsnet v1.98.10 sidecar build/test | PASS |
 | systemd template verification | PASS |
 | Docker Compose static template check | PASS |
-| Docker image config/build | BLOCKED（本机无 Docker CLI/daemon） |
+| Docker image config/build | PASS（deploy-bridge + deploy-ingress） |
 | real Tailnet enrollment/traffic | BLOCKED |
 | Android/Bridge physical E2E | BLOCKED |
 
@@ -41,7 +41,7 @@ Executed on 2026-08-18:
 bridge-contract + bridge-runtime Vitest: 21 files / 127 tests PASS
 bridge-runtime typecheck: PASS
 bridge-runtime build: PASS
-real SQLite drill: schema 1, 11/11 namespaces, digest sha256:9194163dc437e5aa9954818ca39ac65deade7f7879035bef69075010c545382f
+real SQLite drill: schema 1, 11/11 namespaces, digest sha256:5f4ddabcb1903efecc8ec265309c77b53eeaa928403d4180c03d6fa4267a610c
 go mod verify: all modules verified
 go test ./...: PASS
 systemd-analyze root template verification: PASS
@@ -49,14 +49,21 @@ static deployment checks: PASS
 systemd installer disposable-root dry run: PASS
 ```
 
-The production aggregate command reaches all local checks and then fails
-closed:
+The production aggregate command now passes every local check, Compose
+config, and both `docker compose build --pull` images:
 
 ```text
-BRIDGE_PRODUCTION_VERIFY_BLOCKED Docker CLI/daemon unavailable; image config/build not executed
+BRIDGE_PRODUCTION_VERIFY_PASS
 ```
 
-This is intentional. No image-build or physical Tailnet pass is claimed.
+Image evidence: `docs/mvp/evidence/bridge/2026-08-18-docker-build.json`
+- `docker.io/library/deploy-bridge:latest`
+  manifest list `sha256:d6a1c184bd54fc5e83c8154655c8936a910382247c01a995857d09e905b393c8`
+- `docker.io/library/deploy-ingress:latest`
+  manifest list `sha256:f0d5424fbe887bc15037ada61f5ee29bc95d041b270962d6fdf34027201c39c0`
+
+The physical Tailnet and Android/Bridge E2E blockers remain; no such pass is
+claimed from image build success alone.
 
 ## Deployment template
 
@@ -74,7 +81,7 @@ Operators must provide:
 - read-only `pairing-ticket-public.pem`;
 - tsnet state directory and one-time auth key credential;
 - hostname and HTTPS control URL;
-- Docker daemon or a host with the systemd users/directories provisioned.
+- a running Docker daemon or a host with the systemd users/directories provisioned.
 
 The template intentionally does not include pairing private keys or Android
 device credentials.

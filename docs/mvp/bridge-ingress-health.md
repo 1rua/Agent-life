@@ -1,6 +1,6 @@
 # Bridge ingress and health deployment
 
-Status: **authenticated tsnet sidecar source/build/test PASS; physical Tailnet enrollment and Docker image build BLOCKED**.
+Status: **authenticated tsnet sidecar source/build/image PASS; physical Tailnet enrollment BLOCKED**.
 
 The production ingress is now a Go sidecar under `bridge-runtime/ingress/`. It
 imports locked `tailscale.com v1.98.10`, starts an embedded userspace tsnet
@@ -20,7 +20,8 @@ connection generation or replay admission. Durable operation replay association
 remains a separate transaction boundary; full production control protocol and
 Task 9 routing APIs are not claimed by this slice.
 
-Docker and systemd templates publish no host socket. The current machine has
-no Docker CLI/daemon, so Compose config/build is an explicit blocker rather
-than a pass. The sidecar also has not connected to a real control server or
-completed DIRECT/DERP/offline device evidence; those remain P0t/E2E gates.
+Docker and systemd templates publish no host socket. Compose config/build has
+been executed and produced the locked base-image `deploy-ingress` image
+(evidence `evidence/bridge/2026-08-18-docker-build.json`). The sidecar still
+has not connected to a real control server or completed DIRECT/DERP/offline
+device evidence; those remain P0t/E2E gates.

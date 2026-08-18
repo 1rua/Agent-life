@@ -1,6 +1,6 @@
 # Bridge persistence and migration readiness
 
-Status: **single-host Node SQLite production stack PASS; Docker image build and physical deployment evidence BLOCKED**.
+Status: **single-host Node SQLite production stack PASS; Docker image build PASS; physical Tailnet/E2E BLOCKED**.
 
 `bridge-contract/src/persistence.ts` now locks the adapter driver to
 `node:sqlite@24.18.0/sqlite@3.53.1`. `bridge-runtime/src/node-sqlite-adapter.ts`
@@ -24,7 +24,7 @@ SQLite databases, writes all 11 closed namespaces, performs a real backup and
 restore, executes recovery, compares canonical content, and removes temporary
 artifacts. Evidence:
 [2026-08-18 Node SQLite drill](evidence/bridge/2026-08-18-node-sqlite.json),
-digest `sha256:9194163dc437e5aa9954818ca39ac65deade7f7879035bef69075010c545382f`.
+digest `sha256:5f4ddabcb1903efecc8ec265309c77b53eeaa928403d4180c03d6fa4267a610c`.
 
 Focused current evidence:
 
@@ -37,8 +37,9 @@ static deployment template verification: passed
 real SQLite backup/restore/recover drill: passed
 ```
 
-Remaining production blockers are explicit: Docker Compose config/build has not
-run because this host has no Docker CLI/daemon; the Go sidecar has not joined a
-real Tailnet; and physical Android/Bridge E2E remains separate. A file-backed
+Docker Compose config/build has now run successfully and produced
+`deploy-bridge` and `deploy-ingress` images (evidence
+`evidence/bridge/2026-08-18-docker-build.json`). Remaining blockers are the Go
+sidecar joining a real Tailnet and physical Android/Bridge E2E. A file-backed
 development store, fake adapter, or source-only ingress seam must not be
 reported as this production stack.

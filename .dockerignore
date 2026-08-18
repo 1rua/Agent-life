@@ -14,3 +14,9 @@
 !bridge-runtime/tsconfig.json
 !bridge-runtime/tsconfig.build.json
 !bridge-runtime/src/**
+!protocol/
+!protocol/src/**
+!protocol/registries/**
+!protocol/schemas/**
+!package.json
+!package-lock.json
