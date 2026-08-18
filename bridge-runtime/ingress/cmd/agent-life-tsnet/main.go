@@ -189,9 +189,13 @@ func run() error {
 		UserLogf:   logger.Info,
 	}
 	defer server.Close()
-	startContext, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-	if _, err := server.Up(startContext); err != nil {
+	// Interactive login has no deadline: without an auth key, tsnet prints the
+	// official login URL and waits for the operator to authorize the node.
+	// A container stop/signal terminates this process as expected.
+	if cfg.authKey == "" {
+		logger.Info("no tsnet auth key; waiting for interactive login URL")
+	}
+	if _, err := server.Up(context.Background()); err != nil {
 		return fmt.Errorf("tsnet startup failed: %w", err)
 	}
 	local, err := server.LocalClient()

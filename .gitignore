@@ -54,3 +54,5 @@ Thumbs.db
 /bridge-runtime/dist/
 /bridge-runtime/ingress/agent-life-tsnet
 /bridge-runtime/node_modules
+
+/bridge-runtime/deploy/secrets/
