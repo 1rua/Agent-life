@@ -106,3 +106,23 @@ tunnel or always-on+lockdown paths. Verify merged manifests and `dumpsys vpn`
 show no product VPN, route/DNS snapshots are unchanged, and egress contains
 only approved control/STUN/DERP plus the ticket-bound Bridge. Any failure is a
 gate failure; the product must not fall back to public HTTPS or a system VPN.
+
+## Physical Gate C/D attempt (2026-08-17): BLOCKED
+
+A real `arm64-v8a` API 36 device (`R5CY32BXV8N`, Android 16, 4096-byte pages)
+was available. The locked AAR verifier, native tests, Android module checks,
+SDK-free no-VPN boundary, dependency-lock validator, and the two empty
+connected tasks all exited successfully. Those are not P0t matrix coverage:
+both `tailnet-core` and `transport` have zero `androidTest` source files.
+
+The required `p0t/device` runner/framing/collector/validator/secret scanner,
+controller descriptor, distinct one-time five-minute enrollment-key inputs,
+real Tailnet/Bridge controller, forced DERP and approval policies, controlled
+network/Doze/VPN transitions, egress capture, and budget collector are absent.
+On this Android 16 build, `dumpsys vpn` reports `Can't find service: vpn`; a
+sanitized connectivity baseline observed zero VPN agents and no product
+`BIND_VPN_SERVICE`, but cannot replace per-case VPN/route/DNS auditing.
+
+All Gate C/D matrix rows remain **BLOCKED**. See
+`docs/mvp/evidence/p0t/2026-08-17T11-35-26Z-r5cy32bxv8n/BLOCKED.md` and
+`inventory.json`. The overall P0t gate is **BLOCKED**, not partially passed.

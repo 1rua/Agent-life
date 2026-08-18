@@ -1,4 +1,5 @@
 .worktrees/
+AGENTS.md
 /.toolchains/
 *.tsnet-toolchain.env
 /apps/android/tailnet-core/native/tsnetbridge/.tsnet-aar.lock.candidate.*

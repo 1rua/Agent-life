@@ -16,7 +16,7 @@ const rows = [
   {
     decision_id: "MVP-DEP-TSNET",
     official_reference: "https://github.com/tailscale/tailscale",
-    immutable_version: "tailscale@v1.84.0, gomobile+NDK27, arm64-v8a",
+    immutable_version: "tailscale-v1.98.10, tag object 0ee734d3089846b27bc6ebcddd3d6ee5ec13e04d, commit 36550d57f4a4055246ef7412f4e650a012a465f1, AAR sha256 a654e487f88cc35a7baa238666151746f83dec12000a3078f6a83508df791e87, ABIs arm64-v8a+x86_64, NDK r27c archive sha256 verified 59c2f6dc96743b5daf5d1626684640b20a6bd2b1d85b13156b90333741bad5cc, toolchain digest remains provisional",
     integrity: "PLACEHOLDER",
     license_review: "BSD-3-Clause; reviewed",
     reviewer_time: "2026-08-14T00:00:00Z",

@@ -1,0 +1,162 @@
+{
+  "schema_version": "p0t-gate-inventory/blocked/v1",
+  "run_id": "2026-08-17T11-35-26Z-r5cy32bxv8n",
+  "recorded_at": "2026-08-17T11:35:26Z",
+  "gate": "P0T-GATE-C-D",
+  "gate_status": "BLOCKED",
+  "aar": {
+    "artifact": "apps/android/tailnet-core/libs/tsnet-android-1.98.10.aar",
+    "sha256": "a654e487f88cc35a7baa238666151746f83dec12000a3078f6a83508df791e87",
+    "verification_exit_code": 0,
+    "abis": [
+      "arm64-v8a",
+      "x86_64"
+    ]
+  },
+  "device": {
+    "serial": "R5CY32BXV8N",
+    "model": "SM-S9380",
+    "abi": "arm64-v8a",
+    "abilist": "arm64-v8a",
+    "api_level": 36,
+    "android_release": "16",
+    "page_size_bytes": 4096,
+    "adb_state": "device"
+  },
+  "prerequisite_observations": [
+    {
+      "item": "tracked AAR verifier",
+      "command": "python3 apps/android/tailnet-core/tools/verify-tsnet-aar.py --lock apps/android/tailnet-core/native/tsnetbridge/tsnet-aar.lock.json --aar apps/android/tailnet-core/libs/tsnet-android-1.98.10.aar --provenance apps/android/tailnet-core/libs/tsnet-android-1.98.10.provenance.json --sbom apps/android/tailnet-core/libs/tsnet-android-1.98.10.sbom.json --notices apps/android/tailnet-core/native/tsnetbridge/THIRD_PARTY_NOTICES.md",
+      "exit_code": 0
+    },
+    {
+      "item": "Android no-VPN/source boundary",
+      "command": "python3 apps/android/tools/test_transport_boundary.py",
+      "exit_code": 0
+    },
+    {
+      "item": "native tsnetbridge tests",
+      "command": "bash apps/android/tailnet-core/tools/run-tsnet-go-tests.sh ./...",
+      "exit_code": 0
+    },
+    {
+      "item": "tailnet-core and transport check",
+      "command": "ANDROID_HOME=/mnt/数据/项目/Agent-life/.toolchains/android-sdk ./gradlew --no-daemon :tailnet-core:check :transport:check",
+      "exit_code": 0
+    },
+    {
+      "item": "dependency lock validator",
+      "command": "./tools/run-node24 npm run mvp:lock:check",
+      "exit_code": 0
+    },
+    {
+      "item": "connected tasks",
+      "command": "ANDROID_HOME=/mnt/数据/项目/Agent-life/.toolchains/android-sdk ANDROID_SERIAL=R5CY32BXV8N ./gradlew --no-daemon clean :tailnet-core:connectedDebugAndroidTest :transport:connectedDebugAndroidTest",
+      "exit_code": 0,
+      "coverage": {
+        "tailnet_core_android_test_files": 0,
+        "transport_android_test_files": 0,
+        "interpretation": "Gradle succeeded only because both androidTest source sets are empty; this is not P0t matrix coverage."
+      }
+    },
+    {
+      "item": "release readiness launcher",
+      "command": "ANDROID_HOME=/mnt/数据/项目/Agent-life/.toolchains/android-sdk ./e2e/mvp/run-readiness.sh --release",
+      "exit_code": 1,
+      "android_smoke_exit_code": 0,
+      "observed": "The launcher printed RELEASE_READINESS_BLOCKED and RELEASE_GATE_BLOCKED; P0T-GATE remained a production blocker. The preceding smoke-only RELEASE_GATE_PASS line is not P0t matrix evidence."
+    }
+  ],
+  "required_matrix": [
+    {
+      "case_id": "DIRECT",
+      "status": "BLOCKED",
+      "reason": "No real P0t connected test/harness or controller Tailnet enrollment input is present."
+    },
+    {
+      "case_id": "DERP",
+      "status": "BLOCKED",
+      "reason": "No forced-DERP controller, real Bridge harness, or P0t connected test is present."
+    },
+    {
+      "case_id": "OFFLINE",
+      "status": "BLOCKED",
+      "reason": "No controlled offline transition or P0t connected test is present."
+    },
+    {
+      "case_id": "APPROVAL_REQUIRED",
+      "status": "BLOCKED",
+      "reason": "No controller policy capable of producing a real pending-approval state is present."
+    },
+    {
+      "case_id": "PROCESS_DEATH_RESTORE",
+      "status": "BLOCKED",
+      "reason": "No two-phase process-death instrumentation/provisioning harness is present."
+    },
+    {
+      "case_id": "NETWORK_SWITCH_15S_MONOTONIC_GENERATION",
+      "status": "BLOCKED",
+      "reason": "No validated network transition controller or timing/generation evidence collector is present."
+    },
+    {
+      "case_id": "DOZE",
+      "status": "BLOCKED",
+      "reason": "No controlled Doze entry/exit lifecycle harness or measurements are present."
+    },
+    {
+      "case_id": "OTHER_SYSTEM_VPN_COEXISTENCE",
+      "status": "BLOCKED",
+      "reason": "No controlled second-VPN owner and coexistence case were exercised."
+    },
+    {
+      "case_id": "VPN_TUN_BLOCKED",
+      "status": "BLOCKED",
+      "reason": "No blocked split/full-tunnel or always-on/lockdown controller or collector is present."
+    }
+  ],
+  "enrollment": {
+    "status": "BLOCKED",
+    "controller_key_input": "P0T_AUTH_KEY_PIPE is unset",
+    "controller_descriptor": "P0T_DESCRIPTOR is unset",
+    "controller_review": "P0T_CONTROLLER_REVIEW is unset",
+    "device_runner": "p0t/device/run-p0t.sh is absent",
+    "stdin_framing_runner": "p0t/device directory is absent",
+    "distinct_five_minute_key_evidence": false
+  },
+  "vpn_audit": {
+    "status": "BLOCKED",
+    "dumpsys_vpn_command": "adb -s R5CY32BXV8N shell dumpsys vpn",
+    "observed_output": "Can't find service: vpn",
+    "sanitized_connectivity_baseline": {
+      "active_vpn_network_agents": 0,
+      "com_agentlife_mobile_bind_vpn_service_permission_occurrences": 0,
+      "raw_capture_retained_in_repository": false
+    },
+    "reason": "This Android 16 build has no dumpsys service named vpn, and the required per-case sanitized VPN/route/DNS collector is absent; the baseline alone is not a matrix audit."
+  },
+  "egress_audit": {
+    "status": "BLOCKED",
+    "controlled_gateway_capture_present": false,
+    "destination_class_collector_present": false,
+    "unexpected_flow_count": null,
+    "reason": "No controlled-gateway capture or machine evidence collector exists, so no egress conclusion is claimed."
+  },
+  "resource_budgets": {
+    "status": "BLOCKED",
+    "reason": "No real run occurred; startup, RSS, CPU, wakeup, battery, throughput, and artifact-size budget evidence is absent."
+  },
+  "secret_scan": {
+    "scope": "docs/mvp/evidence/p0t/2026-08-17T11-35-26Z-r5cy32bxv8n",
+    "candidate_findings": 0,
+    "required_repository_scanner_present": false,
+    "reason": "The new evidence directory contains no secret candidate, but p0t/device/scan-secrets.py is absent; this cannot substitute for the required Gate C/D scanner."
+  },
+  "blocking_reasons": [
+    "P0t device runner, stdin provisioning framer, collector, validator, and secret scanner are absent.",
+    "tailnet-core and transport androidTest source sets are empty.",
+    "Controller descriptor, one-time five-minute enrollment key input, and controller review are unset.",
+    "No real Bridge/Tailnet enrollment controller, forced DERP policy, approval-required policy, network transition controller, Doze controller, second-VPN owner, or blocked VPN/TUN case is available.",
+    "No controlled egress capture or resource-budget collector is present.",
+    "The device exposes VPN state through connectivity dumps rather than a dumpsys vpn service on this OEM Android 16 build; no approved per-case sanitizer/collector is present."
+  ]
+}
