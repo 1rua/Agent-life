@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-life.dev/schemas/gateway/v2/event.schema.json",
+  "$defs": {
+    "event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["correlationId", "occurredAt", "payload"],
+      "properties": {
+        "correlationId": {
+          "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
+        },
+        "occurredAt": {
+          "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/utcMillis"
+        },
+        "payload": {
+          "$comment": "Dispatch by the validated SSE event type and validate again with its event-specific sub-Schema; missing sub-Schema must fail closed.",
+          "type": "object"
+        }
+      }
+    }
+  }
+}
