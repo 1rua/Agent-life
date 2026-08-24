@@ -109,7 +109,7 @@ gate failure; the product must not fall back to public HTTPS or a system VPN.
 
 ## Physical Gate C/D attempt (2026-08-17): BLOCKED
 
-A real `arm64-v8a` API 36 device (`R5CY32BXV8N`, Android 16, 4096-byte pages)
+A real `arm64-v8a` API 36 device (`<redacted-device-serial>`, Android 16, 4096-byte pages)
 was available. The locked AAR verifier, native tests, Android module checks,
 SDK-free no-VPN boundary, dependency-lock validator, and the two empty
 connected tasks all exited successfully. Those are not P0t matrix coverage:
@@ -124,5 +124,44 @@ sanitized connectivity baseline observed zero VPN agents and no product
 `BIND_VPN_SERVICE`, but cannot replace per-case VPN/route/DNS auditing.
 
 All Gate C/D matrix rows remain **BLOCKED**. See
-`docs/mvp/evidence/p0t/2026-08-17T11-35-26Z-r5cy32bxv8n/BLOCKED.md` and
+`docs/mvp/evidence/p0t/2026-08-17T11-35-26Z-p0t-device-redacted/BLOCKED.md` and
 `inventory.json`. The overall P0t gate is **BLOCKED**, not partially passed.
+
+## Physical run attempt (2026-08-19): first real-device androidTest + audit evidence
+
+A real `arm64-v8a` API 36 device (`<redacted-device-serial>`, SM-X710, Android 16,
+4096-byte pages) was connected and authorized. New real device tests were
+written for `tailnet-core` (12), `transport` (5) and `app` (2), all running
+over the locked real AAR (`:tailnet-core:connectedDebugAndroidTest
+:transport:connectedDebugAndroidTest` and `:app:connectedDebugAndroidTest`).
+
+Results: `tailnet-core` 11/12 pass, `transport` 5/5, `app` 2/2. Per-case
+sanitized before/after audits (dumpsys connectivity / vpn / route / DNS /
+package) show the system VPN agent count stays 0 and IPv4 route table is
+unchanged across all 18 audited cases. 17/18 per-case `am instrument` runs
+PASS; the single failure is a **real production defect discovered on device**:
+`KeystoreEncryptedNoBackupState` encryption is rejected by real Android
+Keystore (`Caller-provided IV not permitted`), so encrypted node state cannot
+persist on-device. Fix awaits user approval (security-sensitive change).
+
+Matrix rows DIRECT/DERP/OFFLINE(backend)/approval/Doze/another-VPN/lockdown
+remain **BLOCKED** for the documented missing controller/auth-key/Bridge/
+egress inputs. This run is **partial device evidence, not P0t PASS**. See
+`docs/mvp/evidence/p0t/2026-08-19T15-10-02Z-p0t-real-device-all/README.md`,
+`matrix.md` and `inventory.json`.
+
+## Physical run final status (2026-08-20)
+
+The Keystore failure above was fixed by letting Android Keystore generate the
+GCM IV and persisting `cipher.iv`. The refreshed on-device suite reports
+`tailnet-core` 12 PASS / 1 SKIP, `transport` 5/5 and `app` 2/2. The locked AAR
+was rebuilt reproducibly with an app-writable userspace var root and now has
+SHA-256 `510182647fffb0e1ee050cdcff28694db65fed6070bf189fdf916880fdf919ea`.
+
+The product AAR path still cannot start tsnet in an ordinary Android app:
+SELinux denies the required host-route netlink operation. A no-host-route
+experiment did not intercept the actual route path and was reverted. The
+failed patch is retained only under the run's `proposals/` evidence, and all
+required P0t matrix rows remain honestly **BLOCKED**. Tailscale is now treated
+by the accepted modular architecture as an optional companion transport, not
+as the default app transport.

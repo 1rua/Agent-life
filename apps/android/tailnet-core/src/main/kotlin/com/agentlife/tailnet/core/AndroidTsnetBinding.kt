@@ -17,6 +17,14 @@ import tsnetbridge.Tsnetbridge
 class AndroidTsnetBinding(
     private val enrollmentSource: NativeEnrollmentSource,
 ) : TailscaleUserspaceCore {
+    init {
+        // 锁定 AAR 的 Go 运行时在部分 Android 16+ 设备（如 SM-X710，系统未生成
+        // /etc/resolv.conf）默认落入纯 Go 解析器（[::1]:53 refused）导致解析失败。
+        // 强制 netdns=cgo -> bionic getaddrinfo -> netd 解析；已在真机探针验证可用。
+        // 只改运行时 DNS 模式，不触碰 AAR/工具链/权限面。
+        runCatching { android.system.Os.setenv("GODEBUG", "netdns=cgo", true) }
+    }
+
     private val lock = Any()
     private var node: NativeNode? = null
     private var channel: UserspaceBridgeChannel? = null

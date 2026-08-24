@@ -22,4 +22,7 @@ dependencies {
     implementation(project(":encrypted-store"))
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
     testImplementation("junit:junit:4.13.2")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("junit:junit:4.13.2")
 }

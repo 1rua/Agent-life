@@ -3,7 +3,17 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
-android { namespace = "com.agentlife.tailnet.core" }
+android {
+    namespace = "com.agentlife.tailnet.core"
+    defaultConfig {
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // Fail-closed connected tests consume the authoritative ALTSNET1 blob
+        // provisioned by tools/p0t-device/provision-failclosed-bundle.sh on the
+        // attached device. The path is device-local and the blob is non-secret.
+        testInstrumentationRunnerArguments["p0tFailClosedBundle"] =
+            "/data/local/tmp/agentlife-p0t/failclosed.bundle"
+    }
+}
 
 val verifyTsnetAar by tasks.registering {
     group = "verification"
@@ -39,4 +49,7 @@ tasks.named("check") { dependsOn(verifyTsnetAar) }
 dependencies {
     implementation(project(":core-model"))
     implementation(files("libs/tsnet-android-1.98.10.aar"))
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("junit:junit:4.13.2")
 }

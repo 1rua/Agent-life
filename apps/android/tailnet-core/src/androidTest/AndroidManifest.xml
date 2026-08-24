@@ -1,0 +1,7 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:name="com.agentlife.tailnet.core.P0tGoRuntimeEnvApplication" />
+    <!-- 测试宿主（androidTest APK）允许的真实网络访问；只影响测试专用 APK，
+         不改正式 app 权限面（正式 app 仍仅声明 INTERNET）。 -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+</manifest>

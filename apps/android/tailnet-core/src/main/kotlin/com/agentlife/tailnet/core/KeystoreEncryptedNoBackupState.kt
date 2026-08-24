@@ -29,7 +29,9 @@ class KeystoreEncryptedNoBackupState(
 
     override fun write(value: ByteArray) {
         require(value.isNotEmpty()) { "node state must not be empty" }
-        val iv = ByteArray(IV_SIZE).also { java.security.SecureRandom().nextBytes(it) }
+        // 方案②（用户已确认）：Keystore 在 randomized-encryption 下自行生成 IV，
+        // 加密后从 cipher.iv 取回并写进信封；信封格式不变（iv(12B)||ciphertext）。
+        val iv = ByteArray(IV_SIZE)
         val ciphertext = encrypt(value, iv)
         val envelope = ByteArray(IV_SIZE + ciphertext.size)
         iv.copyInto(envelope, 0)
@@ -69,9 +71,14 @@ class KeystoreEncryptedNoBackupState(
         }
     }
 
-    private fun encrypt(plaintext: ByteArray, iv: ByteArray): ByteArray {
+    private fun encrypt(plaintext: ByteArray, ivOut: ByteArray): ByteArray {
         val cipher = Cipher.getInstance(TRANSFORMATION)
-        cipher.init(Cipher.ENCRYPT_MODE, key(), GCMParameterSpec(TAG_BITS, iv))
+        // 不传 GCMParameterSpec：Keystore 在 RandomizedEncryptionRequired(true)
+        // 下手动生成随机 IV，随后从 cipher.iv 读回写入信封。
+        cipher.init(Cipher.ENCRYPT_MODE, key())
+        val generated = checkNotNull(cipher.iv) { "keystore must provide a generated IV" }
+        require(generated.size == IV_SIZE) { "keystore IV size unexpected: ${generated.size}" }
+        generated.copyInto(ivOut, 0)
         return cipher.doFinal(plaintext)
     }
 

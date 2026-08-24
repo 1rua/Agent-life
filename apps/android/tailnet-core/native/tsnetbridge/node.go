@@ -5,8 +5,12 @@ import (
 	"context"
 	"crypto/tls"
 	"net"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"tailscale.com/envknob"
@@ -15,6 +19,51 @@ import (
 )
 
 const startTimeout = 60 * time.Second
+
+// appWritableVarRoot yields a writable, app-private userspace varRoot on
+// Android where $HOME is unusable (no /etc/passwd-based home; "/" is
+// read-only). Android processes expose their package name as /proc/self/cmdline,
+// so the dir resolves to /data/user/0/<pkg>/files/tsnet-uconfig without any
+// caller-supplied context or environment. The dir is created up front so it is
+// guaranteed writable. Non-Android builds return "" so the default
+// os.UserConfigDir behavior is preserved.
+// userspaceVarRoot is an optional caller-supplied writable varRoot (Android
+// apps pass their private files dir at startup; this avoids any filesystem/
+// env/proc assumptions). When empty, appWritableVarRoot(), then the default
+// os.UserConfigDir behavior, apply.
+var userspaceVarRoot atomic.Pointer[string]
+
+// SetUserspaceVarRoot installs the userspace varRoot used by subsequent
+// Started nodes. It must be called before Start; it is exported to Kotlin via
+// gobind so the app can supply its app-private files dir.
+func SetUserspaceVarRoot(path string) {
+	if path == "" {
+		return
+	}
+	p := path
+	userspaceVarRoot.Store(&p)
+}
+
+func appWritableVarRoot() string {
+	if runtime.GOOS != "android" {
+		return ""
+	}
+	raw, err := os.ReadFile("/proc/self/cmdline")
+	if err != nil {
+		return ""
+	}
+	first := strings.SplitN(string(raw), "\x00", 2)[0]
+	first = strings.TrimSpace(first)
+	first = strings.TrimPrefix(first, "/")
+	if first == "" || strings.Contains(first, "/") {
+		return ""
+	}
+	dir := "/data/user/0/" + first + "/files/tsnet-uconfig"
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return ""
+	}
+	return dir
+}
 
 type enrollment struct {
 	Hostname       string
@@ -96,11 +145,24 @@ func Start(bootstrapBytes, restoredStateBytes []byte, sink StateSink) (*Node, er
 	}
 
 	envknob.SetNoLogsNoSupport()
+	varRoot := ""
+	if p := userspaceVarRoot.Load(); p != nil && *p != "" {
+		varRoot = *p
+	} else {
+		varRoot = appWritableVarRoot()
+	}
+	if varRoot != "" {
+		// tsnet 仍可能调用 os.UserConfigDir()（配置目录）。Go 侧 os.Setenv 会实时
+		// 更新 Go 自身 env 缓存（与 Java setenv 不同），保证 Home/配置目录可写。
+		_ = os.Setenv("HOME", varRoot)
+		_ = os.Setenv("XDG_CONFIG_HOME", filepath.Join(varRoot, ".config"))
+	}
 	server := &tsnet.Server{
 		Hostname:     enroll.Hostname,
 		ControlURL:   enroll.ControlURL,
 		AuthKey:      string(authKey),
 		Store:        store,
+		Dir:          varRoot,
 		Ephemeral:    false,
 		RunWebClient: false,
 		Logf:         codeOnlyLogf,

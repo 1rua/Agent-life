@@ -104,6 +104,19 @@ class AgentLifeApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // P0t 真机发现的生产缺陷修复：Android 进程没有可写 HOME，嵌入式 tsnet/
+        // userspace 启动需要 $HOME/.config 作 varRoot（否则 “mkdir /.config:
+        // read-only file system” 立即失败）。转到 noBackupFilesDir（可写、不备份）。
+        runCatching { android.system.Os.setenv("HOME", noBackupFilesDir.absolutePath, true) }
+        runCatching {
+            android.system.Os.setenv("XDG_CONFIG_HOME", File(noBackupFilesDir, ".config").absolutePath, true)
+        }
+        // 把 app 私有可写目录注入到 userspace varRoot（配套 AAR 的 SetUserspaceVarRoot）。
+        runCatching {
+            com.agentlife.tailnet.core.TsnetBootstrap.configureUserspaceVarRoot(
+                File(noBackupFilesDir, "tsnet-uconfig").absolutePath,
+            )
+        }
         notificationAuthority = PersistentNotificationPolicyAuthority(
             FileNotificationPolicyPersistence(
                 File(noBackupFilesDir, "notification-authority-v1.bin"),

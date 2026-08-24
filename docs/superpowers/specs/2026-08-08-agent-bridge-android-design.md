@@ -1,5 +1,8 @@
 # Agent Bridge Android 与 Agent 端集成设计规格
 
+> [!WARNING]
+> 本文已于 2026-08-24 被 [Agent-life 模块化插件架构规格](./2026-08-24-modular-plugin-architecture.md) 取代，仅保留历史背景。独立 Device Bridge、Tailscale 默认链路和 App 内建能力不再是当前架构要求。
+
 - 日期：2026-08-08
 - 修订日期：2026-08-09
 - 状态：规格 v1.1；用户已于 2026-08-08 书面确认，2026-08-09 确认 App 内嵌 Tailscale 且不占系统 VPN 通道的网络修订

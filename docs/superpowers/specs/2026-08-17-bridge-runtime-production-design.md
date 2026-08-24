@@ -1,5 +1,8 @@
 # Bridge runtime 生产部署设计（2026-08-17）
 
+> [!WARNING]
+> 本文已于 2026-08-24 被 [Agent-life 模块化插件架构规格](./2026-08-24-modular-plugin-architecture.md) 取代，仅保留历史背景。独立 Docker/systemd Bridge 不再是生产目标；Gateway 直接安装为 Hermes 或 OpenClaw 宿主插件。
+
 ## 结论
 
 首版采用单主机生产垂直切片：Node 24 内置 SQLite、同库多进程
