@@ -27,11 +27,11 @@
     },
     "base64urlEd25519PublicKey": {
       "type": "string",
-      "pattern": "^[A-Za-z0-9_-]{42}[AQgw]$"
+      "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
     },
     "base64urlEd25519Signature": {
       "type": "string",
-      "pattern": "^[A-Za-z0-9_-]{85}[AEIMQUYcgkosw048]$"
+      "pattern": "^[A-Za-z0-9_-]{85}[AQgw]$"
     },
     "success": {
       "type": "object",

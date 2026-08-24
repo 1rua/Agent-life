@@ -235,6 +235,47 @@ describe("Gateway Protocol v2 Schema registry", () => {
     expect(validateGatewayValue("session.device", value)).toMatchObject({ ok: false });
   });
 
+  describe("canonical base64url tail bits", () => {
+    const allFfPublicKey = `${"_".repeat(42)}8`;
+    const allFfSignature = `${"_".repeat(85)}w`;
+
+    it("accepts the canonical encoding of a 32-byte all-0xff Ed25519 public key", () => {
+      const value = clone(validValues["session.password"]) as {
+        installation: Record<string, unknown>;
+      };
+      value.installation.devicePublicKey = allFfPublicKey;
+
+      expect(validateGatewayValue("session.password", value)).toEqual({ ok: true });
+    });
+
+    it("accepts the canonical encoding of a 64-byte all-0xff Ed25519 signature", () => {
+      const value = {
+        ...(clone(validValues["session.device"]) as Record<string, unknown>),
+        signature: allFfSignature,
+      };
+
+      expect(validateGatewayValue("session.device", value)).toEqual({ ok: true });
+    });
+
+    it("rejects a 64-byte signature tail that satisfies mod4 but not mod16", () => {
+      const value = {
+        ...(clone(validValues["session.device"]) as Record<string, unknown>),
+        signature: `${"_".repeat(85)}E`,
+      };
+
+      expect(validateGatewayValue("session.device", value)).toMatchObject({ ok: false });
+    });
+
+    it("rejects a non-canonical 32-byte public-key tail", () => {
+      const value = clone(validValues["session.password"]) as {
+        installation: Record<string, unknown>;
+      };
+      value.installation.devicePublicKey = `${"_".repeat(42)}9`;
+
+      expect(validateGatewayValue("session.password", value)).toMatchObject({ ok: false });
+    });
+  });
+
   it.each([
     ["negotiate.request", "negotiationId", (value: Record<string, unknown>) => {
       asRecord(value.protocol).major = 3;
