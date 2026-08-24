@@ -1,0 +1,182 @@
+import {
+  Ajv2020,
+  type ErrorObject,
+  type ValidateFunction,
+} from "ajv/dist/2020.js";
+import addFormatsImport from "ajv-formats";
+
+import attachmentDocument from "../schemas/attachment.schema.json" with { type: "json" };
+import conversationDocument from "../schemas/conversation.schema.json" with { type: "json" };
+import deviceRequestDocument from "../schemas/device-request.schema.json" with { type: "json" };
+import envelopeDocument from "../schemas/envelope.schema.json" with { type: "json" };
+import eventDocument from "../schemas/event.schema.json" with { type: "json" };
+import negotiateDocument from "../schemas/negotiate.schema.json" with { type: "json" };
+import sessionDocument from "../schemas/session.schema.json" with { type: "json" };
+
+export type GatewaySchemaName =
+  | "negotiate.request"
+  | "negotiate.response"
+  | "session.password"
+  | "session.refresh"
+  | "session.device"
+  | "conversation.create"
+  | "message.create"
+  | "attachment.create"
+  | "event"
+  | "device.request";
+
+export type ValidationResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly errors: readonly string[] };
+
+type SchemaObject = Record<string, unknown>;
+type SchemaDocument = SchemaObject & {
+  readonly $id: string;
+  readonly $defs: Record<string, SchemaObject>;
+};
+
+const documentEntries = [
+  ["envelope", envelopeDocument],
+  ["negotiate", negotiateDocument],
+  ["session", sessionDocument],
+  ["conversation", conversationDocument],
+  ["attachment", attachmentDocument],
+  ["event", eventDocument],
+  ["deviceRequest", deviceRequestDocument],
+] as unknown as readonly (readonly [string, SchemaDocument])[];
+
+const documents = documentEntries.map(([, document]) => document);
+
+const addFormats = addFormatsImport as unknown as (ajv: Ajv2020) => Ajv2020;
+
+const definitions: Record<GatewaySchemaName, readonly [SchemaDocument, string]> = {
+  "negotiate.request": [negotiateDocument as SchemaDocument, "request"],
+  "negotiate.response": [negotiateDocument as SchemaDocument, "response"],
+  "session.password": [sessionDocument as SchemaDocument, "password"],
+  "session.refresh": [sessionDocument as SchemaDocument, "refresh"],
+  "session.device": [sessionDocument as SchemaDocument, "device"],
+  "conversation.create": [conversationDocument as SchemaDocument, "create"],
+  "message.create": [conversationDocument as SchemaDocument, "messageCreate"],
+  "attachment.create": [attachmentDocument as SchemaDocument, "create"],
+  event: [eventDocument as SchemaDocument, "event"],
+  "device.request": [deviceRequestDocument as SchemaDocument, "request"],
+};
+
+const ajv = new Ajv2020({
+  strict: true,
+  allErrors: true,
+  coerceTypes: false,
+  removeAdditional: false,
+  useDefaults: false,
+});
+addFormats(ajv);
+for (const document of documents) ajv.addSchema(document);
+
+const schemaRef = ([document, definition]: readonly [SchemaDocument, string]): string =>
+  `${document.$id}#/$defs/${definition}`;
+
+const documentPrefixById = new Map(
+  documentEntries.map(([prefix, document]) => [document.$id, prefix]),
+);
+
+const bundledDefinitionName = (documentId: string, definition: string): string => {
+  const prefix = documentPrefixById.get(documentId);
+  if (prefix === undefined) throw new Error(`SCHEMA_DOCUMENT_NOT_REGISTERED:${documentId}`);
+  return `${prefix}__${definition}`;
+};
+
+const localizeRef = (ref: string, currentDocument: SchemaDocument): string => {
+  const localPrefix = "#/$defs/";
+  if (ref.startsWith(localPrefix)) {
+    return `#/$defs/${bundledDefinitionName(currentDocument.$id, ref.slice(localPrefix.length))}`;
+  }
+  for (const document of documents) {
+    const externalPrefix = `${document.$id}#/$defs/`;
+    if (ref.startsWith(externalPrefix)) {
+      return `#/$defs/${bundledDefinitionName(document.$id, ref.slice(externalPrefix.length))}`;
+    }
+  }
+  return ref;
+};
+
+const localizeSchema = (value: unknown, currentDocument: SchemaDocument): unknown => {
+  if (Array.isArray(value)) return value.map((item) => localizeSchema(item, currentDocument));
+  if (typeof value !== "object" || value === null) return value;
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, child]) => [
+      key,
+      key === "$ref" && typeof child === "string"
+        ? localizeRef(child, currentDocument)
+        : localizeSchema(child, currentDocument),
+    ]),
+  );
+};
+
+const bundledDefinitions = Object.fromEntries(
+  documentEntries.flatMap(([prefix, document]) =>
+    Object.entries(document.$defs).map(([definition, schema]) => [
+      `${prefix}__${definition}`,
+      localizeSchema(schema, document),
+    ]),
+  ),
+) as Record<string, SchemaObject>;
+
+const selfContainedSchema = ([document, definition]: readonly [SchemaDocument, string]): SchemaObject => {
+  const root = localizeSchema(document.$defs[definition], document);
+  if (typeof root !== "object" || root === null || Array.isArray(root)) {
+    throw new Error(`SCHEMA_NOT_REGISTERED:${document.$id}#/$defs/${definition}`);
+  }
+  return {
+    $schema: "https://json-schema.org/draft/2020-12/schema",
+    ...(root as SchemaObject),
+    $defs: bundledDefinitions,
+  };
+};
+
+const publicSchemas = new Map<GatewaySchemaName, SchemaObject>(
+  (Object.entries(definitions) as [GatewaySchemaName, readonly [SchemaDocument, string]][]).map(
+    ([name, target]) => [name, selfContainedSchema(target)],
+  ),
+);
+
+const validators = new Map<GatewaySchemaName, ValidateFunction>(
+  (Object.entries(definitions) as [GatewaySchemaName, readonly [SchemaDocument, string]][]).map(
+    ([name, target]) => {
+      const validate = ajv.getSchema(schemaRef(target));
+      if (validate === undefined) throw new Error(`SCHEMA_NOT_REGISTERED:${name}`);
+      return [name, validate];
+    },
+  ),
+);
+
+const normalizeAjvErrors = (
+  errors: readonly ErrorObject[] | null | undefined,
+): readonly string[] =>
+  Object.freeze(
+    (errors ?? [])
+      .map(({ instancePath, keyword, message }) =>
+        `${instancePath === "" ? "/" : instancePath} ${keyword} ${message ?? "validation failed"}`,
+      )
+      .sort(),
+  );
+
+const registeredDefinition = (name: GatewaySchemaName): SchemaObject => {
+  const schema = publicSchemas.get(name);
+  if (schema === undefined) throw new Error(`SCHEMA_NOT_REGISTERED:${name}`);
+  return schema;
+};
+
+export const schemaFor = (name: GatewaySchemaName): object =>
+  structuredClone(registeredDefinition(name));
+
+export const validateGatewayValue = (
+  name: GatewaySchemaName,
+  value: unknown,
+): ValidationResult => {
+  const validate = validators.get(name);
+  if (validate === undefined) throw new Error(`SCHEMA_NOT_REGISTERED:${String(name)}`);
+  return validate(value)
+    ? { ok: true }
+    : { ok: false, errors: normalizeAjvErrors(validate.errors) };
+};

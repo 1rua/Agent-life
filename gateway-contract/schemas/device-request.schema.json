@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-life.dev/schemas/gateway/v2/device-request.schema.json",
+  "$defs": {
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requestId",
+        "capability",
+        "provider",
+        "parameters",
+        "risk",
+        "grantRevision",
+        "createdAt",
+        "expiresAt",
+        "requiresForegroundConfirmation"
+      ],
+      "properties": {
+        "requestId": {
+          "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
+        },
+        "capability": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "version"],
+          "properties": {
+            "id": { "type": "string", "minLength": 1 },
+            "version": { "type": "string", "minLength": 1 }
+          }
+        },
+        "provider": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["pluginId", "authorKeyId"],
+          "properties": {
+            "pluginId": { "type": "string", "minLength": 1 },
+            "authorKeyId": {
+              "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/prefixedSha256"
+            }
+          }
+        },
+        "parameters": {
+          "$comment": "Dispatch by the negotiated capability id and version and validate again with its capability sub-Schema; missing sub-Schema must fail closed.",
+          "type": "object"
+        },
+        "risk": {
+          "enum": ["read", "sync", "write", "high-privilege-ephemeral"]
+        },
+        "grantRevision": { "type": "integer", "minimum": 0 },
+        "createdAt": {
+          "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/utcMillis"
+        },
+        "expiresAt": {
+          "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/utcMillis"
+        },
+        "requiresForegroundConfirmation": { "type": "boolean" }
+      }
+    }
+  }
+}

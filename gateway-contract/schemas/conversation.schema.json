@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-life.dev/schemas/gateway/v2/conversation.schema.json",
+  "$defs": {
+    "create": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["clientConversationId"],
+      "properties": {
+        "clientConversationId": {
+          "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
+        },
+        "title": { "type": "string" }
+      }
+    },
+    "messageCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["clientMessageId", "text", "attachments"],
+      "properties": {
+        "clientMessageId": {
+          "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
+        },
+        "text": { "type": "string" },
+        "attachments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["attachmentId"],
+            "properties": {
+              "attachmentId": {
+                "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
