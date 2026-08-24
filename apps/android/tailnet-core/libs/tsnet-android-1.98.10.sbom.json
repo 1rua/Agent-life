@@ -4858,7 +4858,7 @@
         },
         {
           "name": "aar:sha256",
-          "value": "a654e487f88cc35a7baa238666151746f83dec12000a3078f6a83508df791e87"
+          "value": "510182647fffb0e1ee050cdcff28694db65fed6070bf189fdf916880fdf919ea"
         }
       ],
       "type": "library",
@@ -4878,7 +4878,7 @@
       }
     ]
   },
-  "serialNumber": "urn:uuid:76102812-22c7-4fe8-92dc-65a106147c9c",
+  "serialNumber": "urn:uuid:217f4213-8572-4081-8e1d-b61e02c597f3",
   "specVersion": "1.5",
   "version": 1
 }

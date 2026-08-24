@@ -57,3 +57,12 @@ Thumbs.db
 /bridge-runtime/node_modules
 
 /bridge-runtime/deploy/secrets/
+docs/mvp/evidence/p0t/2026-08-19T15-10-02Z-p0t-real-device-all
+apps/android/tailnet-core/libs/tsnet-android-1.98.10.aar
+apps/android/tailnet-core/libs/tsnet-android-1.98.10.aar
+docs/mvp/evidence/p0t/2026-08-17T11-35-26Z-p0t-device-redacted/inventory.json
+apps/android/tailnet-core/libs/tsnet-android-1.98.10.sbom.json
+apps/android/tailnet-core/libs/tsnet-android-1.98.10.provenance.json
+apps/android/tailnet-core/libs/tsnet-android-1.98.10.aar.sha256
+apps/android/tailnet-core/libs/tsnet-android-1.98.10.aar
+apps/android/tailnet-core/libs/tsnet-android-1.98.10.sbom.json
