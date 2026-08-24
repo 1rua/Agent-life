@@ -22,7 +22,7 @@
             },
             "displayName": { "type": "string", "minLength": 1 },
             "devicePublicKey": {
-              "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/base64url"
+              "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/base64urlEd25519PublicKey"
             }
           }
         }
@@ -86,7 +86,7 @@
           "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
         },
         "signature": {
-          "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/base64url"
+          "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/base64urlEd25519Signature"
         }
       }
     }

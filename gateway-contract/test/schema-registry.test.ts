@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { Ajv2020 } from "ajv/dist/2020.js";
+import addFormatsImport from "ajv-formats";
 
 import {
   schemaFor,
@@ -8,6 +10,9 @@ import {
 
 const hexDigest = "a".repeat(64);
 const prefixedDigest = `sha256:${hexDigest}`;
+const publicKey = "A".repeat(43);
+const signature = "A".repeat(86);
+const addFormats = addFormatsImport as unknown as (ajv: Ajv2020) => Ajv2020;
 
 const validValues: Record<GatewaySchemaName, unknown> = {
   "negotiate.request": {
@@ -57,7 +62,7 @@ const validValues: Record<GatewaySchemaName, unknown> = {
     installation: {
       installationId: "install_1",
       displayName: "Alice's phone",
-      devicePublicKey: "YWJjZA",
+      devicePublicKey: publicKey,
     },
   },
   "session.refresh": {
@@ -73,7 +78,7 @@ const validValues: Record<GatewaySchemaName, unknown> = {
     installationId: "install_1",
     deviceId: "device_1",
     challenge: "challenge_1",
-    signature: "YWJjZA",
+    signature,
   },
   "conversation.create": {
     clientConversationId: "conversation_1",
@@ -114,11 +119,36 @@ const validValues: Record<GatewaySchemaName, unknown> = {
 
 const clone = <T>(value: T): T => structuredClone(value);
 
+const asRecord = (value: unknown): Record<string, unknown> =>
+  value as Record<string, unknown>;
+
+const withUnknownAt = (value: unknown, path: readonly (string | number)[]): unknown => {
+  const mutated = clone(value);
+  let current: unknown = mutated;
+  for (const segment of path) {
+    current = Array.isArray(current)
+      ? current[segment as number]
+      : asRecord(current)[segment as string];
+  }
+  asRecord(current).unexpected = true;
+  return mutated;
+};
+
 describe("Gateway Protocol v2 Schema registry", () => {
   it.each(Object.entries(validValues) as [GatewaySchemaName, unknown][])(
     "accepts a valid %s value",
     (name, value) => {
       expect(validateGatewayValue(name, value)).toEqual({ ok: true });
+    },
+  );
+
+  it.each(Object.entries(validValues) as [GatewaySchemaName, unknown][])(
+    "returns a self-contained %s Schema that a fresh strict Ajv 2020 can compile and execute",
+    (name, value) => {
+      const standaloneAjv = addFormats(new Ajv2020({ strict: true }));
+      const validate = standaloneAjv.compile(schemaFor(name));
+
+      expect(validate(value)).toBe(true);
     },
   );
 
@@ -162,7 +192,7 @@ describe("Gateway Protocol v2 Schema registry", () => {
     expect(validateGatewayValue("message.create", value)).toMatchObject({ ok: false });
   });
 
-  it("enforces opaque ID length and visible ASCII boundaries", () => {
+  it("enforces opaque ID length while accepting space and control ASCII required by the contract", () => {
     const validateId = (clientConversationId: string) =>
       validateGatewayValue("conversation.create", { clientConversationId });
 
@@ -170,10 +200,120 @@ describe("Gateway Protocol v2 Schema registry", () => {
     expect(validateId("a")).toEqual({ ok: true });
     expect(validateId("a".repeat(128))).toEqual({ ok: true });
     expect(validateId("a".repeat(129))).toMatchObject({ ok: false });
-    expect(validateId("contains space")).toMatchObject({ ok: false });
-    expect(validateId("line\nbreak")).toMatchObject({ ok: false });
-    expect(validateId("nul\0byte")).toMatchObject({ ok: false });
+    expect(validateId("contains space")).toEqual({ ok: true });
+    expect(validateId("line\nbreak")).toEqual({ ok: true });
+    expect(validateId("nul\0byte")).toEqual({ ok: true });
+    expect(validateId("delete\u007fbyte")).toEqual({ ok: true });
     expect(validateId("设备")).toMatchObject({ ok: false });
+  });
+
+  it.each([
+    ["wrong decoded length", "A".repeat(42)],
+    ["base64url length modulo four equals one", "A".repeat(41)],
+    ["non-canonical tail bits", `${"A".repeat(42)}B`],
+    ["padding", `${"A".repeat(43)}=`],
+  ])("rejects a device public key with %s", (_reason, devicePublicKey) => {
+    const value = clone(validValues["session.password"]) as {
+      installation: Record<string, unknown>;
+    };
+    value.installation.devicePublicKey = devicePublicKey;
+
+    expect(validateGatewayValue("session.password", value)).toMatchObject({ ok: false });
+  });
+
+  it.each([
+    ["wrong decoded length", "A".repeat(85)],
+    ["base64url length modulo four equals one", "A".repeat(81)],
+    ["non-canonical tail bits", `${"A".repeat(85)}B`],
+    ["padding", `${"A".repeat(86)}=`],
+  ])("rejects a device signature with %s", (_reason, invalidSignature) => {
+    const value = {
+      ...(clone(validValues["session.device"]) as Record<string, unknown>),
+      signature: invalidSignature,
+    };
+
+    expect(validateGatewayValue("session.device", value)).toMatchObject({ ok: false });
+  });
+
+  it.each([
+    ["negotiate.request", "negotiationId", (value: Record<string, unknown>) => {
+      asRecord(value.protocol).major = 3;
+    }],
+    ["negotiate.response", "protocol", (value: Record<string, unknown>) => {
+      asRecord(value.features).messages = "unknown-message-v2";
+    }],
+    ["session.password", "password", (value: Record<string, unknown>) => {
+      asRecord(value.installation).devicePublicKey = "A";
+    }],
+    ["session.refresh", "refreshCredential", (value: Record<string, unknown>) => {
+      value.refreshCredential = "";
+    }],
+    ["session.device", "challenge", (value: Record<string, unknown>) => {
+      value.signature = "A";
+    }],
+    ["conversation.create", "clientConversationId", (value: Record<string, unknown>) => {
+      value.clientConversationId = "设备";
+    }],
+    ["message.create", "clientMessageId", (value: Record<string, unknown>) => {
+      value.clientMessageId = "";
+    }],
+    ["attachment.create", "clientAttachmentId", (value: Record<string, unknown>) => {
+      value.sha256 = hexDigest.toUpperCase();
+    }],
+    ["event", "correlationId", (value: Record<string, unknown>) => {
+      value.occurredAt = "2026-08-24T12:00:00Z";
+    }],
+    ["device.request", "requestId", (value: Record<string, unknown>) => {
+      value.risk = "unknown-risk";
+    }],
+  ] as const)(
+    "rejects missing required, unknown top-level, and critical invalid fields for %s",
+    (name, requiredKey, makeCriticalInvalid) => {
+      const missing = clone(validValues[name]) as Record<string, unknown>;
+      delete missing[requiredKey];
+      const unknown = {
+        ...(clone(validValues[name]) as Record<string, unknown>),
+        unexpected: true,
+      };
+      const criticalInvalid = clone(validValues[name]) as Record<string, unknown>;
+      makeCriticalInvalid(criticalInvalid);
+
+      expect(validateGatewayValue(name, missing)).toMatchObject({ ok: false });
+      expect(validateGatewayValue(name, unknown)).toMatchObject({ ok: false });
+      expect(validateGatewayValue(name, criticalInvalid)).toMatchObject({ ok: false });
+    },
+  );
+
+  it.each([
+    ["negotiate.request", ["protocol"]],
+    ["negotiate.request", ["client"]],
+    ["negotiate.request", ["features"]],
+    ["negotiate.request", ["schemaHashes"]],
+    ["negotiate.response", ["protocol"]],
+    ["negotiate.response", ["features"]],
+    ["negotiate.response", ["limits"]],
+    ["negotiate.response", ["gatewayIdentity"]],
+    ["session.password", ["installation"]],
+    ["message.create", ["attachments", 0]],
+    ["device.request", ["capability"]],
+    ["device.request", ["provider"]],
+  ] as const)("rejects unknown fields in the static nested object %s:%s", (name, path) => {
+    expect(validateGatewayValue(name, withUnknownAt(validValues[name], path))).toMatchObject({
+      ok: false,
+    });
+  });
+
+  it("requires session.device to contain exactly one account selector", () => {
+    const accountSelected = clone(validValues["session.device"]) as Record<string, unknown>;
+    const both = { ...accountSelected, username: "alice" };
+    const neither = { ...accountSelected };
+    delete neither.accountId;
+    const usernameSelected = { ...neither, username: "alice" };
+
+    expect(validateGatewayValue("session.device", accountSelected)).toEqual({ ok: true });
+    expect(validateGatewayValue("session.device", usernameSelected)).toEqual({ ok: true });
+    expect(validateGatewayValue("session.device", both)).toMatchObject({ ok: false });
+    expect(validateGatewayValue("session.device", neither)).toMatchObject({ ok: false });
   });
 
   it("accepts only RFC 3339 UTC timestamps with exactly millisecond precision", () => {

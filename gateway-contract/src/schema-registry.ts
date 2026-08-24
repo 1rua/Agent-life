@@ -35,15 +35,17 @@ type SchemaDocument = SchemaObject & {
   readonly $defs: Record<string, SchemaObject>;
 };
 
-const documents = [
-  envelopeDocument,
-  negotiateDocument,
-  sessionDocument,
-  conversationDocument,
-  attachmentDocument,
-  eventDocument,
-  deviceRequestDocument,
-] as unknown as readonly SchemaDocument[];
+const documentEntries = [
+  ["envelope", envelopeDocument],
+  ["negotiate", negotiateDocument],
+  ["session", sessionDocument],
+  ["conversation", conversationDocument],
+  ["attachment", attachmentDocument],
+  ["event", eventDocument],
+  ["deviceRequest", deviceRequestDocument],
+] as unknown as readonly (readonly [string, SchemaDocument])[];
+
+const documents = documentEntries.map(([, document]) => document);
 
 const addFormats = addFormatsImport as unknown as (ajv: Ajv2020) => Ajv2020;
 
@@ -73,6 +75,71 @@ for (const document of documents) ajv.addSchema(document);
 const schemaRef = ([document, definition]: readonly [SchemaDocument, string]): string =>
   `${document.$id}#/$defs/${definition}`;
 
+const documentPrefixById = new Map(
+  documentEntries.map(([prefix, document]) => [document.$id, prefix]),
+);
+
+const bundledDefinitionName = (documentId: string, definition: string): string => {
+  const prefix = documentPrefixById.get(documentId);
+  if (prefix === undefined) throw new Error(`SCHEMA_DOCUMENT_NOT_REGISTERED:${documentId}`);
+  return `${prefix}__${definition}`;
+};
+
+const localizeRef = (ref: string, currentDocument: SchemaDocument): string => {
+  const localPrefix = "#/$defs/";
+  if (ref.startsWith(localPrefix)) {
+    return `#/$defs/${bundledDefinitionName(currentDocument.$id, ref.slice(localPrefix.length))}`;
+  }
+  for (const document of documents) {
+    const externalPrefix = `${document.$id}#/$defs/`;
+    if (ref.startsWith(externalPrefix)) {
+      return `#/$defs/${bundledDefinitionName(document.$id, ref.slice(externalPrefix.length))}`;
+    }
+  }
+  return ref;
+};
+
+const localizeSchema = (value: unknown, currentDocument: SchemaDocument): unknown => {
+  if (Array.isArray(value)) return value.map((item) => localizeSchema(item, currentDocument));
+  if (typeof value !== "object" || value === null) return value;
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, child]) => [
+      key,
+      key === "$ref" && typeof child === "string"
+        ? localizeRef(child, currentDocument)
+        : localizeSchema(child, currentDocument),
+    ]),
+  );
+};
+
+const bundledDefinitions = Object.fromEntries(
+  documentEntries.flatMap(([prefix, document]) =>
+    Object.entries(document.$defs).map(([definition, schema]) => [
+      `${prefix}__${definition}`,
+      localizeSchema(schema, document),
+    ]),
+  ),
+) as Record<string, SchemaObject>;
+
+const selfContainedSchema = ([document, definition]: readonly [SchemaDocument, string]): SchemaObject => {
+  const root = localizeSchema(document.$defs[definition], document);
+  if (typeof root !== "object" || root === null || Array.isArray(root)) {
+    throw new Error(`SCHEMA_NOT_REGISTERED:${document.$id}#/$defs/${definition}`);
+  }
+  return {
+    $schema: "https://json-schema.org/draft/2020-12/schema",
+    ...(root as SchemaObject),
+    $defs: bundledDefinitions,
+  };
+};
+
+const publicSchemas = new Map<GatewaySchemaName, SchemaObject>(
+  (Object.entries(definitions) as [GatewaySchemaName, readonly [SchemaDocument, string]][]).map(
+    ([name, target]) => [name, selfContainedSchema(target)],
+  ),
+);
+
 const validators = new Map<GatewaySchemaName, ValidateFunction>(
   (Object.entries(definitions) as [GatewaySchemaName, readonly [SchemaDocument, string]][]).map(
     ([name, target]) => {
@@ -95,9 +162,7 @@ const normalizeAjvErrors = (
   );
 
 const registeredDefinition = (name: GatewaySchemaName): SchemaObject => {
-  const target = definitions[name];
-  if (target === undefined) throw new Error(`SCHEMA_NOT_REGISTERED:${String(name)}`);
-  const schema = target[0].$defs[target[1]];
+  const schema = publicSchemas.get(name);
   if (schema === undefined) throw new Error(`SCHEMA_NOT_REGISTERED:${name}`);
   return schema;
 };

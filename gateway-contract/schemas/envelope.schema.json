@@ -4,7 +4,9 @@
   "$defs": {
     "opaqueId": {
       "type": "string",
-      "pattern": "^[!-~]{1,128}$"
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[\\u0000-\\u007f]+$"
     },
     "utcMillis": {
       "type": "string",
@@ -23,9 +25,13 @@
       "type": "string",
       "minLength": 1
     },
-    "base64url": {
+    "base64urlEd25519PublicKey": {
       "type": "string",
-      "pattern": "^[A-Za-z0-9_-]+$"
+      "pattern": "^[A-Za-z0-9_-]{42}[AQgw]$"
+    },
+    "base64urlEd25519Signature": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{85}[AEIMQUYcgkosw048]$"
     },
     "success": {
       "type": "object",
