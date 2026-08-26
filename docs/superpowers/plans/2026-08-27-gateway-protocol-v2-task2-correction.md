@@ -1,4 +1,4 @@
-# Gateway Protocol v2 Task 2 安全纠偏与实现计划
+# Gateway Protocol v2 原迁移计划 Task 2 安全纠偏与实现计划
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -14,7 +14,7 @@
 
 - `docs/contracts/gateway-protocol-v2.md` 是网络协议唯一权威来源；实现和向量不得创造契约外语义。
 - Gateway Protocol v2 不兼容 Bridge Protocol v1；不得导入 v1 wire bytes、身份、配对密钥、队列或数据库状态。
-- TypeScript、Python、Kotlin 后续必须从同一语义输入独立重建结果；Task 2 不建立共享运行二进制。
+- TypeScript、Python、Kotlin 后续必须从同一语义输入独立重建结果；本补充计划 Task 2 不建立共享运行二进制。
 - 动态 Schema 的来源必须在 validator 构造前已受信，运行期请求不得注入 Schema 或 `ValidateFunction`。
 - Android 本地授权仍是设备执行最终权威；Schema 与 Gateway 状态机不能冒充授权裁决。
 - 本计划只修改协议文档、迁移计划和 `gateway-contract/`；不得新建或修改 `integrations/openclaw/`、`integrations/hermes/`、Android runtime、Bridge v1 或 Tailscale 路径。
@@ -23,7 +23,7 @@
 
 ---
 
-### Task 1: 固化 Gateway v2 线协议、动态分派和状态权威
+### 本补充计划 Task 1: 固化 Gateway v2 线协议、动态分派和状态权威
 
 **Files:**
 - Create: `docs/superpowers/plans/2026-08-27-gateway-protocol-v2-task2-correction.md`
@@ -31,12 +31,12 @@
 - Modify: `docs/superpowers/plans/2026-08-24-modular-plugin-architecture-migration.md`
 
 **Interfaces:**
-- Produces: wire ID 正则 `^[A-Za-z0-9._~-]{1,128}$`
+- Produces: 封闭 opaque record ID 集合的 wire ID 正则 `^[A-Za-z0-9._~-]{1,128}$`，不覆盖 digest/key identity
 - Produces: canonical request target 的语言无关逐字节算法
 - Produces: 10 个 ASCII 字段、9 个 LF、末尾无 LF 的请求签名预像
-- Produces: 构造期不可变动态 Schema catalog 与可信 dispatch 规则
+- Produces: 构造期不可变动态 Schema catalog、`VerifiedSchemaBindingSet` 与无 digest runtime dispatch 规则
 - Produces: 完整 `AttachmentState × AttachmentEvent` 与 `DeviceRequestState × DeviceRequestEvent` 矩阵
-- Produces: 六组向量的闭合 `1.0.0` 格式和后续 Task 3/5/6/9 的消费边界
+- Produces: 六组向量的闭合 `1.0.0` meta-schema、`ClaimReceipt` 和本补充计划 Task 3、原迁移计划 Task 3/5/6/9 的消费边界
 
 - [ ] **Step 1: 修正 wire ID、header 和身份来源契约**
 
@@ -46,7 +46,7 @@
 wire-id = 1*128(ALPHA / DIGIT / "." / "_" / "~" / "-")
 ```
 
-所有 ID 仍为不透明值，接收方不得解析业务含义。以下 header 必须从 raw header 列表证明恰好出现一次：
+wire ID 只覆盖协议封闭列举的 opaque record IDs，包括 request/correlation/negotiation/installation/deployment/account/device/pairing/session/invitation/conversation/message/attachment/event/device-request/claim IDs。`authorKeyId`、`schemaSha256`、`tlsSpkiSha256`、内容摘要、编码公钥/签名/credential 以及 plugin/capability/version/operation/error code 不属于 wire ID，继续使用各自 Schema；不得静默改变 author-key encoding。以下九个认证 header 必须从 framework 合并前的 raw header 列表证明始终恰好出现一次：
 
 ```text
 Authorization
@@ -60,7 +60,7 @@ X-Agent-Life-Nonce
 X-Agent-Life-Signature
 ```
 
-重复、逗号合并、trim 后才合法、CR/LF/NUL/其他控制字符全部拒绝；header 名大小写不敏感，值不做 trim、unfold、first/last 选择。token 验证出的账号、设备、会话必须与 header 精确相等，后续业务只能读取一个 `VerifiedRequestContext`。
+条件 singleton 也从同一 raw 列表验证：已认证 `POST|PUT|DELETE` 的 `Idempotency-Key` 恰好一次而 `GET` 不出现；`Last-Event-ID` 只允许在带 canonical query cursor 的 `GET /events` 出现零或一次；JSON body 的 `Content-Type` 恰好一次；attachment content 的 `Content-Length` 和 `Digest` 各恰好一次，其他 entity-body 的 `Content-Length` 为零或一次。任何重复（包括相同值重复）、逗号合并、trim 后才合法、CR/LF/NUL/其他控制字符全部拒绝；header 名大小写不敏感，值不做 trim、unfold、first/last 选择。token 验证出的账号、设备、会话必须与 header 精确相等，后续业务只能读取一个 `VerifiedRequestContext`。
 
 - [ ] **Step 2: 固化 method、body、幂等和 SSE cursor 规则**
 
@@ -77,7 +77,7 @@ method 在线上区分大小写，不得通过 `toUpperCase()` 接受别名。bo
 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 ```
 
-副作用请求的 `Idempotency-Key` 必须精确等于已签名的 `X-Agent-Life-Request-Id`；重试可以更换 timestamp/nonce，但保持 request ID。认证 SSE 恢复以 canonical query 的 `cursor` 为权威，`Last-Event-ID` 若存在必须与 query 精确相等。
+已认证 `POST|PUT|DELETE` 的 `Idempotency-Key` 必须精确等于已签名的 `X-Agent-Life-Request-Id`；重试可以更换 timestamp/nonce，但保持 request ID。认证 SSE 恢复以 canonical query 的 `cursor` 为权威，`Last-Event-ID` 若存在必须与 query 精确相等且其他路由拒绝该 header。
 
 - [ ] **Step 3: 固化 canonical request target 算法**
 
@@ -156,7 +156,11 @@ type GatewaySubschemaKey =
   | { kind: "response.failure"; errorCode: string; schemaSha256: string };
 ```
 
-事件 type 来自可信 SSE `event:` 行；device key 的 provider/capability 从已经通过外壳验证的 value 提取，只有 schema digest 从协商会话上下文传入；success operation/status 来自本地请求上下文；failure code 从已验证 error envelope 提取。请求不得传入 Schema、resolver 或 `ValidateFunction`。重复 key、digest 不符、无法 strict 编译、未解析外部 `$ref` 在构造时失败；运行期未知/缺失 key 返回冻结的 validation errors。
+运行时 `TrustedGatewayDispatch` 不含 digest：event 只含可信 SSE `event:` type；device provider/capability 从已验证 value 提取；success operation/status 来自本地请求上下文；failure code 从已验证 error envelope 提取。构造器同时接收不可变 `VerifiedSchemaBindingSet`：event/response/error 的逻辑 key 只能从本地 verified core binding 选唯一 digest，device 逻辑 key 只能从 authenticated session/pairing binding 选唯一 digest。请求、payload、body、message 和通用调用方不得传入或覆盖 digest、Schema、binding、resolver 或 `ValidateFunction`。重复逻辑 key、同一逻辑 key 多 digest、binding 指向缺失 catalog、digest 不符均在构造时失败。
+
+catalog 格式 `1.0` 的 root 必须直接声明 `type: "object"` 与 `additionalProperties: false`，拒绝 root `$ref`；每个声明 object/properties 的遍历节点也必须直接 closed。只允许本地 `#/$defs/...` ref；拒绝 external/unresolved ref、`unevaluatedProperties`、`patternProperties`、`$dynamicRef`、`$dynamicAnchor`。构造器只遍历 `$defs`、`properties`、单 Schema `items` 和 `allOf|anyOf|oneOf` arrays，其他 Schema-bearing keyword 在格式 1.0 拒绝，并使用 visited set 防止 ref 循环。
+
+TypeScript diagnostics 固定为 `instancePath + "\\t" + schemaPath + "\\t" + keyword + "\\t" + JCS(params)`；dispatch error 使用两个空 path、keyword `dispatch` 和 JCS params。字符串去重后按 UTF-8 bytes 升序排序，冻结数组和外层失败结果。跨语言 `resultHash` 只覆盖 accepted/rejected normalized result，不覆盖 vendor diagnostics。
 
 - [ ] **Step 6: 固化附件矩阵**
 
@@ -191,7 +195,7 @@ type AttachmentEvent =
 | `failed` | `cleanup` | `deleted` |
 | `expired` | `cleanup` | `deleted` |
 
-全部其他组合抛 `INVALID_STATE_TRANSITION`。精确 HTTP 重试由 reducer 前的幂等账本处理，不给普通事件增加自循环。解除配对和删除账号属于 Task 3 的资源级事务，不伪装成逐附件事件。
+全部其他组合在纯 reducer 内部抛 `INVALID_STATE_TRANSITION`，该 code 不进入 wire error list。精确 HTTP 重试由 reducer 前的幂等账本处理，不给普通事件增加自循环。TTL 到期立即删除 staged bytes 并以 `expire` 记录 `expired`，后续 `cleanup` 才把元数据转为 `deleted`。解除配对和删除账号属于原迁移计划 Task 3 的资源级事务，不伪装成逐附件事件。
 
 - [ ] **Step 7: 固化设备请求 claim 与状态矩阵**
 
@@ -233,7 +237,9 @@ type DeviceRequestEvent =
 | `cancel_requested` | `result_outcome_unknown` | `outcome_unknown` |
 | `cancel_requested` | `recover_outcome_unknown` | `outcome_unknown` |
 
-全部其他组合抛 `INVALID_STATE_TRANSITION`，`outcome_unknown` 是不可被普通结果覆盖的终态。协议增加幂等 claim 操作；Android 必须在任何副作用前 claim。claim/result 的 SQLite、CAS、HTTP route 留给 Task 3/9。
+全部其他组合在纯 reducer 内部抛 `INVALID_STATE_TRANSITION`，`outcome_unknown` 是不可被普通结果覆盖的终态。HTTP malformed input 映射 `SCHEMA_INVALID`，幂等输入变化映射 `IDEMPOTENCY_CONFLICT`，已 claim 结果不确定映射 `OUTCOME_UNKNOWN`。
+
+协议增加幂等 claim 操作并返回服务端生成的 `ClaimReceipt { claimId, requestId, accountId, deviceId, pairingGeneration, grantRevision }`，其中 `requestId` 是设备请求 ID；`claimId` 是 wire ID，receipt 原子绑定上述字段并形成最小审计。Android 必须在任何副作用前 claim，result wire body 从 receipt 原样带回同一 `claimId` 与 `grantRevision`，不提交身份字段；Gateway 以服务端 receipt 和 `VerifiedRequestContext` 核对其他绑定，任一不匹配都拒绝。`device.request.cancel.requested` 只表达取消意图：未 claim 的 pending 可直接 `cancelled`，claim 后只能进入 `cancel_requested`，再由可信 result 决定 `cancelled`、其他真实终态或 `outcome_unknown`。claim/result 的 SQLite、CAS、HTTP route 留给原迁移计划 Task 3/5/9。
 
 - [ ] **Step 8: 固化向量格式与后续边界**
 
@@ -248,9 +254,11 @@ type DeviceRequestEvent =
 }
 ```
 
-顶层和 case 均拒绝未知字段；case 只含 `id`、`operation`、`input`、`expected`；ID 在六文件中全局唯一；每文件至少一个 `expected.outcome = "value"` 和一个 `"error"`；二进制用 lowercase hex；时间固定毫秒 UTC；不能出现 `skipped`、`futureOnly` 或无人消费 case。
+本补充计划 Task 3 新建 `gateway-contract/vectors/vector-set-1.0.0.schema.json`。精确 `vectorSet` 为 `request-signatures`、`protocol-negotiation`、`auth-sessions`、`attachments`、`sse-events`、`device-requests`；精确 operation 为 `request.target`、`request.signature`、`schema.validate`、`schema.validate_dispatched`、`attachment.transition`、`device.transition`、`device.maximum_queue_seconds`。meta-schema 以 operation 为 discriminant，闭合验证契约第 16 节逐 operation 的 input、`expected.value` 和 `{ outcome: "error", code }` union；`request.signature` 只使用 `expected.value.preimageHex`，不得使用 `expectedHex`。
 
-原迁移计划 Task 2 增加 `golden-vectors.test.ts` 与 dispatched validator 依赖；Task 9 的 `DeviceRequestClient` 增加 claim 接口。Task 3/5 保留数据库、CAS、幂等账本、TTL、SSE store、附件 staging、crash recovery；Task 6 保留双宿主 runner/resultHash；Task 8/9 保留 Keystore、HTTP/SSE parser、真机 TLS 和 claim/result transport。
+顶层和 case 均拒绝未知字段；case 只含 `id`、`operation`、`input`、`expected`；ID 在六文件中全局唯一；每文件至少一个 value 和一个 error；二进制用偶数长度 lowercase hex；时间固定毫秒 UTC；不能出现 `skipped`、`futureOnly` 或无人消费 case。动态 Schema vector 只能用 `fixtureBindingSetId` 选择 runner 本地冻结的 `VerifiedSchemaBindingSet`，不能携带 Schema/digest。
+
+原迁移计划 Task 2 增加 `golden-vectors.test.ts`、meta-schema 与 dispatched validator/binding set 依赖；原迁移计划 Task 9 的 `DeviceRequestClient.claim` 返回 `ClaimReceipt`，`submitResult` 接受该 receipt。原迁移计划 Task 3/5 保留数据库、CAS、幂等账本、TTL、SSE store、附件 staging、crash recovery；原迁移计划 Task 6 保留双宿主 runner，并以 `resultHash = "sha256:" + lowercaseHex(SHA-256(JCS_UTF8(normalizedActualResult)))` 哈希 `{vectorId,operation,outcome,value}` 或 `{vectorId,operation,outcome:"error",code}`，排除 implementation/status/vendor diagnostics；原迁移计划 Task 8/9 保留 Keystore、HTTP/SSE parser、真机 TLS 和 claim/result transport。
 
 - [ ] **Step 9: 自审文档并提交**
 
@@ -275,7 +283,7 @@ git add docs/contracts/gateway-protocol-v2.md \
 git commit -m "文档: 固化 Gateway v2 签名与状态契约"
 ```
 
-### Task 2: 完成 wire ID 与动态 Schema 二阶段验证
+### 本补充计划 Task 2: 完成 wire ID 与动态 Schema 二阶段验证
 
 **Files:**
 - Modify: `gateway-contract/package.json`
@@ -288,29 +296,31 @@ git commit -m "文档: 固化 Gateway v2 签名与状态契约"
 **Interfaces:**
 - Produces: `GatewaySchemaName` 新增 `response.success` / `response.failure`
 - Produces: `gatewaySubschemaSha256(schema: object): string`
-- Produces: `createGatewayDispatchedValidator(entries): GatewayDispatchedValidator`
+- Produces: `VerifiedSchemaBindingSet`
+- Produces: `createGatewayDispatchedValidator(entries, bindings): GatewayDispatchedValidator`
 - Preserves: `schemaFor(name)` / `validateGatewayValue(name, value)` outer-only 行为
 
 - [ ] **Step 1: 写 wire ID 和公开 response 外壳失败测试**
 
-把原测试改为接受：
+只把契约封闭列举的 opaque record ID Schema 改为接受：
 
 ```text
 A-Z a-z 0-9 . _ ~ -
 ```
 
-并拒绝 space、HTAB、LF、CR、NUL、DEL、逗号、斜杠、百分号和 Unicode。保留长度 0/1/128/129 边界。为 `response.success` 和 `response.failure` 加合法外壳、未知顶层字段和错误字段测试。
+并拒绝 space、HTAB、LF、CR、NUL、DEL、逗号、斜杠、百分号和 Unicode。保留长度 0/1/128/129 边界。`authorKeyId`、`schemaSha256`、`tlsSpkiSha256`、公钥/签名和 plugin/capability identity 继续通过各自 Schema，不套用 opaque ID。为 `response.success` 和 `response.failure` 加合法外壳、未知顶层字段和错误字段测试。
 
 - [ ] **Step 2: 写不可变 catalog 与原子验证失败测试**
 
 测试至少覆盖：
 
-- event：可信 event type + digest + 合法 payload 通过；未知 type、digest 不符、payload 未知字段拒绝；payload 自报 type 不参与分派。
-- device：外壳通过后从 provider/capability 提取 key；author/plugin/capability/version/digest 任一不匹配拒绝；合法嵌套 parameters 通过。
-- success：可信 operation/status/digest 选择 data Schema；错误 operation/status 拒绝。
+- event：可信 event type 经本地 core binding 选择唯一 digest，合法 payload 通过；未知 type、binding 缺失、payload 未知字段拒绝；payload 自报 type/digest 不参与分派。
+- device：外壳通过后从 provider/capability 提取逻辑 key，经 authenticated session/pairing binding 选择唯一 digest；author/plugin/capability/version 任一不匹配拒绝；合法嵌套 parameters 通过。
+- success：可信 operation/status 经本地 core binding 选择唯一 digest 和 data Schema；错误 operation/status 拒绝。
 - failure：从已验证 `error.code` 选择 details Schema；修改 message 不改变分派；未知 code 拒绝。
-- catalog：重复 key、digest 不符、非 closed root、无法 strict 编译、未解析外部 `$ref` 构造失败。
-- 防御性：构造后修改输入 Schema 或 getter 返回值不影响 validator；错误数组稳定、排序、冻结。
+- catalog/bindings：重复逻辑 key、同逻辑 key 多 digest、binding 缺失 entry、digest 不符、无法 strict 编译构造失败；runtime API 无 digest 参数。
+- Schema subset：root `$ref`、非 closed root/object node、external/unresolved/非 `$defs` ref、`unevaluatedProperties`、`patternProperties`、`$dynamicRef`、`$dynamicAnchor` 和格式 1.0 不支持的 Schema-bearing keyword 构造失败；遍历 `$defs`、properties、items、composition arrays 和循环 ref。
+- 防御性：构造后修改输入 Schema/binding 或 getter 返回值不影响 validator；错误字符串按 `instancePath<TAB>schemaPath<TAB>keyword<TAB>JCS(params)` 去重并以 UTF-8 bytes 排序，数组和结果冻结。
 - 顺序：外壳失败时返回外壳错误，不进入动态 key 提取。
 
 - [ ] **Step 3: 运行 RED**
@@ -357,7 +367,7 @@ type GatewaySubschemaCatalogEntry = Readonly<{
 }>;
 ```
 
-构造器 defensive-clone entry，核对 key digest，strict Ajv 编译并存入不可变内部 map。运行期 API 不接受 Schema/resolver，只接受 `TrustedGatewayDispatch` 与 value；完整验证一次性返回 `ValidationResult`。
+构造器 defensive-clone catalog 与 `VerifiedSchemaBindingSet`，机械检查契约格式 1.0 Schema subset，核对 key digest、logical key 唯一绑定并 strict Ajv 编译，再存入不可变内部 map。运行期 API 不接受 digest/Schema/binding/resolver，只接受不含 digest 的 `TrustedGatewayDispatch` 与 value；完整验证一次性返回冻结 `ValidationResult`。
 
 - [ ] **Step 6: 运行 GREEN、回归和类型检查**
 
@@ -390,11 +400,12 @@ git add gateway-contract/package.json \
 git commit -m "修复: 完善 Gateway v2 动态 Schema 验证"
 ```
 
-### Task 3: 实现原迁移计划 Task 2 的签名、状态机与六组向量
+### 本补充计划 Task 3: 实现原迁移计划 Task 2 的签名、状态机与六组向量
 
 **Files:**
 - Create: `gateway-contract/src/request-signature.ts`
 - Create: `gateway-contract/src/state-machines.ts`
+- Create: `gateway-contract/vectors/vector-set-1.0.0.schema.json`
 - Create: `gateway-contract/vectors/request-signatures.json`
 - Create: `gateway-contract/vectors/protocol-negotiation.json`
 - Create: `gateway-contract/vectors/auth-sessions.json`
@@ -414,7 +425,7 @@ git commit -m "修复: 完善 Gateway v2 动态 Schema 验证"
 
 - [ ] **Step 1: 写逐字节签名和 target RED 测试**
 
-测试加载 `request-signatures.json`，从 `bodyHex` 独立解码 bytes，断言 canonical target、完整 expectedHex、末尾无 LF。加入：method/ID/timestamp/nonce/body 任一变化改变预像；小写 method、非法 ID、非 canonical nonce/timestamp 拒绝；absolute target、fragment、dot segment、`//`、尾随 `/`、编码 slash/backslash、畸形 `%`、空 query 拒绝；query percent 编码、重复 pair 与排序按契约执行。
+测试加载 `request-signatures.json`，从 `bodyHex` 独立解码 bytes，断言 canonical target、完整 `expected.value.preimageHex`、末尾无 LF。加入：method/wire-ID/timestamp/nonce/body 任一变化改变预像；小写 method、非法 wire ID、非 canonical nonce/timestamp 拒绝；digest/key identity 不误套 wire ID；absolute target、fragment、dot segment、`//`、尾随 `/`、编码 slash/backslash、畸形 `%`、空 query 拒绝；query percent 编码、重复 pair 与排序按契约执行。
 
 - [ ] **Step 2: 运行签名 RED**
 
@@ -429,11 +440,11 @@ Expected: FAIL，原因是 `request-signature.ts` 与向量不存在。
 
 - [ ] **Step 3: 实现 canonical target 与签名预像**
 
-`SignedRequestInput.body` 必须是 `Uint8Array`；不 parse/stringify body。method 是封闭大写 union；ID、timestamp、nonce 逐项 runtime 校验。使用 `node:crypto` 对 exact bytes 做 SHA-256。`canonicalRequestTarget` 把可规范化输入变为 Task 1 契约的 ASCII origin-form；`canonicalRequestSignatureInput` 必须先确认 `input.target === canonicalRequestTarget(input.target)`，非 canonical target 抛 `NON_CANONICAL_TARGET`，再使用固定 10 行 framing。这样客户端先构造并发送 canonical target，Gateway 从 raw request-target 验证同一字符串。
+`SignedRequestInput.body` 必须是 `Uint8Array`；不 parse/stringify body。method 是封闭大写 union；wire ID、timestamp、nonce 逐项 runtime 校验。使用 `node:crypto` 对 exact bytes 做 SHA-256。`canonicalRequestTarget` 把可规范化输入变为本补充计划 Task 1 契约的 ASCII origin-form；`canonicalRequestSignatureInput` 必须先确认 `input.target === canonicalRequestTarget(input.target)`，非 canonical target 抛 `NON_CANONICAL_TARGET`，再使用固定 10 行 framing。这样客户端先构造并发送 canonical target，Gateway 从 raw request-target 验证同一字符串。
 
 - [ ] **Step 4: 写状态机 RED 测试**
 
-测试完整遍历 Task 1 的状态/事件笛卡尔积：合法表得到精确下一状态；全部其他组合抛 `INVALID_STATE_TRANSITION`；输入字符串无可变状态。测试 `maximumDeviceRequestQueueSeconds`：read/sync `86400`、write `900`、high-privilege-ephemeral `0`。
+测试完整遍历本补充计划 Task 1 的状态/事件笛卡尔积：合法表得到精确下一状态；全部其他组合抛内部 `INVALID_STATE_TRANSITION`；输入字符串无可变状态。测试 `maximumDeviceRequestQueueSeconds`：read/sync `86400`、write `900`、high-privilege-ephemeral `0`。
 
 - [ ] **Step 5: 运行状态机 RED**
 
@@ -452,7 +463,7 @@ Expected: FAIL，原因是 `state-machines.ts` 不存在。
 
 - [ ] **Step 7: 创建六组闭合向量并写消费门禁**
 
-每个文件使用 Task 1 的 `1.0.0` 顶层结构。operation 至少覆盖：
+每个文件必须先通过 `vector-set-1.0.0.schema.json`，并使用本补充计划 Task 1 的 `1.0.0` 顶层结构。operation 精确覆盖：
 
 ```text
 request.target
@@ -464,9 +475,9 @@ device.transition
 device.maximum_queue_seconds
 ```
 
-`golden-vectors.test.ts` 验证六文件存在、顶层/case 闭合、vectorSet 与文件名一致、case ID 全局唯一、每文件有 value/error、每个 operation 有明确消费者；不得仅 grep 文本。`protocol-negotiation` 和 `auth-sessions` 的 Schema cases 调用 `validateGatewayValue`；SSE/device 动态 cases 调用 `GatewayDispatchedValidator`；状态与签名 cases 分别调用生产函数。
+`golden-vectors.test.ts` 验证六文件存在且通过 meta-schema、顶层/case 闭合、六个 vectorSet 与文件名一致、operation/file 归属、case ID 全局唯一、每文件有 value/error、逐 operation input/expected union、lowercase hex/毫秒 UTC、每个 operation 有明确消费者；不得仅 grep 文本。`protocol-negotiation` 和 `auth-sessions` 的 Schema cases 调用 `validateGatewayValue`；SSE/device 动态 cases 只能通过 `fixtureBindingSetId` 选择测试本地冻结的 `VerifiedSchemaBindingSet` 再调用 `GatewayDispatchedValidator`，不能携带 Schema/digest；状态与签名 cases 分别调用生产函数。
 
-- [ ] **Step 8: 运行 Task 2 完整验证**
+- [ ] **Step 8: 运行本补充计划 Task 2/3 完整验证**
 
 Run:
 
@@ -486,7 +497,7 @@ Expected: 全部 PASS；根测试不得扫描其他 worktree；不把 TypeScript
 
 - [ ] **Step 9: 自审并提交**
 
-确认只改 Task 2 列出的 `gateway-contract` 新文件，未进入 `integrations/openclaw`、Hermes、Android、Bridge 或 Tailscale。
+确认只改本补充计划 Task 3 列出的 `gateway-contract` 新文件，未进入 `integrations/openclaw`、Hermes、Android、Bridge 或 Tailscale。
 
 Commit:
 
@@ -502,4 +513,4 @@ git commit -m "新增: 固化 v2 签名与状态机向量"
 
 ## 本计划完成边界
 
-完成三个 Task、逐 Task 独立审查和最终范围审查后停止。不得创建 `integrations/openclaw/` 文件，不得声称 Task 3、双宿主一致性、Android HTTP/SSE、真机 TLS 或生产部署已经完成。
+完成本补充计划三个 Task、逐 Task 独立审查和最终范围审查后停止。不得创建 `integrations/openclaw/` 文件，不得声称原迁移计划 Task 3 runtime、双宿主一致性、Android HTTP/SSE、真机 TLS 或生产部署已经完成。

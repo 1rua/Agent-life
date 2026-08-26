@@ -31,7 +31,8 @@ V2 是新协议，不兼容 Bridge Protocol v1。所有端点必须使用 HTTPS�
 - 摘要使用小写十六进制 SHA-256；
 - HTTP method 只允许区分大小写的 `GET`、`POST`、`PUT`、`DELETE`，不得通过 `toUpperCase()` 或其他规范化接受别名；
 - wire ID 服从 `wire-id = 1*128(ALPHA / DIGIT / "." / "_" / "~" / "-")`，等价正则为 `^[A-Za-z0-9._~-]{1,128}$`；
-- 所有 ID 都是服务端或客户端生成的不透明值，接收方不得解析其中的业务含义。
+- wire ID 是封闭的协议记录标识集合：`requestId`、`correlationId`、`negotiationId`、`installationId`、`deploymentId`、`accountId`、`deviceId`、`pairingId`、`sessionId`、邀请 ID、`conversationId`、`clientConversationId`、`messageId`、`clientMessageId`、`attachmentId`、`clientAttachmentId`、SSE event ID/cursor、设备请求 ID 和 `claimId`；这些值不透明，接收方不得解析业务含义；
+- digest/key identity 和编码密钥材料不属于 wire ID：`authorKeyId`、`schemaSha256`、`tlsSpkiSha256`、内容 `sha256`、公钥、签名及 refresh/access credential 保持各自 Schema 的编码，不得套用 wire ID 正则；`pluginId`、`capabilityId`、版本、operation 和 error code 也使用各自的封闭语法。
 
 所有成功响应包含：
 
@@ -145,9 +146,48 @@ type GatewaySubschemaKey =
   | { kind: "response.failure"; errorCode: string; schemaSha256: string };
 ```
 
-可信分派来源固定如下：事件 `eventType` 来自已验证 SSE 的 `event:` 行；设备请求的 `pluginId`、`authorKeyId`、`capabilityId` 和 `capabilityVersion` 从已经通过外壳验证的 value 提取，只有 `schemaSha256` 从协商会话上下文传入；成功响应的 `operation` 和 `status` 来自本地请求上下文；失败响应的 `errorCode` 从已验证 error envelope 提取。请求不得传入 Schema、resolver 或 `ValidateFunction`，也不得用 payload 自报字段覆盖可信分派。
+运行时 dispatch 不含 `schemaSha256`，封闭类型为：
 
-catalog 构造时必须 defensive-clone 后冻结；每个根 Schema 必须闭合并拒绝未声明字段。重复 key、声明 digest 与 Schema identity 不符、根 Schema 未闭合、无法被 strict validator 编译或含未解析外部 `$ref` 都必须令构造失败。运行时未知或缺失 key 返回 `ok: false` 以及稳定排序、冻结的 validation errors；外壳失败时不得继续提取动态 key。
+```ts
+type TrustedGatewayDispatch =
+  | { kind: "event"; eventType: string }
+  | { kind: "device.request" }
+  | { kind: "response.success"; operation: string; status: number }
+  | { kind: "response.failure" };
+
+type VerifiedSchemaBindingSet = Readonly<{
+  core: readonly (
+    | { kind: "event"; eventType: string; schemaSha256: string }
+    | { kind: "response.success"; operation: string;
+        status: number; schemaSha256: string }
+    | { kind: "response.failure"; errorCode: string; schemaSha256: string }
+  )[];
+  device: readonly {
+    kind: "device.request";
+    pluginId: string;
+    authorKeyId: string;
+    capabilityId: string;
+    capabilityVersion: string;
+    schemaSha256: string;
+  }[];
+}>;
+```
+
+构造 dispatched validator 时必须同时传入不可变的 `VerifiedSchemaBindingSet`。其中 event/response/error 的逻辑 key 分别为 `(eventType)`、`(operation, status)`、`(errorCode)`，只能从本地验证的 core binding 选择唯一 catalog digest；device 的逻辑 key 为 `(pluginId, authorKeyId, capabilityId, capabilityVersion)`，只能从当前已认证 session/pairing binding 选择唯一 digest。catalog 或 binding set 中同一逻辑 key 重复、同一逻辑 key 出现多个 digest、binding 指向不存在的 catalog entry，均使构造失败；即使 digest 相同，也不得用重复 binding 表示第二个候选。
+
+可信分派来源固定如下：事件 `eventType` 来自已验证 SSE `event:` 行；device 的 provider/capability 逻辑 key 从已经通过外壳验证的 value 提取；success 的 `operation` 和 `status` 来自本地请求上下文；failure 的 `errorCode` 从已验证 error envelope 提取。随后 validator 只通过 `VerifiedSchemaBindingSet` 解析 digest，再查 catalog。请求、payload、body、message 和通用调用方不得传入或覆盖 digest、Schema、binding、resolver 或 `ValidateFunction`，也不得用自报字段选择另一候选。
+
+catalog 格式 `1.0` 的 Schema 子集必须机械检查：
+
+1. 根 Schema 必须直接声明 `type: "object"` 和 `additionalProperties: false`，根 `$ref` 拒绝。
+2. 任一被遍历节点只要声明 `type: "object"` 或 `properties`，就必须在同一节点直接声明 `type: "object"` 和 `additionalProperties: false`。
+3. `$ref` 只允许解析到同一根文档内的 `#/$defs/...` JSON Pointer；外部 ref、无法解析的本地 ref 和越出 `$defs` 的 ref 全部拒绝。
+4. 任意节点出现 `unevaluatedProperties`、`patternProperties`、`$dynamicRef` 或 `$dynamicAnchor` 都拒绝。
+5. Schema 子节点只允许出现在 `$defs` 和 `properties` 的 value、单 Schema `items`，以及 `allOf`、`anyOf`、`oneOf` composition arrays；构造器从根开始深度遍历这些位置，以对象 identity visited set 防止 ref 循环。`not`、`if`/`then`/`else`、`dependentSchemas`、`contains`、`propertyNames`、`prefixItems` 等其他 Schema-bearing keyword 不属于格式 `1.0`，出现即拒绝。
+
+catalog 与 binding set 在构造时 defensive-clone 并冻结。声明 digest 与 Schema identity 不符、上述子集检查失败或 strict 编译失败都使构造失败。运行时先验证外壳；外壳失败不得提取 dispatch。未知/缺失 binding 或子值失败返回冻结结果，不抛出 vendor diagnostics。
+
+TypeScript validation diagnostics 的唯一规范化算法为：每个 Ajv error 生成 `instancePath + "\t" + schemaPath + "\t" + keyword + "\t" + JCS(params)`；非 Ajv dispatch error 使用空 `instancePath`、空 `schemaPath`、`keyword = "dispatch"` 和 JCS 参数对象。完全相同的字符串去重，再按 UTF-8 bytes 升序排列，最后 `Object.freeze` errors 数组并冻结外层 `{ ok: false, errors }`。跨语言一致性只哈希第 16 节定义的 accepted/rejected 规范结果，不哈希 Ajv/Python/Kotlin vendor diagnostics。
 
 ## 5. 账号与设备
 
@@ -160,7 +200,7 @@ catalog 构造时必须 defensive-clone 后冻结；每个根 Schema 必须闭�
 - `pairingId`：账号与设备之间的信任关系；
 - `sessionId`：短期认证会话。
 
-以上线上 ID 以及本契约其他 wire ID 都必须满足第 2 节的 `wire-id`；它们仍是不可解析的不透明值，前缀示例不构成业务编码规则。
+上述 `installationId`、`accountId`、`deviceId`、`pairingId` 和 `sessionId` 属于第 2 节封闭 wire ID 集合；它们仍是不可解析的不透明值，前缀示例不构成业务编码规则。`username` 不属于 wire ID。
 
 不同账号中的相同 `installationId` 不共享 device ID、配对、授权或审计。Gateway 必须在打开账号数据库前完成账号解析，不能先连接共享业务数据库再依赖行过滤。
 
@@ -219,7 +259,7 @@ X-Agent-Life-Nonce: <base64url 16 random bytes>
 X-Agent-Life-Signature: <base64url Ed25519 signature>
 ```
 
-HTTP 入口必须从 raw header 列表证明下列每个 header 恰好出现一次：
+HTTP 入口必须从 framework 合并、逗号折叠或 first/last 选择之前的 raw header 列表证明下列九个认证 header 始终各恰好出现一次：
 
 ```text
 Authorization
@@ -233,7 +273,15 @@ X-Agent-Life-Nonce
 X-Agent-Life-Signature
 ```
 
-header 名大小写不敏感；值按收到的原始字段值验证，不做 trim、unfold，也不做 first/last 选择。重复字段、库或代理产生的逗号合并值、只有 trim 后才合法的值，以及含 CR、LF、NUL 或其他控制字符的值一律拒绝。若运行框架不能提供足以证明这些条件的 raw header 列表，该入口必须失败关闭。
+以下五个条件 header 也必须从同一 raw header 列表执行 singleton 规则：
+
+- `Idempotency-Key`：每个已认证 `POST`、`PUT`、`DELETE` 请求必须恰好一次，值按第 6.5 节绑定 request ID；已认证 `GET` 必须不出现。
+- `Last-Event-ID`：只允许在 `GET /events` 且 canonical query 已含非空 `cursor` 时出现零次或一次；若出现必须逐字节等于 query cursor，其他路由必须不出现。
+- `Content-Type`：声明 JSON entity-body 的路由必须恰好一次且值精确为 `application/json`；附件 content 的原始 bytes 路由允许零次或一次，若出现必须精确等于创建附件时已验证的 `mediaType`；无 body 路由不得出现。
+- `Content-Length`：`PUT /attachments/{attachmentId}/content` 必须恰好一次；其他带 entity-body 的路由可以不出现或恰好一次，由 HTTP transfer framing 决定；无 body 路由不得出现。
+- `Digest`：只在 `PUT /attachments/{attachmentId}/content` 必须恰好一次，其他路由必须不出现。
+
+header 名大小写不敏感；值按收到的原始字段值验证，不做 trim、unfold，也不做 first/last 选择。上述十四个 header 的任何重复都拒绝，包括两个完全相同的字段；库或代理已经产生的逗号合并值、只有 trim 后才合法的值，以及含 CR、LF、NUL 或其他控制字符的值也一律拒绝。条件 header 在不允许的路由出现同样拒绝。若运行框架不能提供足以在组合前证明这些条件的 raw header 列表，该入口必须失败关闭。
 
 token 验证得到的 `accountId`、`deviceId`、`sessionId` 必须分别与三个身份 header 的值逐字节精确相等。后续路由和业务只能接收单一不可变的 `VerifiedRequestContext`，不能再次从 header、query、path 或 JSON 读取身份。请求 JSON 中出现 `accountId`、`deviceId`、`principalId` 等试图覆盖认证身份的字段时返回 `IDENTITY_OVERRIDE_REJECTED`。
 
@@ -404,9 +452,9 @@ type AttachmentEvent =
 | `failed` | `cleanup` | `deleted` |
 | `expired` | `cleanup` | `deleted` |
 
-全部其他 `AttachmentState × AttachmentEvent` 组合抛 `INVALID_STATE_TRANSITION`。精确 HTTP 重试由 reducer 前的幂等账本处理，不给普通事件增加自循环。解除配对和删除账号是资源级事务，不伪装成逐附件事件。
+全部其他 `AttachmentState × AttachmentEvent` 组合在纯 reducer 内部抛 `INVALID_STATE_TRANSITION`。精确 HTTP 重试由 reducer 前的幂等账本处理，不给普通事件增加自循环。解除配对和删除账号是资源级事务，不伪装成逐附件事件。
 
-只有 `verified` 附件可被消息引用。宿主确认接收后 Gateway 删除暂存字节并保留无正文终态；配对解除、账号删除或 TTL 到期立即删除。
+只有 `verified` 附件可被消息引用。宿主确认接收后 Gateway 删除暂存字节并保留无正文终态。TTL 到期必须立即删除 staged bytes，并通过 `expire` 把协议元数据记录为 `expired`；后续单独的 `cleanup` 才把该无正文元数据转为 `deleted`。解除配对和账号删除仍以资源级事务立即移除对应 bytes 和元数据，不伪造 reducer 的逐附件跳转。
 
 ## 9. SSE 事件流
 
@@ -426,7 +474,7 @@ V2 事件类型：
 - `conversation.message.delta`
 - `conversation.message.completed`
 - `device.requested`
-- `device.request.cancelled`
+- `device.request.cancel.requested`
 - `pairing.grant.changed`
 - `session.revoked`
 - `attachment.acknowledged`
@@ -462,9 +510,24 @@ Agent 宿主通过 Gateway Core 创建结构化设备请求；模型不能提供
 }
 ```
 
-Android 执行前重新验证插件身份、当前提供者、能力版本、授权 revision、本地权限、资源状态和期限。结果提交到 `POST /device-requests/{requestId}/result`，必须幂等并包含执行时授权 revision。
+Android 执行前重新验证插件身份、当前提供者、能力版本、授权 revision、本地权限、资源状态和期限。结果提交到 `POST /device-requests/{requestId}/result`，必须幂等；request body 只提交 claim 时取得的同一个 `claimId`、同一个 `grantRevision` 和 result，不提交 `accountId`、`deviceId` 或 `pairingGeneration` 来覆盖身份。Gateway 通过服务端 receipt 记录和 `VerifiedRequestContext` 核对全部绑定，不能只凭 request ID 接受结果。
 
-Android 必须先调用幂等 claim 操作 `POST /device-requests/{requestId}/claim`，并在任何副作用前取得该请求的 claim；未 claim 的 `pending` 请求不能直接提交普通结果。claim 与 result 的持久化、SQLite/CAS 和崩溃恢复由 Gateway Core 实现，线上调用仍遵守第 6 节的签名与幂等绑定。
+Android 必须先调用幂等 claim 操作 `POST /device-requests/{requestId}/claim`，并在任何副作用前取得服务端生成的 claim。claim 成功响应的 `data` 是：
+
+```ts
+type ClaimReceipt = Readonly<{
+  claimId: string;
+  requestId: string;
+  accountId: string;
+  deviceId: string;
+  pairingGeneration: number;
+  grantRevision: number;
+}>;
+```
+
+`claimId` 是第 2 节 wire ID；receipt 内的 `requestId` 是 route 指向的设备请求 ID，不是成功 envelope 顶层的已签名 HTTP request ID。Gateway 必须把 receipt 原子绑定到已验证 `accountId`、`deviceId`、当前 `pairingGeneration`、当前 `grantRevision` 和目标设备请求，并写入最小审计；同一 claim 幂等重试返回同一 receipt。Android 不能自选或改写 receipt 字段。result 必须从 receipt 原样带回 `claimId` 和 `grantRevision`；Gateway 用服务端 receipt 记录检查账号、设备、generation、revision、设备 request 和 claim，任一不匹配均拒绝，未 claim 的 `pending` 请求不能直接提交普通结果。claim 与 result 的持久化、SQLite/CAS 和崩溃恢复由 Gateway Core 实现，线上调用仍遵守第 6 节的签名与幂等绑定。
+
+`device.request.cancel.requested` 只表示取消意图，不表示设备已经停止。只有尚未 claim 的 `pending` 请求收到 cancel 时可以立即成为 `cancelled`；claim 后收到 cancel 只进入 `cancel_requested`，随后必须由可信 result 决定 `cancelled`、实际发生的其他终态或 `outcome_unknown`。Gateway 和 Android 不得因看到取消 SSE 就伪造 `result_cancelled`。
 
 设备请求状态和事件是封闭集合：
 
@@ -504,7 +567,7 @@ type DeviceRequestEvent =
 | `cancel_requested` | `result_outcome_unknown` | `outcome_unknown` |
 | `cancel_requested` | `recover_outcome_unknown` | `outcome_unknown` |
 
-全部其他 `DeviceRequestState × DeviceRequestEvent` 组合抛 `INVALID_STATE_TRANSITION`。`outcome_unknown` 是不可被普通结果覆盖的终态；准确 HTTP 重试仍由 reducer 前的幂等账本处理，不增加自循环。
+全部其他 `DeviceRequestState × DeviceRequestEvent` 组合在纯 reducer 内部抛 `INVALID_STATE_TRANSITION`。`outcome_unknown` 是不可被普通结果覆盖的终态；准确 HTTP 重试仍由 reducer 前的幂等账本处理，不增加自循环。
 
 队列上限：
 
@@ -569,7 +632,6 @@ CAPABILITY_UNAVAILABLE
 PROVIDER_CHANGED
 IDEMPOTENCY_CONFLICT
 OUTCOME_UNKNOWN
-INVALID_STATE_TRANSITION
 ATTACHMENT_LIMIT_EXCEEDED
 ATTACHMENT_DIGEST_MISMATCH
 ATTACHMENT_EXPIRED
@@ -580,6 +642,8 @@ HOST_INCOMPATIBLE
 ACCOUNT_DELETING
 INTERNAL_ERROR
 ```
+
+`INVALID_STATE_TRANSITION` 只属于纯 reducer 和黄金向量的内部错误，不是 Gateway wire error code。HTTP endpoint 对 malformed input 返回 `SCHEMA_INVALID`，对同一幂等键绑定不同输入返回 `IDEMPOTENCY_CONFLICT`，对已 claim 操作无法确定真实终态返回 `OUTCOME_UNKNOWN`；若未来需要公开其他状态机映射，必须单独修改本契约。
 
 认证失败不泄露账号是否存在。安全、身份、摘要、授权和 generation 错误默认不可自动重试；网络中断和明确 `retryable: true` 的限流错误按退避策略处理。
 
@@ -605,7 +669,7 @@ Android、Hermes 和 OpenClaw 实现必须共同通过语言无关向量：
 - 多账号文件级隔离、备份不含活动身份、账号删除；
 - Android/Gateway correlation ID 对应且审计不含正文。
 
-六个 JSON 向量文件的顶层结构固定为：
+六个 JSON 向量文件必须由版本化 meta-schema `gateway-contract/vectors/vector-set-1.0.0.schema.json` 验证，顶层结构固定为：
 
 ```json
 {
@@ -616,8 +680,77 @@ Android、Hermes 和 OpenClaw 实现必须共同通过语言无关向量：
 }
 ```
 
-顶层对象和每个 case 都拒绝未知字段。case 只能包含 `id`、`operation`、`input`、`expected`；case ID 在六个文件中全局唯一；每个文件至少包含一个 `expected.outcome = "value"` 和一个 `expected.outcome = "error"`。二进制统一为 lowercase hex，时间统一为固定三位毫秒 UTC。不得出现 `skipped`、`futureOnly` 或没有任何一致性 runner 消费的 case。
+`vectorSet` 的精确枚举与文件/operation 归属为：
 
-Task 2 的 TypeScript 门禁必须逐 case 调用生产 canonicalizer、纯 reducer、outer validator 或 dispatched validator，不能只 grep/parse 向量。Task 3/5 各自实现数据库、CAS、幂等账本、TTL、SSE store、附件 staging 和 crash recovery；Task 6 使用独立 OpenClaw/Hermes runner 并比较契约结果的 `resultHash`；Task 8/9 保留 Android Keystore、HTTP/SSE byte parser、真机 TLS 以及 claim/result transport 的独立实现和证据。Task 2 的本地向量通过不等于双宿主、Android 或真机一致性已完成。
+| 文件 | `vectorSet` | 允许的 `operation` |
+|---|---|---|
+| `request-signatures.json` | `request-signatures` | `request.target`, `request.signature` |
+| `protocol-negotiation.json` | `protocol-negotiation` | `schema.validate` |
+| `auth-sessions.json` | `auth-sessions` | `schema.validate` |
+| `attachments.json` | `attachments` | `schema.validate`, `attachment.transition` |
+| `sse-events.json` | `sse-events` | `schema.validate_dispatched` |
+| `device-requests.json` | `device-requests` | `schema.validate_dispatched`, `device.transition`, `device.maximum_queue_seconds` |
+
+operation 的完整枚举只有：
+
+```text
+request.target
+request.signature
+schema.validate
+schema.validate_dispatched
+attachment.transition
+device.transition
+device.maximum_queue_seconds
+```
+
+顶层对象和每个 case 都拒绝未知字段。case 只能包含 `id`、`operation`、`input`、`expected`，并以 `operation` 作为 discriminant；case ID 满足 wire ID 且在六文件中全局唯一。每个文件至少包含一个 value 和一个 error case，不得出现 `skipped`、`futureOnly` 或没有生产消费者的 case。
+
+每个 operation 的 `input` 和 value 结果为以下闭合对象；表中未列字段全部拒绝：
+
+| `operation` | `input` | `expected.value` | 允许的 `expected.error.code` |
+|---|---|---|---|
+| `request.target` | `{ target: string }` | `{ canonicalTarget: string }` | `SCHEMA_INVALID` |
+| `request.signature` | `{ method, target, accountId, deviceId, sessionId, requestId, timestamp, nonce, bodyHex }` | `{ preimageHex: string }` | `SCHEMA_INVALID`, `NON_CANONICAL_TARGET` |
+| `schema.validate` | `{ schemaName, value }` | `{ valid: true }` | `SCHEMA_INVALID` |
+| `schema.validate_dispatched` | `{ fixtureBindingSetId, dispatch, value }` | `{ valid: true }` | `SCHEMA_INVALID` |
+| `attachment.transition` | `{ current: AttachmentState, event: AttachmentEvent }` | `{ nextState: AttachmentState }` | `INVALID_STATE_TRANSITION` |
+| `device.transition` | `{ current: DeviceRequestState, event: DeviceRequestEvent }` | `{ nextState: DeviceRequestState }` | `INVALID_STATE_TRANSITION` |
+| `device.maximum_queue_seconds` | `{ risk: "read" | "sync" | "write" | "high-privilege-ephemeral" }` | `{ seconds: 86400 | 900 | 0 }` | `SCHEMA_INVALID` |
+
+`schemaName` 的格式 `1.0.0` 枚举为 `negotiate.request`、`negotiate.response`、`session.password`、`session.refresh`、`session.device`、`conversation.create`、`message.create`、`attachment.create`、`event`、`device.request`、`response.success`、`response.failure`。`fixtureBindingSetId` 只选择测试 runner 本地已验证并冻结的 fixture，不携带 Schema 或 digest；`dispatch` 必须满足第 4.1 节不含 digest 的 `TrustedGatewayDispatch`。`value` 是待验证 JSON value，不改变 binding。
+
+`expected` 是精确 tagged union：
+
+```ts
+type VectorOperation =
+  | "request.target" | "request.signature"
+  | "schema.validate" | "schema.validate_dispatched"
+  | "attachment.transition" | "device.transition"
+  | "device.maximum_queue_seconds";
+
+type VectorErrorCode =
+  | "SCHEMA_INVALID" | "NON_CANONICAL_TARGET"
+  | "INVALID_STATE_TRANSITION";
+
+type VectorExpected<V> =
+  | { outcome: "value"; value: V }
+  | { outcome: "error"; code: VectorErrorCode };
+```
+
+`INVALID_STATE_TRANSITION` 在这里只是 reducer 内部预期错误，不是第 14 节 wire error。`bodyHex`、`preimageHex` 和其他二进制必须是偶数长度 lowercase hex；timestamp 必须是固定三位毫秒 UTC。`request.signature` 的 oracle 必须写为 `case.expected.value.preimageHex`，不得再使用顶层 `expectedHex`。
+
+原迁移计划 Task 2 的 TypeScript 门禁必须先用 meta-schema 验证六文件，再逐 case 调用生产 canonicalizer、纯 reducer、outer validator 或 dispatched validator，不能只 grep/parse 向量。本补充计划 Task 3 只实现这些纯函数和向量；原迁移计划 Task 3/5 各自实现数据库、CAS、幂等账本、TTL、SSE store、附件 staging 和 crash recovery；原迁移计划 Task 6 使用独立 OpenClaw/Hermes runner；原迁移计划 Task 8/9 保留 Android Keystore、HTTP/SSE byte parser、真机 TLS 以及 claim/result transport 的独立实现和证据。本补充计划 Task 3 的本地向量通过不等于双宿主、Android 或真机一致性已完成。
+
+原迁移计划 Task 6 的每个 runner 必须先构造以下 normalized actual result，value/error 对象都拒绝额外字段：
+
+```ts
+type NormalizedActualResult =
+  | { vectorId: string; operation: VectorOperation;
+      outcome: "value"; value: unknown }
+  | { vectorId: string; operation: VectorOperation;
+      outcome: "error"; code: VectorErrorCode };
+```
+
+`status` 只有 `pass` 或 `fail`：normalized actual result 与 case expected 投影按 JCS bytes 完全相等时为 `pass`，否则为 `fail`。`resultHash = "sha256:" + lowercaseHex(SHA-256(JCS_UTF8(normalizedActualResult)))`。runner JSONL 输出 `{ vectorId, operation, implementation, status, resultHash }`；`implementation`、`status`、vendor diagnostics、堆栈、宿主 ID、时间和路径都不进入 hash。两个实现只比较相同 vector 的 normalized accepted/rejected outcome 与 `resultHash`，不比较 Ajv/Python/Kotlin 错误文本。
 
 任一实现只有在同一向量版本全部通过后才能声明 `Gateway Protocol 2.0` 兼容。
