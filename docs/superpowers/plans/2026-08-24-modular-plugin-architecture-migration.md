@@ -125,18 +125,25 @@ git commit -m "新增: 建立 Gateway Protocol v2 严格 Schema"
 - Create: `gateway-contract/vectors/device-requests.json`
 - Test: `gateway-contract/test/request-signature.test.ts`
 - Test: `gateway-contract/test/state-machines.test.ts`
+- Test: `gateway-contract/test/golden-vectors.test.ts`
 
 **Interfaces:**
+- Requires: 补充计划 `2026-08-27-gateway-protocol-v2-task2-correction.md` 的不可变 catalog 与 dispatched validator 已完成
+- Consumes: `schemaFor` / `validateGatewayValue` outer-only validator 与 `GatewayDispatchedValidator`
+- Produces: `canonicalRequestTarget(target: string): string`
 - Produces: `canonicalRequestSignatureInput(input: SignedRequestInput): Uint8Array`
 - Produces: `nextAttachmentState(current, event): AttachmentState`
 - Produces: `nextDeviceRequestState(current, event): DeviceRequestState`
+- Produces: `maximumDeviceRequestQueueSeconds(risk): 86400 | 900 | 0`
 
-- [ ] **Step 1: 写协议文档中的逐字节签名向量测试**
+- [ ] **Step 1: 写协议文档中的逐字节签名、target 与动态分派向量测试**
 
 ```ts
 expect(Buffer.from(canonicalRequestSignatureInput(vector.input)).toString("hex"))
   .toBe(vector.expectedHex);
 ```
+
+测试必须覆盖区分大小写的 method、wire ID、固定毫秒 UTC、canonical 16-byte nonce、exact body bytes、10 字段/9 LF/末尾无 LF，以及 canonical origin-form target 的拒绝和排序边界。SSE/device 动态 case 必须调用已经构造并冻结的 `GatewayDispatchedValidator`，请求不能携带 Schema、resolver 或 `ValidateFunction`。
 
 - [ ] **Step 2: 运行并确认签名向量红灯**
 
@@ -147,17 +154,22 @@ Expected: FAIL，canonicalizer 尚不存在。
 - [ ] **Step 3: 实现唯一 canonicalizer 和有限状态机**
 
 ```ts
-export const canonicalRequestSignatureInput = (v: SignedRequestInput): Uint8Array =>
-  textEncoder.encode([
-    "AGENT-LIFE-REQUEST-V2", v.method.toUpperCase(), normalizeTarget(v.target),
-    v.accountId, v.deviceId, v.sessionId, v.requestId,
-    v.timestamp, v.nonce, sha256Hex(v.body),
+export const canonicalRequestSignatureInput = (v: SignedRequestInput): Uint8Array => {
+  assertExactSignedRequestFields(v);
+  const target = canonicalRequestTarget(v.target);
+  if (target !== v.target) throw new Error("NON_CANONICAL_TARGET");
+  return textEncoder.encode([
+    "AGENT-LIFE-REQUEST-V2", v.method, target, v.accountId, v.deviceId,
+    v.sessionId, v.requestId, v.timestamp, v.nonce, sha256Hex(v.body),
   ].join("\n"));
+};
 ```
 
-状态机对未列出的转移抛出 `INVALID_STATE_TRANSITION`；不提供“尽力恢复”分支。
+`body` 必须是未经 parse/stringify 的 `Uint8Array`。状态机按协议完整矩阵实现纯 reducer，对未列出的状态/事件组合抛 `INVALID_STATE_TRANSITION`；不提供普通事件自循环或“尽力恢复”分支。
 
-- [ ] **Step 4: 运行全部向量**
+- [ ] **Step 4: 建立闭合六文件格式并运行全部向量**
+
+六文件统一使用 `formatVersion: "1.0.0"`、`protocolVersion: "2.0"`、`vectorSet` 和 `cases`；顶层及 case 拒绝未知字段，case 只含 `id`、`operation`、`input`、`expected`。`gateway-contract/test/golden-vectors.test.ts` 必须证明 ID 全局唯一、每文件同时包含 value/error、二进制/时间格式规范且每个 operation 都有生产消费者；不得只检查 JSON 存在或 grep 文本。
 
 Run: `npm --prefix gateway-contract test`
 
@@ -197,6 +209,7 @@ git commit -m "新增: 固化 v2 签名与状态机向量"
 - Produces: `GatewayCore.handle(request: VerifiedGatewayRequest): Promise<GatewayResponse>`
 - Produces: `GatewayBackupService.exportPortable(accountId): Promise<PortableBackup>`
 - Produces: `IdentityRotationService.rotate(request): Promise<RotationReceipt>`
+- Owns: SQLite、CAS、幂等账本、TTL、SSE store、附件 staging、device claim/result 和 crash recovery；不得把这些状态塞回 Task 2 纯 reducer
 
 - [ ] **Step 1: 写文件级账号隔离失败测试**
 
@@ -327,6 +340,7 @@ git commit -m "新增: 注册 OpenClaw Agent-life Gateway"
 - Produces: `register(ctx: HermesPluginContext) -> None`
 - Produces: `GatewayCore.handle(request: VerifiedGatewayRequest) -> GatewayResponse`
 - Produces: 与 OpenClaw 等价的 portable backup、身份轮换和最小审计结果
+- Owns: 与 OpenClaw 独立实现且语义等价的 SQLite、CAS、幂等账本、TTL、SSE store、附件 staging、device claim/result 和 crash recovery
 
 - [ ] **Step 1: 写 Python 账号隔离和 `ctx.register_platform` 失败测试**
 
@@ -387,6 +401,7 @@ git commit -m "新增: 实现 Hermes 原生 Gateway 插件"
 **Interfaces:**
 - Consumes: 同一 `gateway-contract/vectors/*.json`
 - Produces: 标准 JSONL `{ vectorId, implementation, status, resultHash }`
+- Produces: 独立 OpenClaw runner 与 Hermes runner；两者都消费每个可执行 case，不共享运行二进制
 
 - [ ] **Step 1: 写结果哈希必须一致的失败测试**
 
@@ -500,6 +515,7 @@ git commit -m "重构: 建立 Android 插件宿主模块边界"
 - Produces: `GatewaySessionManager.logout(profileId): Unit`
 - Produces: `GatewaySessionManager.removeLocalAccount(profileId): Unit`
 - Produces: `GatewaySessionManager.unpair(profileId): Unit`
+- Owns: Android Keystore 中的设备私钥与 refresh credential；Task 2 的 TypeScript 向量不能替代本任务的 JVM/真机证据
 
 - [ ] **Step 1: 写“不保存密码、刷新凭据轮换、退出撤销”的失败测试**
 
@@ -575,7 +591,9 @@ git commit -m "新增: 实现多账号会话与可撤销自动登录"
 - Produces: `GatewayHttpClient.events(cursor: String?): Flow<GatewayEvent>`
 - Produces: `AttachmentUploader.upload(SelectedAttachment): AttachmentId`
 - Produces: `ConversationClient.threads(accountId): Flow<List<ConversationThread>>`
+- Produces: `DeviceRequestClient.claim(requestId, grantRevision): Unit`
 - Produces: `DeviceRequestClient.submitResult(requestId, grantRevision, result): Unit`
+- Owns: HTTP raw header/target/body bytes、SSE byte parser、真机 TLS 和 claim/result transport；不把本地 TypeScript 向量当作 Android 证据
 
 - [ ] **Step 1: 写分片 SSE、断线游标和摘要不符失败测试**
 
@@ -601,13 +619,13 @@ interface GatewayByteTransport {
 }
 ```
 
-默认实现只接受 `https` URL、系统信任或 profile 固定 SPKI；SSE 只在完整空行后提交事件与游标。附件使用创建 → content → commit，读取 `ContentResolver` 流时同步计算长度和 SHA-256。
+默认实现只接受 `https` URL、系统信任或 profile 固定 SPKI；签名必须从实际发送的 canonical raw target 和 exact body bytes 构造，并从 raw header 列表失败关闭重复或折叠字段。SSE 只在完整空行后提交事件与游标，恢复时以 canonical query cursor 为权威。附件使用创建 → content → commit，读取 `ContentResolver` 流时同步计算长度和 SHA-256。设备请求在任何副作用前调用幂等 claim，随后才允许提交 result。
 
 - [ ] **Step 4: 运行协议向量和 TLS 真机测试**
 
 Run: `cd apps/android && ./gradlew :gateway-client:testDebugUnitTest :gateway-client:connectedDebugAndroidTest`
 
-Expected: PASS；自签名未固定、指纹变化、游标冲突、摘要不符和超限均失败关闭。
+Expected: PASS；自签名未固定、指纹变化、raw header 重复/折叠、非 canonical target、游标冲突、摘要不符、超限以及未 claim 即提交结果均失败关闭。
 
 - [ ] **Step 5: 提交**
 

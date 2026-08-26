@@ -27,9 +27,11 @@ V2 是新协议，不兼容 Bridge Protocol v1。所有端点必须使用 HTTPS�
 - `Content-Type: application/json`；
 - 对象拒绝重复键；
 - 协议 Schema 默认拒绝未知字段；
-- 时间使用 RFC 3339 UTC，精确到毫秒；
+- 时间使用 RFC 3339 UTC，且必须精确包含三位毫秒；
 - 摘要使用小写十六进制 SHA-256；
-- ID 是服务端或客户端生成的不透明 ASCII 字符串，长度 1–128，接收方不得解析业务含义。
+- HTTP method 只允许区分大小写的 `GET`、`POST`、`PUT`、`DELETE`，不得通过 `toUpperCase()` 或其他规范化接受别名；
+- wire ID 服从 `wire-id = 1*128(ALPHA / DIGIT / "." / "_" / "~" / "-")`，等价正则为 `^[A-Za-z0-9._~-]{1,128}$`；
+- 所有 ID 都是服务端或客户端生成的不透明值，接收方不得解析其中的业务含义。
 
 所有成功响应包含：
 
@@ -128,6 +130,25 @@ V2 是新协议，不兼容 Bridge Protocol v1。所有端点必须使用 HTTPS�
 
 协议主版本不同、核心 Schema 不兼容、未知安全字段或未知高风险能力时返回 `PROTOCOL_INCOMPATIBLE`。次版本差异只启用双方声明的交集。协商结果由 `negotiationId` 绑定后续认证会话，客户端不能在单次请求中自行扩大功能。
 
+### 4.1 动态 Schema catalog 与可信分派
+
+`schemaFor` 和 `validateGatewayValue` 保留 outer-only 兼容语义：它们只验证固定协议外壳，不把动态 `payload`、`parameters`、成功 `data` 或失败 `details` 误报为已经完成子 Schema 验证。完整验证必须使用一个原子的 dispatched validator：构造时接收并冻结 catalog；运行时依次完成外壳验证、可信 key 解析、catalog lookup 和子值验证，调用方不能观察或绕过中间的半验证状态。
+
+每个 catalog entry 的 Schema identity 是 `sha256:` 加 RFC 8785 JCS 所得 UTF-8 bytes 的小写 SHA-256。分派 key 只有以下四类：
+
+```ts
+type GatewaySubschemaKey =
+  | { kind: "event"; eventType: string; schemaSha256: string }
+  | { kind: "device.request"; pluginId: string; authorKeyId: string;
+      capabilityId: string; capabilityVersion: string; schemaSha256: string }
+  | { kind: "response.success"; operation: string; status: number; schemaSha256: string }
+  | { kind: "response.failure"; errorCode: string; schemaSha256: string };
+```
+
+可信分派来源固定如下：事件 `eventType` 来自已验证 SSE 的 `event:` 行；设备请求的 `pluginId`、`authorKeyId`、`capabilityId` 和 `capabilityVersion` 从已经通过外壳验证的 value 提取，只有 `schemaSha256` 从协商会话上下文传入；成功响应的 `operation` 和 `status` 来自本地请求上下文；失败响应的 `errorCode` 从已验证 error envelope 提取。请求不得传入 Schema、resolver 或 `ValidateFunction`，也不得用 payload 自报字段覆盖可信分派。
+
+catalog 构造时必须 defensive-clone 后冻结；每个根 Schema 必须闭合并拒绝未声明字段。重复 key、声明 digest 与 Schema identity 不符、根 Schema 未闭合、无法被 strict validator 编译或含未解析外部 `$ref` 都必须令构造失败。运行时未知或缺失 key 返回 `ok: false` 以及稳定排序、冻结的 validation errors；外壳失败时不得继续提取动态 key。
+
 ## 5. 账号与设备
 
 ### 5.1 标识
@@ -138,6 +159,8 @@ V2 是新协议，不兼容 Bridge Protocol v1。所有端点必须使用 HTTPS�
 - `deviceId`：逻辑 Gateway 为该安装实例创建的账号内设备标识；
 - `pairingId`：账号与设备之间的信任关系；
 - `sessionId`：短期认证会话。
+
+以上线上 ID 以及本契约其他 wire ID 都必须满足第 2 节的 `wire-id`；它们仍是不可解析的不透明值，前缀示例不构成业务编码规则。
 
 不同账号中的相同 `installationId` 不共享 device ID、配对、授权或审计。Gateway 必须在打开账号数据库前完成账号解析，不能先连接共享业务数据库再依赖行过滤。
 
@@ -180,7 +203,9 @@ V2 是新协议，不兼容 Bridge Protocol v1。所有端点必须使用 HTTPS�
 
 ## 6. 已认证请求
 
-短期 access token 使用：
+### 6.1 Raw header 与验证后身份
+
+短期 access token 使用以下 header：
 
 ```http
 Authorization: Bearer <opaque-access-token>
@@ -194,24 +219,110 @@ X-Agent-Life-Nonce: <base64url 16 random bytes>
 X-Agent-Life-Signature: <base64url Ed25519 signature>
 ```
 
-设备签名输入：
+HTTP 入口必须从 raw header 列表证明下列每个 header 恰好出现一次：
 
 ```text
-AGENT-LIFE-REQUEST-V2\n
-<UPPERCASE METHOD>\n
-<normalized path and sorted percent-encoded query>\n
-<account-id>\n
-<device-id>\n
-<session-id>\n
-<request-id>\n
-<timestamp>\n
-<nonce>\n
-<lowercase sha256 of exact body bytes>
+Authorization
+X-Agent-Life-Protocol
+X-Agent-Life-Account
+X-Agent-Life-Device
+X-Agent-Life-Session
+X-Agent-Life-Request-Id
+X-Agent-Life-Timestamp
+X-Agent-Life-Nonce
+X-Agent-Life-Signature
 ```
 
-Gateway 校验 token、账号、设备、配对 generation、时间窗、nonce、防重放和签名。认证身份只能来自验证结果；请求 JSON 中出现 `accountId`、`deviceId`、`principalId` 等试图覆盖认证身份的字段时返回 `IDENTITY_OVERRIDE_REJECTED`。
+header 名大小写不敏感；值按收到的原始字段值验证，不做 trim、unfold，也不做 first/last 选择。重复字段、库或代理产生的逗号合并值、只有 trim 后才合法的值，以及含 CR、LF、NUL 或其他控制字符的值一律拒绝。若运行框架不能提供足以证明这些条件的 raw header 列表，该入口必须失败关闭。
 
-读请求重复可以安全重试。所有创建、副作用和附件提交请求必须携带 `Idempotency-Key`；同一账号、设备和键在保留期内返回同一终态，不重复执行。
+token 验证得到的 `accountId`、`deviceId`、`sessionId` 必须分别与三个身份 header 的值逐字节精确相等。后续路由和业务只能接收单一不可变的 `VerifiedRequestContext`，不能再次从 header、query、path 或 JSON 读取身份。请求 JSON 中出现 `accountId`、`deviceId`、`principalId` 等试图覆盖认证身份的字段时返回 `IDENTITY_OVERRIDE_REJECTED`。
+
+### 6.2 Method、时间、nonce、签名与 body bytes
+
+已认证请求字段语法为：
+
+```text
+method    = "GET" / "POST" / "PUT" / "DELETE"
+timestamp = RFC3339 UTC with exactly milliseconds
+nonce     = canonical unpadded base64url of exactly 16 bytes
+signature = canonical unpadded base64url of exactly 64 Ed25519 bytes
+```
+
+method 在线上区分大小写；小写或混合大小写一律拒绝，不能先转为大写再验签。nonce 和 signature 解码后必须分别恰好为 16 和 64 bytes，并且以 canonical unpadded base64url 重新编码后必须与原字符串完全相同。
+
+body digest 覆盖 HTTP transfer framing 解码后的 exact entity-body bytes，并且必须在 JSON decode、字符转换、自动解压或重序列化之前计算。JSON 请求禁止 `Content-Encoding`。零字节 body 的 SHA-256 固定为：
+
+```text
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+```
+
+### 6.3 Canonical request target
+
+签名输入只允许 `/agent-life/v2` 基路径内的 HTTP origin-form target。语言无关的逐字节算法必须按以下顺序执行：
+
+1. 拒绝 absolute-form、authority-form、`*`、fragment、空白和控制字符；path 必须是 `/agent-life/v2` 或其下级路径。
+2. 只在第一个字面量 `?` 分离 path/query；query 内出现字面量 `?` 属于非规范输入。
+3. path 使用字面量 `/` 分段；每个完整 `%HH` 解码为一个 byte，畸形或不完整的 percent escape 拒绝。
+4. byte 属于 `[A-Za-z0-9._~-]` 时原样输出，其他 byte 输出大写 `%HH`。
+5. 拒绝解码后为 `.` 或 `..` 的 segment；拒绝 segment 解码后包含 `/` 或 `\\`；拒绝 `//` 和非根尾随 `/`。
+6. query 使用字面量 `&` 分 pair，空 pair 拒绝；在第一个字面量 `=` 分 name/value，空 name 拒绝，未写 `=` 的输入也规范为带空 value 的 `name=`。
+7. query name/value 使用第 3、4 步相同的 byte 解码和编码；`+` 规范为 `%2B`，绝不解释为空格。
+8. 先按 canonical encoded name 的 ASCII bytes 排序，再按 canonical encoded value 的 ASCII bytes 排序；完全重复的 pair 保留原数量。
+9. 没有 query 时不输出 `?`；字面量空 query 标记 `?` 必须拒绝。
+10. 客户端实际发送的 raw target 与 Gateway 验签读取的 raw target 都必须逐字节等于 canonical target；反向代理不能依赖未认证的 `X-Original-URI` 恢复已被重写的路径。
+
+### 6.4 请求签名预像
+
+设备签名预像严格由以下 10 个 ASCII 字段和字段间 9 个 `0x0A` 组成：
+
+```text
+ASCII("AGENT-LIFE-REQUEST-V2") LF
+ASCII(method) LF
+ASCII(canonicalTarget) LF
+ASCII(accountId) LF
+ASCII(deviceId) LF
+ASCII(sessionId) LF
+ASCII(requestId) LF
+ASCII(timestamp) LF
+ASCII(nonce) LF
+ASCII(lowercaseHex(SHA-256(exactBodyBytes)))
+```
+
+最后一个字段后不得出现 LF、CR、NUL、空格或 BOM。Ed25519 直接签完整预像，不使用 Ed25519ph。
+
+独立 oracle 向量输入：
+
+```json
+{
+  "method": "GET",
+  "target": "/agent-life/v2/events?cursor=evt_1&z=last",
+  "accountId": "acct_1",
+  "deviceId": "dev_1",
+  "sessionId": "sess_1",
+  "requestId": "req_1",
+  "timestamp": "2026-08-27T00:00:00.000Z",
+  "nonce": "AAAAAAAAAAAAAAAAAAAAAA",
+  "bodyHex": ""
+}
+```
+
+其 canonical target 为：
+
+```text
+/agent-life/v2/events?cursor=evt_1&z=last
+```
+
+其 expected preimage hex 为：
+
+```text
+4147454e542d4c4946452d524551554553542d56320a4745540a2f6167656e742d6c6966652f76322f6576656e74733f637572736f723d6576745f31267a3d6c6173740a616363745f310a6465765f310a736573735f310a7265715f310a323032362d30382d32375430303a30303a30302e3030305a0a414141414141414141414141414141414141414141410a65336230633434323938666331633134396166626634633839393666623932343237616534316534363439623933346361343935393931623738353262383535
+```
+
+Gateway 随后校验账号、设备、配对 generation、时间窗、nonce、防重放和签名；任何一步失败都不得向业务暴露未经验证的上下文。
+
+### 6.5 幂等绑定
+
+读请求重复可以安全重试。所有创建、副作用和附件提交请求必须携带 `Idempotency-Key`，且值必须逐字节精确等于已签名的 `X-Agent-Life-Request-Id`。同一账号、设备和 request ID 在保留期内返回同一终态，不重复执行。客户端重试可以更换 timestamp 和 nonce，但必须保持 request ID 不变。
 
 ## 7. 对话
 
@@ -262,18 +373,44 @@ Gateway 返回 `accepted` 及服务端 message ID；Agent 回复通过 SSE 发�
 
 Gateway 在读取内容前检查协商限制和本账号配额。content 请求必须携带 `Content-Length` 与 `Digest: sha-256=<base64>`，不允许未协商的压缩或媒体类型。commit 只有在字节数和摘要完全匹配时成功。
 
-附件状态：
+附件状态和事件是封闭集合：
 
-```text
-created -> uploading -> verified -> delivered -> acknowledged -> deleted
-created|uploading|verified -> expired|failed -> deleted
+```ts
+type AttachmentState =
+  | "created" | "uploading" | "verified" | "delivered"
+  | "acknowledged" | "failed" | "expired" | "deleted";
+
+type AttachmentEvent =
+  | "begin_upload" | "verify" | "deliver" | "acknowledge"
+  | "fail" | "expire" | "cleanup";
 ```
+
+唯一合法转移为：
+
+| 当前状态 | 事件 | 下一状态 |
+|---|---|---|
+| `created` | `begin_upload` | `uploading` |
+| `created` | `fail` | `failed` |
+| `created` | `expire` | `expired` |
+| `uploading` | `verify` | `verified` |
+| `uploading` | `fail` | `failed` |
+| `uploading` | `expire` | `expired` |
+| `verified` | `deliver` | `delivered` |
+| `verified` | `fail` | `failed` |
+| `verified` | `expire` | `expired` |
+| `delivered` | `acknowledge` | `acknowledged` |
+| `delivered` | `expire` | `expired` |
+| `acknowledged` | `cleanup` | `deleted` |
+| `failed` | `cleanup` | `deleted` |
+| `expired` | `cleanup` | `deleted` |
+
+全部其他 `AttachmentState × AttachmentEvent` 组合抛 `INVALID_STATE_TRANSITION`。精确 HTTP 重试由 reducer 前的幂等账本处理，不给普通事件增加自循环。解除配对和删除账号是资源级事务，不伪装成逐附件事件。
 
 只有 `verified` 附件可被消息引用。宿主确认接收后 Gateway 删除暂存字节并保留无正文终态；配对解除、账号删除或 TTL 到期立即删除。
 
 ## 9. SSE 事件流
 
-`GET /events?cursor=<opaque>` 使用 `Accept: text/event-stream`。客户端也可以发送 `Last-Event-ID`；两者同时存在且不一致时返回 `CURSOR_CONFLICT`。
+`GET /events?cursor=<opaque>` 使用 `Accept: text/event-stream`。认证 SSE 恢复以 canonical query 中的 `cursor` 为权威；`Last-Event-ID` 若存在，必须与 query cursor 逐字节精确相等，否则返回 `CURSOR_CONFLICT`。只有 header、没有 query cursor 不能选择恢复位置。
 
 事件格式：
 
@@ -327,6 +464,48 @@ Agent 宿主通过 Gateway Core 创建结构化设备请求；模型不能提供
 
 Android 执行前重新验证插件身份、当前提供者、能力版本、授权 revision、本地权限、资源状态和期限。结果提交到 `POST /device-requests/{requestId}/result`，必须幂等并包含执行时授权 revision。
 
+Android 必须先调用幂等 claim 操作 `POST /device-requests/{requestId}/claim`，并在任何副作用前取得该请求的 claim；未 claim 的 `pending` 请求不能直接提交普通结果。claim 与 result 的持久化、SQLite/CAS 和崩溃恢复由 Gateway Core 实现，线上调用仍遵守第 6 节的签名与幂等绑定。
+
+设备请求状态和事件是封闭集合：
+
+```ts
+type DeviceRequestState =
+  | "pending" | "claimed" | "cancel_requested"
+  | "succeeded" | "failed" | "denied" | "cancelled"
+  | "expired" | "outcome_unknown";
+
+type DeviceRequestEvent =
+  | "claim" | "cancel" | "expire"
+  | "result_succeeded" | "result_failed" | "result_denied"
+  | "result_cancelled" | "result_outcome_unknown"
+  | "recover_outcome_unknown";
+```
+
+唯一合法转移为：
+
+| 当前状态 | 事件 | 下一状态 |
+|---|---|---|
+| `pending` | `claim` | `claimed` |
+| `pending` | `cancel` | `cancelled` |
+| `pending` | `expire` | `expired` |
+| `claimed` | `cancel` | `cancel_requested` |
+| `claimed` | `expire` | `outcome_unknown` |
+| `claimed` | `result_succeeded` | `succeeded` |
+| `claimed` | `result_failed` | `failed` |
+| `claimed` | `result_denied` | `denied` |
+| `claimed` | `result_cancelled` | `cancelled` |
+| `claimed` | `result_outcome_unknown` | `outcome_unknown` |
+| `claimed` | `recover_outcome_unknown` | `outcome_unknown` |
+| `cancel_requested` | `expire` | `outcome_unknown` |
+| `cancel_requested` | `result_succeeded` | `succeeded` |
+| `cancel_requested` | `result_failed` | `failed` |
+| `cancel_requested` | `result_denied` | `denied` |
+| `cancel_requested` | `result_cancelled` | `cancelled` |
+| `cancel_requested` | `result_outcome_unknown` | `outcome_unknown` |
+| `cancel_requested` | `recover_outcome_unknown` | `outcome_unknown` |
+
+全部其他 `DeviceRequestState × DeviceRequestEvent` 组合抛 `INVALID_STATE_TRANSITION`。`outcome_unknown` 是不可被普通结果覆盖的终态；准确 HTTP 重试仍由 reducer 前的幂等账本处理，不增加自循环。
+
 队列上限：
 
 | 风险 | 默认最长等待 | 恢复后处理 |
@@ -378,6 +557,7 @@ SESSION_EXPIRED
 SESSION_REVOKED
 IDENTITY_OVERRIDE_REJECTED
 SIGNATURE_INVALID
+NON_CANONICAL_TARGET
 REQUEST_REPLAYED
 CLOCK_SKEWED
 PAIRING_REQUIRED
@@ -389,6 +569,7 @@ CAPABILITY_UNAVAILABLE
 PROVIDER_CHANGED
 IDEMPOTENCY_CONFLICT
 OUTCOME_UNKNOWN
+INVALID_STATE_TRANSITION
 ATTACHMENT_LIMIT_EXCEEDED
 ATTACHMENT_DIGEST_MISMATCH
 ATTACHMENT_EXPIRED
@@ -423,5 +604,20 @@ Android、Hermes 和 OpenClaw 实现必须共同通过语言无关向量：
 - 提供者切换、授权 revision 和 Companion 故障关闭；
 - 多账号文件级隔离、备份不含活动身份、账号删除；
 - Android/Gateway correlation ID 对应且审计不含正文。
+
+六个 JSON 向量文件的顶层结构固定为：
+
+```json
+{
+  "formatVersion": "1.0.0",
+  "protocolVersion": "2.0",
+  "vectorSet": "request-signatures",
+  "cases": []
+}
+```
+
+顶层对象和每个 case 都拒绝未知字段。case 只能包含 `id`、`operation`、`input`、`expected`；case ID 在六个文件中全局唯一；每个文件至少包含一个 `expected.outcome = "value"` 和一个 `expected.outcome = "error"`。二进制统一为 lowercase hex，时间统一为固定三位毫秒 UTC。不得出现 `skipped`、`futureOnly` 或没有任何一致性 runner 消费的 case。
+
+Task 2 的 TypeScript 门禁必须逐 case 调用生产 canonicalizer、纯 reducer、outer validator 或 dispatched validator，不能只 grep/parse 向量。Task 3/5 各自实现数据库、CAS、幂等账本、TTL、SSE store、附件 staging 和 crash recovery；Task 6 使用独立 OpenClaw/Hermes runner 并比较契约结果的 `resultHash`；Task 8/9 保留 Android Keystore、HTTP/SSE byte parser、真机 TLS 以及 claim/result transport 的独立实现和证据。Task 2 的本地向量通过不等于双宿主、Android 或真机一致性已完成。
 
 任一实现只有在同一向量版本全部通过后才能声明 `Gateway Protocol 2.0` 兼容。
