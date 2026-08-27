@@ -1,0 +1,71 @@
+{
+  "formatVersion": "1.0.0",
+  "protocolVersion": "2.0",
+  "vectorSet": "request-signatures",
+  "cases": [
+    {
+      "id": "request-target-sort",
+      "operation": "request.target",
+      "input": {
+        "target": "/agent-life/v2/events?z=last&cursor=evt_1"
+      },
+      "expected": {
+        "outcome": "value",
+        "value": {
+          "canonicalTarget": "/agent-life/v2/events?cursor=evt_1&z=last"
+        }
+      }
+    },
+    {
+      "id": "request-target-invalid-query",
+      "operation": "request.target",
+      "input": {
+        "target": "/agent-life/v2/events?"
+      },
+      "expected": {
+        "outcome": "error",
+        "code": "SCHEMA_INVALID"
+      }
+    },
+    {
+      "id": "request-signature-oracle",
+      "operation": "request.signature",
+      "input": {
+        "method": "GET",
+        "target": "/agent-life/v2/events?cursor=evt_1&z=last",
+        "accountId": "acct_1",
+        "deviceId": "dev_1",
+        "sessionId": "sess_1",
+        "requestId": "req_1",
+        "timestamp": "2026-08-27T00:00:00.000Z",
+        "nonce": "AAAAAAAAAAAAAAAAAAAAAA",
+        "bodyHex": ""
+      },
+      "expected": {
+        "outcome": "value",
+        "value": {
+          "preimageHex": "4147454e542d4c4946452d524551554553542d56320a4745540a2f6167656e742d6c6966652f76322f6576656e74733f637572736f723d6576745f31267a3d6c6173740a616363745f310a6465765f310a736573735f310a7265715f310a323032362d30382d32375430303a30303a30302e3030305a0a414141414141414141414141414141414141414141410a65336230633434323938666331633134396166626634633839393666623932343237616534316534363439623933346361343935393931623738353262383535"
+        }
+      }
+    },
+    {
+      "id": "request-signature-noncanonical",
+      "operation": "request.signature",
+      "input": {
+        "method": "GET",
+        "target": "/agent-life/v2/events?z=last&cursor=evt_1",
+        "accountId": "acct_1",
+        "deviceId": "dev_1",
+        "sessionId": "sess_1",
+        "requestId": "req_1",
+        "timestamp": "2026-08-27T00:00:00.000Z",
+        "nonce": "AAAAAAAAAAAAAAAAAAAAAA",
+        "bodyHex": ""
+      },
+      "expected": {
+        "outcome": "error",
+        "code": "NON_CANONICAL_TARGET"
+      }
+    }
+  ]
+}

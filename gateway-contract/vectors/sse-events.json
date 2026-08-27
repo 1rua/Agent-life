@@ -1,0 +1,47 @@
+{
+  "formatVersion": "1.0.0",
+  "protocolVersion": "2.0",
+  "vectorSet": "sse-events",
+  "cases": [
+    {
+      "id": "sse-event-gateway-notice-valid",
+      "operation": "schema.validate_dispatched",
+      "input": {
+        "fixtureBindingSetId": "gateway-core-fixtures-v1",
+        "dispatch": {
+          "kind": "event",
+          "eventType": "gateway.notice"
+        },
+        "value": {
+          "correlationId": "correlation_1",
+          "occurredAt": "2026-08-27T00:00:00.000Z",
+          "payload": { "noticeCode": "maintenance" }
+        }
+      },
+      "expected": {
+        "outcome": "value",
+        "value": { "valid": true }
+      }
+    },
+    {
+      "id": "sse-event-payload-unknown-field",
+      "operation": "schema.validate_dispatched",
+      "input": {
+        "fixtureBindingSetId": "gateway-core-fixtures-v1",
+        "dispatch": {
+          "kind": "event",
+          "eventType": "gateway.notice"
+        },
+        "value": {
+          "correlationId": "correlation_1",
+          "occurredAt": "2026-08-27T00:00:00.000Z",
+          "payload": { "noticeCode": "maintenance", "unexpected": true }
+        }
+      },
+      "expected": {
+        "outcome": "error",
+        "code": "SCHEMA_INVALID"
+      }
+    }
+  ]
+}

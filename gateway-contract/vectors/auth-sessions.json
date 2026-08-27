@@ -1,0 +1,65 @@
+{
+  "formatVersion": "1.0.0",
+  "protocolVersion": "2.0",
+  "vectorSet": "auth-sessions",
+  "cases": [
+    {
+      "id": "auth-session-password-valid",
+      "operation": "schema.validate",
+      "input": {
+        "schemaName": "session.password",
+        "value": {
+          "negotiationId": "neg_1",
+          "username": "alice",
+          "password": "user-entered-secret",
+          "installation": {
+            "installationId": "install_1",
+            "displayName": "Alice's phone",
+            "devicePublicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+          }
+        }
+      },
+      "expected": {
+        "outcome": "value",
+        "value": { "valid": true }
+      }
+    },
+    {
+      "id": "auth-session-device-invalid-signature",
+      "operation": "schema.validate",
+      "input": {
+        "schemaName": "session.device",
+        "value": {
+          "negotiationId": "neg_1",
+          "accountId": "account_1",
+          "installationId": "install_1",
+          "deviceId": "device_1",
+          "challenge": "challenge_1",
+          "signature": "A"
+        }
+      },
+      "expected": {
+        "outcome": "error",
+        "code": "SCHEMA_INVALID"
+      }
+    },
+    {
+      "id": "auth-session-refresh-valid",
+      "operation": "schema.validate",
+      "input": {
+        "schemaName": "session.refresh",
+        "value": {
+          "negotiationId": "neg_1",
+          "accountId": "account_1",
+          "installationId": "install_1",
+          "deviceId": "device_1",
+          "refreshCredential": "refresh-secret"
+        }
+      },
+      "expected": {
+        "outcome": "value",
+        "value": { "valid": true }
+      }
+    }
+  ]
+}
