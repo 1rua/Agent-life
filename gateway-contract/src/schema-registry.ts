@@ -4,6 +4,7 @@ import {
   type ValidateFunction,
 } from "ajv/dist/2020.js";
 import addFormatsImport from "ajv-formats";
+import canonicalize from "canonicalize";
 
 import attachmentDocument from "../schemas/attachment.schema.json" with { type: "json" };
 import conversationDocument from "../schemas/conversation.schema.json" with { type: "json" };
@@ -23,7 +24,9 @@ export type GatewaySchemaName =
   | "message.create"
   | "attachment.create"
   | "event"
-  | "device.request";
+  | "device.request"
+  | "response.success"
+  | "response.failure";
 
 export type ValidationResult =
   | { readonly ok: true }
@@ -60,6 +63,8 @@ const definitions: Record<GatewaySchemaName, readonly [SchemaDocument, string]> 
   "attachment.create": [attachmentDocument as SchemaDocument, "create"],
   event: [eventDocument as SchemaDocument, "event"],
   "device.request": [deviceRequestDocument as SchemaDocument, "request"],
+  "response.success": [envelopeDocument as SchemaDocument, "success"],
+  "response.failure": [envelopeDocument as SchemaDocument, "failure"],
 };
 
 const ajv = new Ajv2020({
@@ -152,14 +157,20 @@ const validators = new Map<GatewaySchemaName, ValidateFunction>(
 
 const normalizeAjvErrors = (
   errors: readonly ErrorObject[] | null | undefined,
-): readonly string[] =>
-  Object.freeze(
-    (errors ?? [])
-      .map(({ instancePath, keyword, message }) =>
-        `${instancePath === "" ? "/" : instancePath} ${keyword} ${message ?? "validation failed"}`,
-      )
-      .sort(),
+): readonly string[] => {
+  const diagnostics = new Set<string>();
+  for (const error of errors ?? []) {
+    const params = canonicalize(error.params) ?? "null";
+    diagnostics.add(
+      `${error.instancePath}\t${error.schemaPath}\t${error.keyword}\t${params}`,
+    );
+  }
+  return Object.freeze(
+    [...diagnostics].sort((left, right) =>
+      Buffer.from(left, "utf8").compare(Buffer.from(right, "utf8")),
+    ),
   );
+};
 
 const registeredDefinition = (name: GatewaySchemaName): SchemaObject => {
   const schema = publicSchemas.get(name);
@@ -177,6 +188,6 @@ export const validateGatewayValue = (
   const validate = validators.get(name);
   if (validate === undefined) throw new Error(`SCHEMA_NOT_REGISTERED:${String(name)}`);
   return validate(value)
-    ? { ok: true }
-    : { ok: false, errors: normalizeAjvErrors(validate.errors) };
+    ? Object.freeze({ ok: true })
+    : Object.freeze({ ok: false, errors: normalizeAjvErrors(validate.errors) });
 };

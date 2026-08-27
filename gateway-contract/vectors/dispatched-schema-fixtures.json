@@ -1,0 +1,115 @@
+{
+  "formatVersion": "1.0.0",
+  "catalogEntries": [
+    {
+      "fixtureId": "event.gateway-notice.v1",
+      "key": {
+        "kind": "event",
+        "eventType": "gateway.notice",
+        "schemaSha256": "sha256:597cd548512a66963ae944e75af529fddd0c40cdf8fc59b3fe3cab5287b6c725"
+      },
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["noticeCode"],
+        "properties": {
+          "noticeCode": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    {
+      "fixtureId": "device.sms-query.v1",
+      "key": {
+        "kind": "device.request",
+        "pluginId": "org.agentlife.sms",
+        "authorKeyId": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capabilityId": "org.agentlife.sms.query",
+        "capabilityVersion": "1.0.0",
+        "schemaSha256": "sha256:2b97b44496ebe4e20884dcf12391bc272783513c0ed5a5f459ab062eca6c37ac"
+      },
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["query"],
+        "properties": {
+          "query": { "type": "string", "minLength": 1 },
+          "receivedAfter": { "type": "string", "format": "date-time" },
+          "senders": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    {
+      "fixtureId": "response.conversation-create.v1",
+      "key": {
+        "kind": "response.success",
+        "operation": "conversation.create",
+        "status": 201,
+        "schemaSha256": "sha256:2719284ed50fba05b945c58eb5146dd53becdcc48b0a57228d8e97a407a0b87e"
+      },
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["conversationId"],
+        "properties": {
+          "conversationId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._~-]{1,128}$"
+          }
+        }
+      }
+    },
+    {
+      "fixtureId": "error.cursor-expired.v1",
+      "key": {
+        "kind": "response.failure",
+        "errorCode": "CURSOR_EXPIRED",
+        "schemaSha256": "sha256:7cb06a94b19b83c6aba2ed82832bcfd3c103345f4fb6b5f106739cfe40d5fce9"
+      },
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["recoverableResources"],
+        "properties": {
+          "recoverableResources": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": { "enum": ["conversations", "attachments", "device-requests"] }
+          }
+        }
+      }
+    }
+  ],
+  "bindingSets": [
+    {
+      "id": "gateway-core-fixtures-v1",
+      "bindings": [
+        {
+          "key": { "kind": "event", "eventType": "gateway.notice" },
+          "schemaSha256": "sha256:597cd548512a66963ae944e75af529fddd0c40cdf8fc59b3fe3cab5287b6c725"
+        },
+        {
+          "key": {
+            "kind": "device.request",
+            "pluginId": "org.agentlife.sms",
+            "authorKeyId": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "capabilityId": "org.agentlife.sms.query",
+            "capabilityVersion": "1.0.0"
+          },
+          "schemaSha256": "sha256:2b97b44496ebe4e20884dcf12391bc272783513c0ed5a5f459ab062eca6c37ac"
+        },
+        {
+          "key": {
+            "kind": "response.success",
+            "operation": "conversation.create",
+            "status": 201
+          },
+          "schemaSha256": "sha256:2719284ed50fba05b945c58eb5146dd53becdcc48b0a57228d8e97a407a0b87e"
+        },
+        {
+          "key": { "kind": "response.failure", "errorCode": "CURSOR_EXPIRED" },
+          "schemaSha256": "sha256:7cb06a94b19b83c6aba2ed82832bcfd3c103345f4fb6b5f106739cfe40d5fce9"
+        }
+      ]
+    }
+  ]
+}

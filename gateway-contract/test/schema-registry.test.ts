@@ -115,6 +115,24 @@ const validValues: Record<GatewaySchemaName, unknown> = {
     expiresAt: "2026-08-25T12:00:00.000Z",
     requiresForegroundConfirmation: false,
   },
+  "response.success": {
+    requestId: "request_1",
+    correlationId: "correlation_1",
+    protocol: "2.0",
+    data: { arbitrary: true },
+  },
+  "response.failure": {
+    requestId: "request_1",
+    correlationId: "correlation_1",
+    protocol: "2.0",
+    error: {
+      code: "CURSOR_EXPIRED",
+      message: "expired",
+      retryable: true,
+      retryAfterSeconds: null,
+      details: { arbitrary: true },
+    },
+  },
 };
 
 const clone = <T>(value: T): T => structuredClone(value);
@@ -192,7 +210,7 @@ describe("Gateway Protocol v2 Schema registry", () => {
     expect(validateGatewayValue("message.create", value)).toMatchObject({ ok: false });
   });
 
-  it("enforces opaque ID length while accepting space and control ASCII required by the contract", () => {
+  it("enforces the visible wire ID alphabet and length", () => {
     const validateId = (clientConversationId: string) =>
       validateGatewayValue("conversation.create", { clientConversationId });
 
@@ -200,11 +218,71 @@ describe("Gateway Protocol v2 Schema registry", () => {
     expect(validateId("a")).toEqual({ ok: true });
     expect(validateId("a".repeat(128))).toEqual({ ok: true });
     expect(validateId("a".repeat(129))).toMatchObject({ ok: false });
-    expect(validateId("contains space")).toEqual({ ok: true });
-    expect(validateId("line\nbreak")).toEqual({ ok: true });
-    expect(validateId("nul\0byte")).toEqual({ ok: true });
-    expect(validateId("delete\u007fbyte")).toEqual({ ok: true });
-    expect(validateId("设备")).toMatchObject({ ok: false });
+    for (const invalidId of [
+      "contains space",
+      "contains\thtab",
+      "line\nbreak",
+      "carriage\rreturn",
+      "nul\0byte",
+      "delete\u007fbyte",
+      "comma,value",
+      "slash/value",
+      "percent%value",
+      "设备",
+    ]) {
+      expect(validateId(invalidId)).toMatchObject({ ok: false });
+    }
+    expect(validateId("A-z_0.~-")).toEqual({ ok: true });
+  });
+
+  it("validates the public success and failure response shells", () => {
+    expect(
+      validateGatewayValue("response.success", {
+        requestId: "request_1",
+        correlationId: "correlation_1",
+        protocol: "2.0",
+        data: { arbitrary: true },
+      }),
+    ).toEqual({ ok: true });
+    expect(
+      validateGatewayValue("response.failure", {
+        requestId: "request_1",
+        correlationId: "correlation_1",
+        protocol: "2.0",
+        error: {
+          code: "CURSOR_EXPIRED",
+          message: "expired",
+          retryable: true,
+          retryAfterSeconds: 1,
+          details: { arbitrary: true },
+        },
+      }),
+    ).toEqual({ ok: true });
+
+    expect(
+      validateGatewayValue("response.success", {
+        requestId: "request_1",
+        correlationId: "correlation_1",
+        protocol: "2.0",
+        data: {},
+        unexpected: true,
+      }),
+    ).toMatchObject({ ok: false });
+    expect(
+      validateGatewayValue("response.failure", {
+        requestId: "request_1",
+        correlationId: "correlation_1",
+        protocol: "2.0",
+        error: {
+          code: "CURSOR_EXPIRED",
+          message: "expired",
+          retryable: true,
+          retryAfterSeconds: null,
+          details: {},
+          unexpected: true,
+        },
+      }),
+    ).toMatchObject({ ok: false });
   });
 
   it.each([
@@ -496,7 +574,10 @@ describe("Gateway Protocol v2 Schema registry", () => {
       const properties = record.properties;
       if (typeof properties === "object" && properties !== null && !Array.isArray(properties)) {
         for (const [key, child] of Object.entries(properties)) {
-          assertStrictObjects(child, key === "payload" || key === "parameters");
+          assertStrictObjects(
+            child,
+            key === "payload" || key === "parameters" || key === "data" || key === "details",
+          );
         }
       }
       if (record.items !== undefined) assertStrictObjects(record.items);
