@@ -46,6 +46,11 @@ const signatureOracleVector = (
 ).cases.find(
   (vectorCase) => vectorCase.id === "request-signature-oracle" && vectorCase.operation === "request.signature",
 ) as unknown as SignatureVector;
+const nonEmptyBodyVector = (
+  requestSignaturesDocument as unknown as { cases: Array<{ id: string; operation: string }> }
+).cases.find(
+  (vectorCase) => vectorCase.id === "request-signature-nonempty-body" && vectorCase.operation === "request.signature",
+) as unknown as SignatureVector | undefined;
 
 describe("Gateway Protocol v2 request signature", () => {
   it("builds the prescribed ten-field preimage for the fixed oracle", () => {
@@ -76,6 +81,29 @@ describe("Gateway Protocol v2 request signature", () => {
 
     expect(Buffer.from(actual).toString("hex")).toBe(
       signatureOracleVector.expected.value.preimageHex,
+    );
+  });
+
+  it("locks an exact preimage for a non-empty raw body vector", () => {
+    expect(nonEmptyBodyVector).toBeDefined();
+    if (nonEmptyBodyVector === undefined) return;
+
+    const input = nonEmptyBodyVector.input;
+    expect(input.bodyHex).not.toBe("");
+    const actual = canonicalRequestSignatureInput({
+      method: input.method,
+      target: input.target,
+      accountId: input.accountId,
+      deviceId: input.deviceId,
+      sessionId: input.sessionId,
+      requestId: input.requestId,
+      timestamp: input.timestamp,
+      nonce: input.nonce,
+      body: Uint8Array.from(Buffer.from(input.bodyHex, "hex")),
+    });
+
+    expect(Buffer.from(actual).toString("hex")).toBe(
+      nonEmptyBodyVector.expected.value.preimageHex,
     );
   });
 
