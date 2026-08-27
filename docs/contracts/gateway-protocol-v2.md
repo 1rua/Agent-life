@@ -144,6 +144,13 @@ type GatewaySubschemaKey =
       capabilityId: string; capabilityVersion: string; schemaSha256: string }
   | { kind: "response.success"; operation: string; status: number; schemaSha256: string }
   | { kind: "response.failure"; errorCode: string; schemaSha256: string };
+
+type GatewayLogicalSubschemaKey =
+  | { kind: "event"; eventType: string }
+  | { kind: "device.request"; pluginId: string; authorKeyId: string;
+      capabilityId: string; capabilityVersion: string }
+  | { kind: "response.success"; operation: string; status: number }
+  | { kind: "response.failure"; errorCode: string };
 ```
 
 运行时 dispatch 不含 `schemaSha256`，封闭类型为：
@@ -717,7 +724,102 @@ device.maximum_queue_seconds
 | `device.transition` | `{ current: DeviceRequestState, event: DeviceRequestEvent }` | `{ nextState: DeviceRequestState }` | `INVALID_STATE_TRANSITION` |
 | `device.maximum_queue_seconds` | `{ risk: "read" | "sync" | "write" | "high-privilege-ephemeral" }` | `{ seconds: 86400 | 900 | 0 }` | `SCHEMA_INVALID` |
 
-`schemaName` 的格式 `1.0.0` 枚举为 `negotiate.request`、`negotiate.response`、`session.password`、`session.refresh`、`session.device`、`conversation.create`、`message.create`、`attachment.create`、`event`、`device.request`、`response.success`、`response.failure`。`fixtureBindingSetId` 只选择测试 runner 本地已验证并冻结的 fixture，不携带 Schema 或 digest；`dispatch` 必须满足第 4.1 节不含 digest 的 `TrustedGatewayDispatch`。`value` 是待验证 JSON value，不改变 binding。
+`schemaName` 的格式 `1.0.0` 枚举为 `negotiate.request`、`negotiate.response`、`session.password`、`session.refresh`、`session.device`、`conversation.create`、`message.create`、`attachment.create`、`event`、`device.request`、`response.success`、`response.failure`。`schema.validate_dispatched.input.fixtureBindingSetId` 在格式 `1.0.0` 中只有一个合法值 `gateway-core-fixtures-v1`；`dispatch` 必须满足第 4.1 节不含 digest 的 `TrustedGatewayDispatch`。`value` 是待验证 JSON value，不改变 binding。
+
+本补充计划 Task 2 必须新建以下共享、版本化测试资产：
+
+```text
+gateway-contract/vectors/dispatched-schema-fixtures-1.0.0.schema.json
+gateway-contract/vectors/dispatched-schema-fixtures.json
+```
+
+`dispatched-schema-fixtures-1.0.0.schema.json` 是 registry meta-schema；`dispatched-schema-fixtures.json` 是 TypeScript、Python、Kotlin runner 共同读取的唯一 format `1.0.0` registry。registry 顶层只允许：
+
+```json
+{
+  "formatVersion": "1.0.0",
+  "catalogEntries": [],
+  "bindingSets": []
+}
+```
+
+每个 `catalogEntries` 元素只允许 `fixtureId`、完整 `GatewaySubschemaKey`（含 `schemaSha256`）和 `schema`；每个 `bindingSets` 元素只允许 `id`、`bindings`；每个 binding 只允许不含 digest 的 `GatewayLogicalSubschemaKey` 和单独的 `schemaSha256`。所有对象拒绝未知字段。format `1.0.0` registry 必须恰好包含下列四个 catalog entry、按下列顺序排列，并且恰好包含一个 `id = "gateway-core-fixtures-v1"` 的 binding set；该 binding set 的四个 binding 按同一顺序将 logical key 绑定到对应 digest。
+
+```ts
+type DispatchedSchemaFixtureCatalogEntry = Readonly<{
+  fixtureId: string;
+  key: GatewaySubschemaKey;
+  schema: object;
+}>;
+
+type DispatchedSchemaFixtureBinding = Readonly<{
+  key: GatewayLogicalSubschemaKey;
+  schemaSha256: string;
+}>;
+
+type DispatchedSchemaFixtureBindingSet = Readonly<{
+  id: "gateway-core-fixtures-v1";
+  bindings: readonly DispatchedSchemaFixtureBinding[];
+}>;
+```
+
+#### `event.gateway-notice.v1`
+
+Logical key：`{ kind:"event", eventType:"gateway.notice" }`
+
+规范 JCS bytes：
+
+```json
+{"additionalProperties":false,"properties":{"noticeCode":{"minLength":1,"type":"string"}},"required":["noticeCode"],"type":"object"}
+```
+
+```text
+sha256:597cd548512a66963ae944e75af529fddd0c40cdf8fc59b3fe3cab5287b6c725
+```
+
+#### `device.sms-query.v1`
+
+Logical key：`{ kind:"device.request", pluginId:"org.agentlife.sms", authorKeyId:"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", capabilityId:"org.agentlife.sms.query", capabilityVersion:"1.0.0" }`
+
+规范 JCS bytes：
+
+```json
+{"additionalProperties":false,"properties":{"query":{"minLength":1,"type":"string"},"receivedAfter":{"format":"date-time","type":"string"},"senders":{"items":{"type":"string"},"type":"array"}},"required":["query"],"type":"object"}
+```
+
+```text
+sha256:2b97b44496ebe4e20884dcf12391bc272783513c0ed5a5f459ab062eca6c37ac
+```
+
+#### `response.conversation-create.v1`
+
+Logical key：`{ kind:"response.success", operation:"conversation.create", status:201 }`
+
+规范 JCS bytes：
+
+```json
+{"additionalProperties":false,"properties":{"conversationId":{"pattern":"^[A-Za-z0-9._~-]{1,128}$","type":"string"}},"required":["conversationId"],"type":"object"}
+```
+
+```text
+sha256:2719284ed50fba05b945c58eb5146dd53becdcc48b0a57228d8e97a407a0b87e
+```
+
+#### `error.cursor-expired.v1`
+
+Logical key：`{ kind:"response.failure", errorCode:"CURSOR_EXPIRED" }`
+
+规范 JCS bytes：
+
+```json
+{"additionalProperties":false,"properties":{"recoverableResources":{"items":{"enum":["conversations","attachments","device-requests"]},"type":"array","uniqueItems":true}},"required":["recoverableResources"],"type":"object"}
+```
+
+```text
+sha256:7cb06a94b19b83c6aba2ed82832bcfd3c103345f4fb6b5f106739cfe40d5fce9
+```
+
+每个 catalog entry 的完整 key 等于相应 logical key 加上该段 `schemaSha256`。registry 构造器仍必须独立执行第 4.1 节的 JCS digest 核对、logical key 唯一性、binding/catalog 完整性和 Schema subset 检查，不能只信任文件内 digest。`schema.validate_dispatched` vector 只能引用 `gateway-core-fixtures-v1`；所有 runner 必须从共享 `dispatched-schema-fixtures.json` 构造 catalog 和 bindings，禁止内联、复制或本地替换 Schema/digest/binding。该 registry 只属于一致性测试资产，不进入 runtime 请求，也不改变“请求不可注入 Schema、digest 或 binding”的规则。
 
 `expected` 是精确 tagged union：
 

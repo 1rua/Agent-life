@@ -256,7 +256,7 @@ type DeviceRequestEvent =
 
 本补充计划 Task 3 新建 `gateway-contract/vectors/vector-set-1.0.0.schema.json`。精确 `vectorSet` 为 `request-signatures`、`protocol-negotiation`、`auth-sessions`、`attachments`、`sse-events`、`device-requests`；精确 operation 为 `request.target`、`request.signature`、`schema.validate`、`schema.validate_dispatched`、`attachment.transition`、`device.transition`、`device.maximum_queue_seconds`。meta-schema 以 operation 为 discriminant，闭合验证契约第 16 节逐 operation 的 input、`expected.value` 和 `{ outcome: "error", code }` union；`request.signature` 只使用 `expected.value.preimageHex`，不得使用 `expectedHex`。
 
-顶层和 case 均拒绝未知字段；case 只含 `id`、`operation`、`input`、`expected`；ID 在六文件中全局唯一；每文件至少一个 value 和一个 error；二进制用偶数长度 lowercase hex；时间固定毫秒 UTC；不能出现 `skipped`、`futureOnly` 或无人消费 case。动态 Schema vector 只能用 `fixtureBindingSetId` 选择 runner 本地冻结的 `VerifiedSchemaBindingSet`，不能携带 Schema/digest。
+顶层和 case 均拒绝未知字段；case 只含 `id`、`operation`、`input`、`expected`；ID 在六文件中全局唯一；每文件至少一个 value 和一个 error；二进制用偶数长度 lowercase hex；时间固定毫秒 UTC；不能出现 `skipped`、`futureOnly` 或无人消费 case。动态 Schema vector 的 `fixtureBindingSetId` 只能是 `gateway-core-fixtures-v1`；runner 必须从本补充计划 Task 2 创建的共享 `dispatched-schema-fixtures.json` 构造 catalog/bindings，不能携带或本地替换 Schema/digest。
 
 原迁移计划 Task 2 增加 `golden-vectors.test.ts`、meta-schema 与 dispatched validator/binding set 依赖；原迁移计划 Task 9 的 `DeviceRequestClient.claim` 返回 `ClaimReceipt`，`submitResult` 接受该 receipt。原迁移计划 Task 3/5 保留数据库、CAS、幂等账本、TTL、SSE store、附件 staging、crash recovery；原迁移计划 Task 6 保留双宿主 runner，并以 `resultHash = "sha256:" + lowercaseHex(SHA-256(JCS_UTF8(normalizedActualResult)))` 哈希 `{vectorId,operation,outcome,value}` 或 `{vectorId,operation,outcome:"error",code}`，排除 implementation/status/vendor diagnostics；原迁移计划 Task 8/9 保留 Keystore、HTTP/SSE parser、真机 TLS 和 claim/result transport。
 
@@ -290,6 +290,8 @@ git commit -m "文档: 固化 Gateway v2 签名与状态契约"
 - Modify: `gateway-contract/schemas/envelope.schema.json`
 - Modify: `gateway-contract/src/schema-registry.ts`
 - Create: `gateway-contract/src/dispatched-schema-validator.ts`
+- Create: `gateway-contract/vectors/dispatched-schema-fixtures-1.0.0.schema.json`
+- Create: `gateway-contract/vectors/dispatched-schema-fixtures.json`
 - Modify: `gateway-contract/test/schema-registry.test.ts`
 - Create: `gateway-contract/test/dispatched-schema-validator.test.ts`
 
@@ -298,6 +300,7 @@ git commit -m "文档: 固化 Gateway v2 签名与状态契约"
 - Produces: `gatewaySubschemaSha256(schema: object): string`
 - Produces: `VerifiedSchemaBindingSet`
 - Produces: `createGatewayDispatchedValidator(entries, bindings): GatewayDispatchedValidator`
+- Produces: format `1.0.0` 的共享 dispatched Schema fixture registry 与唯一 binding-set ID `gateway-core-fixtures-v1`
 - Preserves: `schemaFor(name)` / `validateGatewayValue(name, value)` outer-only 行为
 
 - [ ] **Step 1: 写 wire ID 和公开 response 外壳失败测试**
@@ -322,6 +325,8 @@ A-Z a-z 0-9 . _ ~ -
 - Schema subset：root `$ref`、非 closed root/object node、external/unresolved/非 `$defs` ref、`unevaluatedProperties`、`patternProperties`、`$dynamicRef`、`$dynamicAnchor` 和格式 1.0 不支持的 Schema-bearing keyword 构造失败；遍历 `$defs`、properties、items、composition arrays 和循环 ref。
 - 防御性：构造后修改输入 Schema/binding 或 getter 返回值不影响 validator；错误字符串按 `instancePath<TAB>schemaPath<TAB>keyword<TAB>JCS(params)` 去重并以 UTF-8 bytes 排序，数组和结果冻结。
 - 顺序：外壳失败时返回外壳错误，不进入动态 key 提取。
+- fixture registry：meta-schema 关闭顶层/catalog entry/binding set/binding 未知字段；registry 恰好包含契约四个 `fixtureId`、逐字 JCS bytes/digest/logical key 和唯一 `gateway-core-fixtures-v1` binding set；缺失、额外、重排、digest 变化、binding 不完整或 vector 使用其他 binding-set ID 均拒绝。
+- 共享消费：TypeScript test 从 `dispatched-schema-fixtures.json` 构造 catalog/bindings；后续 Python、Kotlin runner 也只能读取同一 JSON 资产。三种语言均禁止内联、复制或本地替换任一 Schema/digest/binding。
 
 - [ ] **Step 3: 运行 RED**
 
@@ -332,7 +337,7 @@ PATH="../../.toolchains/node-v24.18.0-linux-x64/bin:../../node_modules/.bin:$PAT
   npm --prefix gateway-contract test -- schema-registry.test.ts dispatched-schema-validator.test.ts
 ```
 
-Expected: FAIL，原因是 ID Schema 仍接受控制字符、response 名称不存在、`dispatched-schema-validator.ts` 不存在。
+Expected: FAIL，原因是 ID Schema 仍接受控制字符、response 名称不存在、`dispatched-schema-validator.ts` 与两份共享 fixture registry 资产不存在。
 
 - [ ] **Step 4: 最小实现 wire ID 与 response 外壳**
 
@@ -369,6 +374,8 @@ type GatewaySubschemaCatalogEntry = Readonly<{
 
 构造器 defensive-clone catalog 与 `VerifiedSchemaBindingSet`，机械检查契约格式 1.0 Schema subset，核对 key digest、logical key 唯一绑定并 strict Ajv 编译，再存入不可变内部 map。运行期 API 不接受 digest/Schema/binding/resolver，只接受不含 digest 的 `TrustedGatewayDispatch` 与 value；完整验证一次性返回冻结 `ValidationResult`。
 
+测试 fixture loader 必须先以 `dispatched-schema-fixtures-1.0.0.schema.json` 验证共享 registry，再逐项重算四个 Schema 的 JCS digest，并只用 `gateway-core-fixtures-v1` 构造 validator。fixture registry 不导出给 runtime request，也不能成为 runtime Schema resolver。
+
 - [ ] **Step 6: 运行 GREEN、回归和类型检查**
 
 Run:
@@ -395,6 +402,8 @@ git add gateway-contract/package.json \
   gateway-contract/schemas/envelope.schema.json \
   gateway-contract/src/schema-registry.ts \
   gateway-contract/src/dispatched-schema-validator.ts \
+  gateway-contract/vectors/dispatched-schema-fixtures-1.0.0.schema.json \
+  gateway-contract/vectors/dispatched-schema-fixtures.json \
   gateway-contract/test/schema-registry.test.ts \
   gateway-contract/test/dispatched-schema-validator.test.ts
 git commit -m "修复: 完善 Gateway v2 动态 Schema 验证"
@@ -475,7 +484,7 @@ device.transition
 device.maximum_queue_seconds
 ```
 
-`golden-vectors.test.ts` 验证六文件存在且通过 meta-schema、顶层/case 闭合、六个 vectorSet 与文件名一致、operation/file 归属、case ID 全局唯一、每文件有 value/error、逐 operation input/expected union、lowercase hex/毫秒 UTC、每个 operation 有明确消费者；不得仅 grep 文本。`protocol-negotiation` 和 `auth-sessions` 的 Schema cases 调用 `validateGatewayValue`；SSE/device 动态 cases 只能通过 `fixtureBindingSetId` 选择测试本地冻结的 `VerifiedSchemaBindingSet` 再调用 `GatewayDispatchedValidator`，不能携带 Schema/digest；状态与签名 cases 分别调用生产函数。
+`golden-vectors.test.ts` 验证六文件存在且通过 meta-schema、顶层/case 闭合、六个 vectorSet 与文件名一致、operation/file 归属、case ID 全局唯一、每文件有 value/error、逐 operation input/expected union、lowercase hex/毫秒 UTC、每个 operation 有明确消费者；不得仅 grep 文本。`protocol-negotiation` 和 `auth-sessions` 的 Schema cases 调用 `validateGatewayValue`；SSE/device 动态 cases 的 `fixtureBindingSetId` 必须恒等于 `gateway-core-fixtures-v1`，并只从共享 `dispatched-schema-fixtures.json` 构造 `GatewayDispatchedValidator`，不能内联或本地替换 Schema/digest/binding；状态与签名 cases 分别调用生产函数。
 
 - [ ] **Step 8: 运行本补充计划 Task 2/3 完整验证**
 

@@ -129,8 +129,8 @@ git commit -m "新增: 建立 Gateway Protocol v2 严格 Schema"
 - Test: `gateway-contract/test/golden-vectors.test.ts`
 
 **Interfaces:**
-- Requires: `2026-08-27-gateway-protocol-v2-task2-correction.md` 中“本补充计划 Task 2”的不可变 catalog、`VerifiedSchemaBindingSet` 与 dispatched validator 已完成
-- Consumes: `schemaFor` / `validateGatewayValue` outer-only validator、`VerifiedSchemaBindingSet` 与 `GatewayDispatchedValidator`
+- Requires: `2026-08-27-gateway-protocol-v2-task2-correction.md` 中“本补充计划 Task 2”新建并完成不可变 catalog、`VerifiedSchemaBindingSet`、dispatched validator，以及 `gateway-contract/vectors/dispatched-schema-fixtures-1.0.0.schema.json` / `gateway-contract/vectors/dispatched-schema-fixtures.json`
+- Consumes: `schemaFor` / `validateGatewayValue` outer-only validator、`VerifiedSchemaBindingSet`、`GatewayDispatchedValidator` 与唯一共享 binding set `gateway-core-fixtures-v1`
 - Produces: `canonicalRequestTarget(target: string): string`
 - Produces: `canonicalRequestSignatureInput(input: SignedRequestInput): Uint8Array`
 - Produces: `nextAttachmentState(current, event): AttachmentState`
@@ -144,7 +144,7 @@ expect(Buffer.from(canonicalRequestSignatureInput(vector.input)).toString("hex")
   .toBe(vector.expected.value.preimageHex);
 ```
 
-测试必须覆盖区分大小写的 method、wire ID、固定毫秒 UTC、canonical 16-byte nonce、exact body bytes、10 字段/9 LF/末尾无 LF，以及 canonical origin-form target 的拒绝和排序边界。SSE/device 动态 case 必须调用已经构造并冻结的 `GatewayDispatchedValidator`，请求不能携带 Schema、resolver 或 `ValidateFunction`。
+测试必须覆盖区分大小写的 method、wire ID、固定毫秒 UTC、canonical 16-byte nonce、exact body bytes、10 字段/9 LF/末尾无 LF，以及 canonical origin-form target 的拒绝和排序边界。SSE/device 动态 case 的 `fixtureBindingSetId` 必须恒等于 `gateway-core-fixtures-v1`，runner 必须先验证并读取共享 `dispatched-schema-fixtures.json`、重算四个规范 JCS digest，再构造 `GatewayDispatchedValidator`；禁止内联或本地替换 Schema/digest/binding，请求仍不能携带 Schema、resolver 或 `ValidateFunction`。
 
 - [ ] **Step 2: 运行并确认签名向量红灯**
 
@@ -170,7 +170,7 @@ export const canonicalRequestSignatureInput = (v: SignedRequestInput): Uint8Arra
 
 - [ ] **Step 4: 建立闭合六文件格式并运行全部向量**
 
-六文件统一使用 `formatVersion: "1.0.0"`、`protocolVersion: "2.0"`、契约精确枚举的 `vectorSet` 和 `cases`，并全部通过 `vector-set-1.0.0.schema.json`；顶层及 case 拒绝未知字段，case 只含 `id`、`operation`、`input`、`expected`。`gateway-contract/test/golden-vectors.test.ts` 必须证明文件名/vectorSet/operation 归属、ID 全局唯一、每文件同时包含 value/error、每个 operation 的闭合 input/expected union、二进制/时间格式规范且每个 operation 都有生产消费者；不得只检查 JSON 存在或 grep 文本。
+六文件统一使用 `formatVersion: "1.0.0"`、`protocolVersion: "2.0"`、契约精确枚举的 `vectorSet` 和 `cases`，并全部通过 `vector-set-1.0.0.schema.json`；顶层及 case 拒绝未知字段，case 只含 `id`、`operation`、`input`、`expected`。`gateway-contract/test/golden-vectors.test.ts` 必须证明文件名/vectorSet/operation 归属、ID 全局唯一、每文件同时包含 value/error、每个 operation 的闭合 input/expected union、二进制/时间格式规范且每个 operation 都有生产消费者；`schema.validate_dispatched` 还必须证明只引用共享 `gateway-core-fixtures-v1`，不得只检查 JSON 存在或 grep 文本。
 
 Run: `npm --prefix gateway-contract test`
 
@@ -401,6 +401,7 @@ git commit -m "新增: 实现 Hermes 原生 Gateway 插件"
 
 **Interfaces:**
 - Consumes: 同一 `gateway-contract/vectors/*.json`
+- Consumes: 同一 `gateway-contract/vectors/dispatched-schema-fixtures.json` 与唯一 binding set `gateway-core-fixtures-v1`
 - Produces: 标准 JSONL `{ vectorId, operation, implementation, status, resultHash }`
 - Produces: 独立 OpenClaw runner 与 Hermes runner；两者都消费每个可执行 case，不共享运行二进制
 
@@ -410,7 +411,7 @@ git commit -m "新增: 实现 Hermes 原生 Gateway 插件"
 expect(openClawResults.map(projectResult)).toEqual(hermesResults.map(projectResult));
 ```
 
-每个 runner 先构造契约闭合的 normalized actual result：value 为 `{ vectorId, operation, outcome: "value", value }`，error 为 `{ vectorId, operation, outcome: "error", code }`。`status` 只允许 `pass|fail`；`resultHash = "sha256:" + lowercaseHex(SHA-256(JCS_UTF8(normalizedActualResult)))`，不得包含 implementation、status、vendor diagnostics、堆栈、宿主 ID、时间或路径。
+每个 runner 先验证并读取同一共享 fixture registry，为 `schema.validate_dispatched` 重算四个规范 Schema digest，并从 `gateway-core-fixtures-v1` 构造 catalog/bindings；OpenClaw 和 Hermes 禁止内联或本地替换 fixture。随后构造契约闭合的 normalized actual result：value 为 `{ vectorId, operation, outcome: "value", value }`，error 为 `{ vectorId, operation, outcome: "error", code }`。`status` 只允许 `pass|fail`；`resultHash = "sha256:" + lowercaseHex(SHA-256(JCS_UTF8(normalizedActualResult)))`，不得包含 implementation、status、vendor diagnostics、堆栈、宿主 ID、时间或路径。
 
 - [ ] **Step 2: 运行并确认两个实现尚未统一输出**
 
@@ -622,7 +623,7 @@ interface GatewayByteTransport {
 }
 ```
 
-默认实现只接受 `https` URL、系统信任或 profile 固定 SPKI；签名必须从实际发送的 canonical raw target 和 exact body bytes 构造，并从 raw header 列表失败关闭认证和条件 singleton 的重复或折叠字段。SSE 只在完整空行后提交事件与游标，恢复时以 canonical query cursor 为权威；`device.request.cancel.requested` 只记录取消意图，不能被当作已经取消。附件使用创建 → content → commit，读取 `ContentResolver` 流时同步计算长度和 SHA-256。设备请求在任何副作用前调用幂等 claim，保存服务端 `ClaimReceipt`；`submitResult(claim, result)` 只从 receipt 原样序列化 `claimId` 与 `grantRevision`，身份/generation 由服务端 receipt 和验证上下文核对。任一绑定不匹配时失败关闭。
+默认实现只接受 `https` URL、系统信任或 profile 固定 SPKI；签名必须从实际发送的 canonical raw target 和 exact body bytes 构造，并从 raw header 列表失败关闭认证和条件 singleton 的重复或折叠字段。SSE 只在完整空行后提交事件与游标，恢复时以 canonical query cursor 为权威；`device.request.cancel.requested` 只记录取消意图，不能被当作已经取消。附件使用创建 → content → commit，读取 `ContentResolver` 流时同步计算长度和 SHA-256。设备请求在任何副作用前调用幂等 claim，保存服务端 `ClaimReceipt`；`submitResult(claim, result)` 只从 receipt 原样序列化 `claimId` 与 `grantRevision`，身份/generation 由服务端 receipt 和验证上下文核对。任一绑定不匹配时失败关闭。Kotlin 的 dispatched Schema 向量测试必须读取同一 `dispatched-schema-fixtures.json`、重算四个 digest 并只接受 `gateway-core-fixtures-v1`，不得维护 Android 本地 fixture 副本。
 
 - [ ] **Step 4: 运行协议向量和 TLS 真机测试**
 
