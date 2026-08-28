@@ -8,7 +8,49 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping
 
 
-_SECRET_FIELD = re.compile(r"password|credential|secret|token|body|text|content|privateKey", re.I)
+# Field names are compared after removing spelling separators so that one
+# deny-first policy covers snake_case, camelCase, kebab-case and casing
+# variants.  These are intentionally field-name rules: audit callers may keep
+# harmless action/result metadata, but a denied branch is never traversed or
+# serialized.
+_DENIED_FIELD_MARKERS = frozenset(
+    {
+        "password",
+        "credential",
+        "secret",
+        "token",
+        "body",
+        "text",
+        "content",
+        "privatekey",
+        "accesskey",
+        "proof",
+        "signature",
+        "authorization",
+    }
+)
+_DENIED_FIELD_NAMES = frozenset(
+    {
+        "message",
+        "messages",
+        "attachment",
+        "attachments",
+        "payload",
+        "data",
+        "details",
+    }
+)
+
+
+def _normalized_field_name(value: Any) -> str:
+    return re.sub(r"[^a-z0-9]", "", str(value).casefold())
+
+
+def _is_denied_field(value: Any) -> bool:
+    normalized = _normalized_field_name(value)
+    return normalized in _DENIED_FIELD_NAMES or any(
+        marker in normalized for marker in _DENIED_FIELD_MARKERS
+    )
 
 
 def _now(value: datetime | str | None = None) -> datetime:
@@ -36,7 +78,11 @@ def scrub(value: Any) -> Any:
         return [scrub(item) for item in value]
     if not isinstance(value, Mapping):
         return value
-    return {key: scrub(child) for key, child in value.items() if not _SECRET_FIELD.search(str(key))}
+    return {
+        key: scrub(child)
+        for key, child in value.items()
+        if not _is_denied_field(key)
+    }
 
 
 class AuditStore:
@@ -65,8 +111,8 @@ class AuditStore:
         ).fetchall()
         return [
             {
-                "eventType": row["event_type"], "actor": json.loads(row["actor_json"]),
-                "subject": json.loads(row["subject_json"]), "correlationId": row["correlation_id"],
+                "eventType": row["event_type"], "actor": scrub(json.loads(row["actor_json"])),
+                "subject": scrub(json.loads(row["subject_json"])), "correlationId": row["correlation_id"],
                 "occurredAt": row["occurred_at"],
             }
             for row in rows
