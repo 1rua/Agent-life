@@ -29,6 +29,9 @@ from .account_paths import (
 from .audit import AuditStore
 
 
+SHARED_CORE_SCHEMA_HASH = "sha256:" + "a" * 64
+
+
 class GatewayError(Exception):
     """A protocol or state-machine error with a stable code."""
 
@@ -36,6 +39,11 @@ class GatewayError(Exception):
         super().__init__(code)
         self.code = code
         self.details = dict(details or {})
+
+
+class TransactionOutcomeUnknown(GatewayError):
+    def __init__(self, details: Mapping[str, Any] | None = None):
+        super().__init__("OUTCOME_UNKNOWN", details)
 
 
 @dataclass(frozen=True, init=False)
@@ -259,6 +267,14 @@ def request_signature_preimage(input: Mapping[str, Any]) -> bytes:
 class ContractRegistry:
     """Read-only consumer of the repository's shared Schema and fixture registry."""
 
+    dispatched_registry_id = "gateway-core-fixtures-v1"
+    dispatched_fixture_ids = (
+        "event.gateway-notice.v1",
+        "device.sms-query.v1",
+        "response.conversation-create.v1",
+        "error.cursor-expired.v1",
+    )
+
     schema_definitions = {
         "negotiate.request": ("negotiate.schema.json", "request"),
         "negotiate.response": ("negotiate.schema.json", "response"),
@@ -273,6 +289,10 @@ class ContractRegistry:
         "response.success": ("envelope.schema.json", "success"),
         "response.failure": ("envelope.schema.json", "failure"),
     }
+
+    @property
+    def core_schema_hash(self) -> str:
+        return SHARED_CORE_SCHEMA_HASH
 
     def __init__(self, contract_root: str | Path | None = None):
         self.root = _contract_root(contract_root)
@@ -290,27 +310,77 @@ class ContractRegistry:
         return tuple((name, key[name]) for name in sorted(key) if name != "schemaSha256")
 
     def _load_dispatched_registry(self) -> None:
-        registry = json.loads((self.root / "vectors" / "dispatched-schema-fixtures.json").read_text(encoding="utf-8"))
-        for entry in registry["catalogEntries"]:
-            key = self._logical_key(entry["key"])
-            if key in self._catalog:
-                raise GatewayError("INTERNAL_ERROR", {"reason": "duplicate dispatched catalog key"})
-            expected = entry["key"]["schemaSha256"]
-            actual = "sha256:" + hashlib.sha256(_jcs(entry["schema"]).encode("utf-8")).hexdigest()
-            if expected != actual:
-                raise GatewayError("INTERNAL_ERROR", {"reason": "dispatched schema digest mismatch"})
-            self._catalog[key] = {"schemaSha256": expected, "schema": entry["schema"]}
-        for binding_set in registry["bindingSets"]:
+        def invalid(reason: str) -> None:
+            raise GatewayError("DISPATCHED_REGISTRY_INVALID", {"reason": reason})
+
+        try:
+            vectors = self.root / "vectors"
+            meta_path = vectors / "dispatched-schema-fixtures-1.0.0.schema.json"
+            registry_path = vectors / "dispatched-schema-fixtures.json"
+            if not meta_path.is_file() or not registry_path.is_file():
+                invalid("registry assets missing")
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            registry = json.loads(registry_path.read_text(encoding="utf-8"))
+            if not self._valid(meta, registry, meta):
+                invalid("registry does not satisfy shared meta-schema")
+            if registry.get("formatVersion") != "1.0.0":
+                invalid("unsupported registry format")
+            catalog_entries = registry.get("catalogEntries")
+            binding_sets = registry.get("bindingSets")
+            if not isinstance(catalog_entries, list) or not isinstance(binding_sets, list):
+                invalid("registry collections are not arrays")
+            fixture_ids = [entry.get("fixtureId") for entry in catalog_entries if isinstance(entry, Mapping)]
+            if tuple(fixture_ids) != self.dispatched_fixture_ids:
+                invalid("catalog entry order or identity mismatch")
+            if len(binding_sets) != 1 or not isinstance(binding_sets[0], Mapping):
+                invalid("binding set count mismatch")
+            binding_set = binding_sets[0]
+            if binding_set.get("id") != self.dispatched_registry_id:
+                invalid("binding set identity mismatch")
+            bindings = binding_set.get("bindings")
+            if not isinstance(bindings, list) or len(bindings) != len(catalog_entries):
+                invalid("binding count mismatch")
+
+            catalog_keys: list[tuple[Any, ...]] = []
+            catalog_by_key: dict[tuple[Any, ...], dict[str, Any]] = {}
+            for entry in catalog_entries:
+                if not isinstance(entry, Mapping) or not isinstance(entry.get("key"), Mapping) or not isinstance(entry.get("schema"), Mapping):
+                    invalid("catalog entry shape invalid")
+                key = self._logical_key(entry["key"])
+                if key in catalog_by_key:
+                    invalid("duplicate catalog logical key")
+                expected = entry["key"].get("schemaSha256")
+                actual = "sha256:" + hashlib.sha256(_jcs(entry["schema"]).encode("utf-8")).hexdigest()
+                if expected != actual:
+                    invalid("catalog schema digest mismatch")
+                catalog_keys.append(key)
+                catalog_by_key[key] = {"schemaSha256": expected, "schema": entry["schema"]}
+
             binding_map: dict[tuple[Any, ...], str] = {}
-            for binding in binding_set["bindings"]:
-                key = self._logical_key({**binding["key"], "schemaSha256": binding["schemaSha256"]})
-                if key in binding_map or key not in self._catalog or binding_map.get(key) == binding["schemaSha256"]:
-                    if key in binding_map:
-                        raise GatewayError("INTERNAL_ERROR", {"reason": "duplicate dispatched binding key"})
-                if self._catalog[key]["schemaSha256"] != binding["schemaSha256"]:
-                    raise GatewayError("INTERNAL_ERROR", {"reason": "binding points to wrong schema"})
-                binding_map[key] = binding["schemaSha256"]
-            self._bindings[binding_set["id"]] = binding_map
+            binding_keys: list[tuple[Any, ...]] = []
+            for binding in bindings:
+                if not isinstance(binding, Mapping) or not isinstance(binding.get("key"), Mapping):
+                    invalid("binding shape invalid")
+                key = self._logical_key(binding["key"])
+                if key in binding_map:
+                    invalid("duplicate binding logical key")
+                if key not in catalog_by_key:
+                    invalid("binding points to missing catalog entry")
+                digest = binding.get("schemaSha256")
+                if catalog_by_key[key]["schemaSha256"] != digest:
+                    invalid("binding digest mismatch")
+                binding_keys.append(key)
+                binding_map[key] = digest
+            if binding_keys != catalog_keys:
+                invalid("binding order or logical key mismatch")
+            self._catalog = catalog_by_key
+            self._bindings[self.dispatched_registry_id] = binding_map
+        except GatewayError as exc:
+            if exc.code == "DISPATCHED_REGISTRY_INVALID":
+                raise
+            invalid("registry validation failed")
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            invalid(f"registry parsing failed: {type(exc).__name__}")
 
     def _resolve_ref(self, ref: str, current_document: Mapping[str, Any]) -> tuple[Mapping[str, Any], Mapping[str, Any]]:
         if ref.startswith("#/$defs/"):
@@ -413,15 +483,19 @@ class ContractRegistry:
         return self._valid(document["$defs"][target[1]], value, document)
 
     def validate_dispatched(self, binding_set_id: str, dispatch: Mapping[str, Any], value: Any) -> bool:
-        if not isinstance(dispatch, Mapping) or binding_set_id not in self._bindings:
+        if not isinstance(dispatch, Mapping) or binding_set_id != self.dispatched_registry_id:
             return False
         kind = dispatch.get("kind")
         if kind == "event":
+            if set(dispatch) != {"kind", "eventType"}:
+                return False
             if not self.validate("event", value):
                 return False
             logical = (('eventType', dispatch.get("eventType")), ('kind', "event"))
             payload = value.get("payload") if isinstance(value, Mapping) else None
         elif kind == "device.request":
+            if set(dispatch) != {"kind"}:
+                return False
             if not self.validate("device.request", value):
                 return False
             provider = value.get("provider", {})
@@ -429,11 +503,15 @@ class ContractRegistry:
             logical = (('authorKeyId', provider.get("authorKeyId")), ('capabilityId', capability.get("id")), ('capabilityVersion', capability.get("version")), ('kind', "device.request"), ('pluginId', provider.get("pluginId")))
             payload = value.get("parameters")
         elif kind == "response.success":
+            if set(dispatch) != {"kind", "operation", "status"}:
+                return False
             if not self.validate("response.success", value):
                 return False
             logical = (('kind', "response.success"), ('operation', dispatch.get("operation")), ('status', dispatch.get("status")))
             payload = value.get("data") if isinstance(value, Mapping) else None
         elif kind == "response.failure":
+            if set(dispatch) != {"kind"}:
+                return False
             if not self.validate("response.failure", value):
                 return False
             error = value.get("error", {})
@@ -441,10 +519,12 @@ class ContractRegistry:
             payload = error.get("details") if isinstance(error, Mapping) else None
         else:
             return False
-        schema = self._bindings[binding_set_id].get(logical)
+        schema = self._bindings[self.dispatched_registry_id].get(logical)
         if schema is None:
             return False
-        entry = next((item for key, item in self._catalog.items() if key == logical and item["schemaSha256"] == schema), None)
+        entry = self._catalog.get(logical)
+        if entry is not None and entry["schemaSha256"] != schema:
+            entry = None
         return entry is not None and self._valid(entry["schema"], payload, self.documents[next(iter(self.documents))])
 
 
@@ -508,6 +588,12 @@ def _request_context(request: Any) -> dict[str, Any]:
         "pairingGeneration": _context_value(context, "pairingGeneration", "pairing_generation", 1),
         "grantRevision": _context_value(context, "grantRevision", "grant_revision", 1),
     }
+    negotiation_id = _context_value(context, "negotiationId", "negotiation_id")
+    installation_id = _context_value(context, "installationId", "installation_id")
+    if negotiation_id is not None:
+        result["negotiationId"] = negotiation_id
+    if installation_id is not None:
+        result["installationId"] = installation_id
     if any(result[name] is None for name in ("accountId", "deviceId", "sessionId", "requestId", "correlationId")):
         raise GatewayError("AUTHENTICATION_REQUIRED")
     return result
@@ -548,7 +634,11 @@ def _failure(context: Mapping[str, Any], code: str, details: Mapping[str, Any] |
 class AccountStore:
     """One SQLite connection for one already-resolved account directory."""
 
-    def __init__(self, paths: AccountPaths, master_key_ref: str | None = None):
+    def __init__(self, paths: AccountPaths, master_key_ref: str | None = None, commit_hook: Any = None):
+        self.paths = paths
+        self.master_key_ref = master_key_ref or f"host-secret:{paths.root.name}"
+        self.commit_hook = commit_hook
+        self.fail_next_commit = False
         ensure_account_directories(paths)
         self.database = sqlite3.connect(str(paths.database), isolation_level=None, check_same_thread=False)
         self.database.row_factory = sqlite3.Row
@@ -609,7 +699,7 @@ class AccountStore:
               risk TEXT NOT NULL, state TEXT NOT NULL,
               capability_json TEXT NOT NULL, provider_json TEXT NOT NULL,
               parameters_json TEXT NOT NULL, created_at TEXT NOT NULL,
-              expires_at TEXT NOT NULL
+              expires_at TEXT NOT NULL, requires_foreground_confirmation INTEGER NOT NULL DEFAULT 0
             );
             CREATE TABLE IF NOT EXISTS claim_receipts (
               claim_id TEXT PRIMARY KEY NOT NULL, request_id TEXT NOT NULL UNIQUE,
@@ -636,9 +726,20 @@ class AccountStore:
               negotiation_id TEXT PRIMARY KEY NOT NULL, response_json TEXT NOT NULL,
               created_at TEXT NOT NULL, expires_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS negotiation_bindings (
+              negotiation_id TEXT PRIMARY KEY NOT NULL, account_id TEXT NOT NULL,
+              installation_id TEXT NOT NULL, bound_at TEXT NOT NULL,
+              expires_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS uncertain_outcomes (
+              device_id TEXT NOT NULL, request_id TEXT NOT NULL,
+              input_hash TEXT NOT NULL, created_at TEXT NOT NULL,
+              expires_at TEXT NOT NULL,
+              PRIMARY KEY (device_id, request_id)
+            );
             """
         )
-        self._metadata("master_key_ref", master_key_ref or f"host-secret:{paths.root.name}")
+        self._metadata("master_key_ref", self.master_key_ref)
         self._metadata("gateway_identity_ref", "spki_initial")
         self._metadata("pairing_generation", "1")
         self._metadata("deployment_id", f"deploy_{hashlib.sha256(str(paths.root.parent.parent).encode('utf-8')).hexdigest()[:16]}")
@@ -651,27 +752,69 @@ class AccountStore:
         )
 
     @contextmanager
-    def transaction(self) -> Iterator[sqlite3.Connection]:
+    def transaction(self, unknown_marker: Mapping[str, Any] | None = None) -> Iterator[sqlite3.Connection]:
         nested = self._transaction_depth > 0
         if not nested:
             self.database.execute("BEGIN IMMEDIATE")
         self._transaction_depth += 1
         try:
             yield self.database
-            self._transaction_depth -= 1
-            if not nested:
-                self.database.execute("COMMIT")
-        except BaseException:
-            self._transaction_depth -= 1
+        except BaseException as exc:
             if not nested:
                 try:
                     self.database.execute("ROLLBACK")
                 except sqlite3.Error:
                     pass
+                self._transaction_depth = 0
+                if isinstance(exc, TransactionOutcomeUnknown):
+                    self._reopen_after_unknown()
+                    self._persist_uncertain_marker(unknown_marker)
+            else:
+                self._transaction_depth -= 1
             raise
+        if nested:
+            self._transaction_depth -= 1
+            return
+        try:
+            if self.fail_next_commit:
+                self.fail_next_commit = False
+                raise sqlite3.OperationalError("injected commit failure")
+            if self.commit_hook is not None:
+                self.commit_hook()
+            self.database.execute("COMMIT")
+        except BaseException as exc:
+            self._transaction_depth = 0
+            self._reopen_after_unknown()
+            self._persist_uncertain_marker(unknown_marker)
+            raise TransactionOutcomeUnknown({"reason": "transaction commit outcome unknown"}) from exc
+        self._transaction_depth = 0
 
     def close(self) -> None:
         self.database.close()
+
+    def _reopen_after_unknown(self) -> None:
+        try:
+            self.database.rollback()
+        except sqlite3.Error:
+            pass
+        try:
+            self.database.close()
+        except sqlite3.Error:
+            pass
+        replacement = AccountStore(self.paths, self.master_key_ref, self.commit_hook)
+        self.database = replacement.database
+        self._transaction_depth = 0
+
+    def _persist_uncertain_marker(self, marker: Mapping[str, Any] | None) -> None:
+        if marker is None:
+            return
+        self.database.execute(
+            "INSERT OR REPLACE INTO uncertain_outcomes(device_id, request_id, input_hash, created_at, expires_at) VALUES (?, ?, ?, ?, ?)",
+            (
+                marker["deviceId"], marker["requestId"], marker["inputHash"],
+                marker["createdAt"], marker["expiresAt"],
+            ),
+        )
 
 
 class EventStore:
@@ -1002,18 +1145,20 @@ class AttachmentStore:
 
 
 class DeviceRequestStore:
-    def __init__(self, account_id: str, store: AccountStore, audit: AuditStore, events: EventStore):
+    def __init__(self, account_id: str, store: AccountStore, audit: AuditStore, events: EventStore, contracts: ContractRegistry | None = None):
         self.account_id = account_id
         self.store = store
         self.audit = audit
         self.events = events
+        self.contracts = contracts or ContractRegistry()
 
     def enqueue(
         self, request_id: str | None = None, device_id: str | None = None,
         pairing_generation: int | None = None, grant_revision: int | None = None,
         risk: str | None = None, capability: Mapping[str, Any] | None = None,
         provider: Mapping[str, Any] | None = None, parameters: Mapping[str, Any] | None = None,
-        correlation_id: str | None = None, now: datetime | str | None = None, **aliases: Any,
+        correlation_id: str | None = None, now: datetime | str | None = None,
+        requires_foreground_confirmation: bool | None = None, **aliases: Any,
     ) -> dict[str, Any]:
         request_id = request_id if request_id is not None else aliases.pop("requestId")
         device_id = device_id if device_id is not None else aliases.pop("deviceId")
@@ -1024,23 +1169,48 @@ class DeviceRequestStore:
         provider = provider if provider is not None else aliases.pop("provider")
         parameters = parameters if parameters is not None else aliases.pop("parameters")
         correlation_id = correlation_id if correlation_id is not None else aliases.pop("correlationId")
+        requires_foreground_confirmation = (
+            requires_foreground_confirmation
+            if requires_foreground_confirmation is not None
+            else aliases.pop("requiresForegroundConfirmation", False)
+        )
         current = _now(now)
         ttl = maximum_device_request_queue_seconds(risk)
         state = "expired" if ttl == 0 else "pending"
         expires_at = iso_millis(current + timedelta(seconds=ttl))
-        self.store.database.execute(
-            """
-            INSERT INTO device_requests(request_id, device_id, pairing_generation, grant_revision, risk, state,
-              capability_json, provider_json, parameters_json, created_at, expires_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (request_id, device_id, pairing_generation, grant_revision, risk, state,
-             _json(capability), _json(provider), _json(parameters), iso_millis(current), expires_at),
-        )
-        if state == "pending":
-            self.events.append("device.requested", correlation_id, {
-                "requestId": request_id, "risk": risk, "grantRevision": grant_revision,
-            }, current)
+        record = {
+            "requestId": request_id,
+            "capability": dict(capability),
+            "provider": dict(provider),
+            "parameters": dict(parameters),
+            "risk": risk,
+            "grantRevision": int(grant_revision),
+            "createdAt": iso_millis(current),
+            "expiresAt": expires_at,
+            "requiresForegroundConfirmation": bool(requires_foreground_confirmation),
+        }
+        if not self.contracts.validate_dispatched(
+            self.contracts.dispatched_registry_id, {"kind": "device.request"}, record
+        ):
+            raise GatewayError("SCHEMA_INVALID")
+        with self.store.transaction():
+            self.store.database.execute(
+                """
+                INSERT INTO device_requests(request_id, device_id, pairing_generation, grant_revision, risk, state,
+                  capability_json, provider_json, parameters_json, created_at, expires_at, requires_foreground_confirmation)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (request_id, device_id, pairing_generation, grant_revision, risk, state,
+                 _json(capability), _json(provider), _json(parameters), record["createdAt"], expires_at,
+                 int(record["requiresForegroundConfirmation"])),
+            )
+            if state == "pending":
+                self.events.append("device.requested", correlation_id, record, current)
+            self.audit.append(
+                "device.request.enqueued", {"accountId": self.account_id, "deviceId": device_id},
+                {"requestId": request_id, "risk": risk, "grantRevision": grant_revision, "state": state},
+                correlation_id, current,
+            )
         return self.get(request_id)
 
     def claim(
@@ -1091,29 +1261,37 @@ class DeviceRequestStore:
         correlation_id: str, now: datetime | str | None = None,
     ) -> dict[str, Any]:
         current = _now(now)
+        expired = False
+        record: dict[str, Any] | None = None
         with self.store.transaction():
             row = self._row(request_id)
             self._assert_binding(row, device_id, pairing_generation, grant_revision)
             if self._expire_if_due(row, current):
-                raise GatewayError("OUTCOME_UNKNOWN")
-            receipt = self.store.database.execute(
-                "SELECT * FROM claim_receipts WHERE request_id = ? AND claim_id = ?", (request_id, claim_id)
-            ).fetchone()
-            if receipt is None:
-                raise GatewayError("OUTCOME_UNKNOWN")
-            self._assert_binding(receipt, device_id, pairing_generation, grant_revision)
-            if row["state"] not in {"claimed", "cancel_requested"}:
-                raise GatewayError("OUTCOME_UNKNOWN")
-            outcome = result.get("outcome")
-            event = "result_outcome_unknown" if outcome == "outcome_unknown" else f"result_{outcome}"
-            next_state = next_device_request_state(row["state"], event)
-            self.store.database.execute("UPDATE device_requests SET state = ? WHERE request_id = ?", (next_state, request_id))
-            self.audit.append(
-                "device.request.result", {"accountId": self.account_id, "deviceId": device_id},
-                {"requestId": request_id, "claimId": claim_id, "outcome": outcome},
-                correlation_id, current,
-            )
-            return self.get(request_id)
+                expired = True
+            else:
+                receipt = self.store.database.execute(
+                    "SELECT * FROM claim_receipts WHERE request_id = ? AND claim_id = ?", (request_id, claim_id)
+                ).fetchone()
+                if receipt is None:
+                    raise GatewayError("OUTCOME_UNKNOWN")
+                self._assert_binding(receipt, device_id, pairing_generation, grant_revision)
+                if row["state"] not in {"claimed", "cancel_requested"}:
+                    raise GatewayError("OUTCOME_UNKNOWN")
+                outcome = result.get("outcome")
+                event = "result_outcome_unknown" if outcome == "outcome_unknown" else f"result_{outcome}"
+                next_state = next_device_request_state(row["state"], event)
+                self.store.database.execute("UPDATE device_requests SET state = ? WHERE request_id = ?", (next_state, request_id))
+                self.audit.append(
+                    "device.request.result", {"accountId": self.account_id, "deviceId": device_id},
+                    {"requestId": request_id, "claimId": claim_id, "outcome": outcome},
+                    correlation_id, current,
+                )
+                record = self.get(request_id)
+        if expired:
+            raise GatewayError("OUTCOME_UNKNOWN")
+        if record is None:
+            raise GatewayError("OUTCOME_UNKNOWN")
+        return record
 
     def validate_claim_replay(
         self, request_id: str, device_id: str, pairing_generation: int,
@@ -1168,22 +1346,43 @@ class DeviceRequestStore:
 
     def cancel(self, request_id: str, device_id: str, pairing_generation: int, grant_revision: int, correlation_id: str, now: datetime | str | None = None) -> dict[str, Any]:
         current = _now(now)
+        expired = False
+        record: dict[str, Any] | None = None
         with self.store.transaction():
             row = self._row(request_id)
             self._assert_binding(row, device_id, pairing_generation, grant_revision)
             if self._expire_if_due(row, current):
-                raise GatewayError("OUTCOME_UNKNOWN")
-            next_state = next_device_request_state(row["state"], "cancel")
-            self.store.database.execute("UPDATE device_requests SET state = ? WHERE request_id = ?", (next_state, request_id))
-            self.events.append("device.request.cancel.requested", correlation_id, {"requestId": request_id}, current)
-            return self.get(request_id)
+                expired = True
+            else:
+                next_state = next_device_request_state(row["state"], "cancel")
+                self.store.database.execute("UPDATE device_requests SET state = ? WHERE request_id = ?", (next_state, request_id))
+                self.events.append("device.request.cancel.requested", correlation_id, {"requestId": request_id}, current)
+                record = self.get(request_id)
+        if expired:
+            raise GatewayError("OUTCOME_UNKNOWN")
+        if record is None:
+            raise GatewayError("OUTCOME_UNKNOWN")
+        return record
 
     def get(self, request_id: str) -> dict[str, Any]:
         row = self._row(request_id)
+        return self._map(row)
+
+    def list(self) -> list[dict[str, Any]]:
+        rows = self.store.database.execute("SELECT * FROM device_requests ORDER BY request_id").fetchall()
+        return [self._map(row) for row in rows]
+
+    @staticmethod
+    def _map(row: sqlite3.Row) -> dict[str, Any]:
         return {
             "requestId": row["request_id"], "deviceId": row["device_id"],
             "pairingGeneration": int(row["pairing_generation"]), "grantRevision": int(row["grant_revision"]),
-            "risk": row["risk"], "state": row["state"], "expiresAt": row["expires_at"],
+            "risk": row["risk"], "state": row["state"],
+            "capability": json.loads(row["capability_json"]),
+            "provider": json.loads(row["provider_json"]),
+            "parameters": json.loads(row["parameters_json"]),
+            "createdAt": row["created_at"], "expiresAt": row["expires_at"],
+            "requiresForegroundConfirmation": bool(row["requires_foreground_confirmation"]),
         }
 
     def _row(self, request_id: str) -> sqlite3.Row:
@@ -1284,7 +1483,7 @@ class ConversationPort:
 
 
 class GatewayAccount:
-    def __init__(self, account_id: str, paths: AccountPaths, store: AccountStore):
+    def __init__(self, account_id: str, paths: AccountPaths, store: AccountStore, contracts: ContractRegistry | None = None):
         self.account_id = account_id
         self.accountId = account_id
         self.paths = paths
@@ -1294,7 +1493,7 @@ class GatewayAccount:
         self.audit = AuditStore(store, account_id)
         self.events = EventStore(store)
         self.attachments = AttachmentStore(account_id, paths, store, self.audit)
-        self.device_requests = DeviceRequestStore(account_id, store, self.audit, self.events)
+        self.device_requests = DeviceRequestStore(account_id, store, self.audit, self.events, contracts)
         self.conversations = ConversationPort(account_id, store, self.attachments, self.audit)
         self.sessions = SessionService(account_id, store, self.audit)
         self.deviceRequests = self.device_requests
@@ -1499,11 +1698,16 @@ def _contains_identity_override(value: Any) -> bool:
 
 
 class GatewayCore:
-    def __init__(self, storage_root: str | Path | None = None, secret_store: Any = None, contract_root: str | Path | None = None):
+    def __init__(
+        self, storage_root: str | Path | None = None, secret_store: Any = None,
+        contract_root: str | Path | None = None, commit_hook: Any = None,
+    ):
         self.storage_root = Path(storage_root or default_hermes_gateway_root()).resolve()
         self.secret_store = secret_store
         self.contract_root = Path(contract_root).resolve() if contract_root is not None else None
         self._contracts: ContractRegistry | None = None
+        self._pending_negotiations: dict[str, dict[str, Any]] = {}
+        self.commit_hook = commit_hook
 
     @property
     def contracts(self) -> ContractRegistry:
@@ -1525,14 +1729,23 @@ class GatewayCore:
     def open_gateway_account(self, account_id: str) -> GatewayAccount:
         # Resolve and validate the opaque account ID before constructing SQLite.
         paths = account_paths(self.storage_root, account_id)
-        store = AccountStore(paths, self._master_key_ref(paths, account_id))
-        return GatewayAccount(account_id, paths, store)
+        store = AccountStore(paths, self._master_key_ref(paths, account_id), self.commit_hook)
+        return GatewayAccount(account_id, paths, store, self.contracts)
 
     def _negotiate(self, account: GatewayAccount, context: Mapping[str, Any], body: Any, now: datetime) -> Mapping[str, Any]:
+        response = self._build_negotiation_response(body, account)
+        if not self.contracts.validate("negotiate.response", response):
+            raise GatewayError("INTERNAL_ERROR")
+        account.store.database.execute(
+            "INSERT OR REPLACE INTO negotiations(negotiation_id, response_json, created_at, expires_at) VALUES (?, ?, ?, ?)",
+            (body["negotiationId"], _json(response), iso_millis(now), iso_millis(now + timedelta(hours=24))),
+        )
+        return response
+
+    def _build_negotiation_response(self, body: Any, account: GatewayAccount | None = None) -> Mapping[str, Any]:
         if not isinstance(body, Mapping) or not self.contracts.validate("negotiate.request", body):
             raise GatewayError("SCHEMA_INVALID")
-        protocol = body["protocol"]
-        if protocol["major"] != 2:
+        if body["schemaHashes"]["core"] != self.contracts.core_schema_hash:
             raise GatewayError("PROTOCOL_INCOMPATIBLE")
         requested = body["features"]
         supported_auth = {"password", "account-invitation", "refresh", "device-key"}
@@ -1543,12 +1756,18 @@ class GatewayCore:
         }
         if any(required[key] not in requested[key] for key in required):
             raise GatewayError("PROTOCOL_INCOMPATIBLE")
-        metadata = {
-            row["key"]: row["value"] for row in account.store.database.execute(
-                "SELECT key, value FROM account_metadata WHERE key IN ('deployment_id', 'tls_spki_sha256')"
-            ).fetchall()
-        }
-        response = {
+        if account is None:
+            deployment_id = "deploy_" + hashlib.sha256(str(self.storage_root).encode("utf-8")).hexdigest()[:16]
+            tls_identity = "sha256:" + "0" * 64
+        else:
+            metadata = {
+                row["key"]: row["value"] for row in account.store.database.execute(
+                    "SELECT key, value FROM account_metadata WHERE key IN ('deployment_id', 'tls_spki_sha256')"
+                ).fetchall()
+            }
+            deployment_id = metadata.get("deployment_id", "deploy_hermes")
+            tls_identity = metadata.get("tls_spki_sha256", "sha256:" + "0" * 64)
+        return {
             "protocol": {"major": 2, "minor": 0},
             "features": {"auth": auth, **required},
             "limits": {
@@ -1557,18 +1776,76 @@ class GatewayCore:
                 "allowedMediaTypes": ["image/jpeg", "image/png", "image/webp", "application/pdf", "text/plain", "audio/mp4"],
                 "attachmentTtlSeconds": 3600, "eventRetentionSeconds": 86_400, "maxClockSkewSeconds": 120,
             },
-            "gatewayIdentity": {
-                "deploymentId": metadata.get("deployment_id", "deploy_hermes"),
-                "tlsSpkiSha256": metadata.get("tls_spki_sha256", "sha256:" + "0" * 64),
-            },
+            "gatewayIdentity": {"deploymentId": deployment_id, "tlsSpkiSha256": tls_identity},
         }
-        if not self.contracts.validate("negotiate.response", response):
-            raise GatewayError("INTERNAL_ERROR")
-        account.store.database.execute(
-            "INSERT OR REPLACE INTO negotiations(negotiation_id, response_json, created_at, expires_at) VALUES (?, ?, ?, ?)",
-            (body["negotiationId"], _json(response), iso_millis(now), iso_millis(now + timedelta(hours=24))),
-        )
-        return response
+
+    def _pre_auth_context(self, request: Any, body: Mapping[str, Any]) -> dict[str, str]:
+        return {
+            "requestId": str(_value(request, "requestId", "request_id", default=body.get("negotiationId", "agent-life-negotiate"))),
+            "correlationId": str(_value(request, "correlationId", "correlation_id", default=body.get("negotiationId", "agent-life-negotiate"))),
+        }
+
+    def _handle_pre_auth(self, request: Any) -> GatewayResponse:
+        body = _request_body(request)
+        context = self._pre_auth_context(request, body if isinstance(body, Mapping) else {})
+        try:
+            response = self._build_negotiation_response(body)
+            negotiation_id = str(body["negotiationId"])
+            now = _request_now(request)
+            input_hash = _hash_input("POST", "/agent-life/v2/negotiate", body)
+            existing = self._pending_negotiations.get(negotiation_id)
+            if existing is not None:
+                if existing["inputHash"] != input_hash:
+                    raise GatewayError("PROTOCOL_INCOMPATIBLE")
+            else:
+                self._pending_negotiations[negotiation_id] = {
+                    "inputHash": input_hash,
+                    "installationId": body["client"]["installationId"],
+                    "response": dict(response),
+                    "expiresAt": _now(now) + timedelta(minutes=5),
+                    "accountId": None,
+                }
+            return _success(context, response)
+        except GatewayError as exc:
+            return _failure(context, exc.code, exc.details)
+
+    def bind_negotiation(
+        self, negotiation_id: str, account_id: str, installation_id: str,
+        now: datetime | str | None = None,
+    ) -> None:
+        current = _now(now)
+        pending = self._pending_negotiations.get(negotiation_id)
+        if (
+            pending is None
+            or pending["expiresAt"] <= current
+            or pending["installationId"] != installation_id
+            or (pending["accountId"] is not None and pending["accountId"] != account_id)
+        ):
+            raise GatewayError("PROTOCOL_INCOMPATIBLE")
+        account = self.open_gateway_account(account_id)
+        try:
+            with account.store.transaction():
+                account.store.database.execute(
+                    "INSERT OR REPLACE INTO negotiation_bindings(negotiation_id, account_id, installation_id, bound_at, expires_at) VALUES (?, ?, ?, ?, ?)",
+                    (negotiation_id, account_id, installation_id, iso_millis(current), iso_millis(pending["expiresAt"])),
+                )
+            pending["accountId"] = account_id
+        finally:
+            account.close()
+
+    def _assert_negotiation_bound(self, account: GatewayAccount, context: Mapping[str, Any], now: datetime) -> None:
+        negotiation_id = context.get("negotiationId")
+        if negotiation_id is None:
+            return
+        installation_id = context.get("installationId")
+        if installation_id is None:
+            raise GatewayError("PROTOCOL_INCOMPATIBLE")
+        row = account.store.database.execute(
+            "SELECT account_id, installation_id, expires_at FROM negotiation_bindings WHERE negotiation_id = ?",
+            (negotiation_id,),
+        ).fetchone()
+        if row is None or row["account_id"] != context["accountId"] or row["installation_id"] != installation_id or _now(row["expires_at"]) <= now:
+            raise GatewayError("PROTOCOL_INCOMPATIBLE")
 
     def _run_idempotent(self, account: GatewayAccount, request: Any, context: Mapping[str, Any], work: Any, replay_check: Any = None) -> dict[str, Any]:
         method = _value(request, "method")
@@ -1580,7 +1857,19 @@ class GatewayCore:
             return _failure(context, "IDEMPOTENCY_CONFLICT")
         now = _request_now(request)
         input_hash = _hash_input(method, _value(request, "target"), _request_body(request))
-        with account.store.transaction():
+        with account.store.transaction(unknown_marker={
+            "deviceId": context["deviceId"],
+            "requestId": request_id,
+            "inputHash": input_hash,
+            "createdAt": iso_millis(now),
+            "expiresAt": iso_millis(now + timedelta(days=30)),
+        }):
+            uncertain = account.store.database.execute(
+                "SELECT 1 FROM uncertain_outcomes WHERE device_id = ? AND request_id = ?",
+                (context["deviceId"], request_id),
+            ).fetchone()
+            if uncertain is not None:
+                return _failure(context, "OUTCOME_UNKNOWN")
             existing = account.store.database.execute(
                 "SELECT input_hash, outcome_json, expires_at FROM idempotency_ledger WHERE device_id = ? AND request_id = ?",
                 (context["deviceId"], request_id),
@@ -1601,22 +1890,28 @@ class GatewayCore:
                 if exc.code not in _PERSISTABLE_ERRORS:
                     raise
                 response = _failure(context, exc.code, exc.details)
-            account.store.database.execute(
-                "INSERT INTO idempotency_ledger(device_id, request_id, input_hash, outcome_json, expires_at) VALUES (?, ?, ?, ?, ?)",
-                (context["deviceId"], request_id, input_hash, _json(response), iso_millis(now + timedelta(days=30))),
-            )
+            try:
+                account.store.database.execute(
+                    "INSERT INTO idempotency_ledger(device_id, request_id, input_hash, outcome_json, expires_at) VALUES (?, ?, ?, ?, ?)",
+                    (context["deviceId"], request_id, input_hash, _json(response), iso_millis(now + timedelta(days=30))),
+                )
+            except sqlite3.Error as exc:
+                raise TransactionOutcomeUnknown({"reason": "idempotency outcome persistence unknown"}) from exc
             return response
 
     def handle(self, request: Any) -> dict[str, Any]:
         try:
+            method = _value(request, "method")
+            target = _value(request, "target")
+            if method == "POST" and target == "/agent-life/v2/negotiate" and _value(request, "context") is None:
+                return self._handle_pre_auth(request)
             context = _request_context(request)
             account = self.open_gateway_account(context["accountId"])
             try:
+                self._assert_negotiation_bound(account, context, _request_now(request))
                 body = _request_body(request)
                 if _contains_identity_override(body):
                     return _failure(context, "IDENTITY_OVERRIDE_REJECTED")
-                method = _value(request, "method")
-                target = _value(request, "target")
                 if method == "GET" and isinstance(target, str) and target.startswith("/agent-life/v2/events"):
                     query = urlsplit(target).query
                     cursor = None

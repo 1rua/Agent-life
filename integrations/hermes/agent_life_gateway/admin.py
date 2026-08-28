@@ -30,7 +30,10 @@ class HostApiCompatibility:
         return self.verified_commit
 
 
-HERMES_HOST_API = HostApiCompatibility("1.0.0", "1.0.0", "a" * 40)
+# No Hermes host API source/release commit was verified in this task.  Keep the
+# adapter explicitly read-only until a real host API range is supplied by the
+# deployment context.
+HERMES_HOST_API = HostApiCompatibility("unverified", "unverified", "")
 
 
 def _version(value: Any) -> tuple[int, int, int, str] | None:
@@ -143,9 +146,9 @@ class AdminService:
     def status(self) -> dict[str, Any]:
         return _success("admin.status", self.read_only, {
             "hostVersion": self.host_version,
-            "minVersion": self.host_api.min_version,
-            "maxVersion": self.host_api.max_version,
-            "verifiedCommit": self.host_api.verified_commit,
+            "minHostVersion": self.host_api.min_version,
+            "maxHostVersion": self.host_api.max_version,
+            "verifiedHostCommit": self.host_api.verified_commit,
             "readOnly": self.read_only,
         })
 

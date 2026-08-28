@@ -94,16 +94,26 @@ class GatewayHttpRoute:
         if verified is None:
             context = _get(request, "context")
             method = _get(request, "method")
-            if context is None or method not in {"GET", "POST", "PUT", "DELETE"}:
+            target = _get(request, "target", default=self.path)
+            if context is None and method == "POST" and target == "/agent-life/v2/negotiate":
+                verified = {
+                    "method": method,
+                    "target": target,
+                    "body": _get(request, "body"),
+                    "requestId": _get(request, "requestId", "request_id", default="agent-life-negotiate"),
+                    "correlationId": _get(request, "correlationId", "correlation_id", default="agent-life-negotiate"),
+                }
+            elif context is None or method not in {"GET", "POST", "PUT", "DELETE"}:
                 return {"statusCode": 401, "headers": dict(_RESPONSE_HEADERS), "body": _failure(request, "AUTHENTICATION_REQUIRED")}
-            verified = {
-                "context": context, "method": method,
-                "target": _get(request, "target", default=self.path),
-                **({"body": _get(request, "body")} if _get(request, "body") is not None else {}),
-                **({"idempotencyKey": _get(request, "idempotencyKey", "idempotency_key")} if _get(request, "idempotencyKey", "idempotency_key") is not None else {}),
-                **({"lastEventId": _get(request, "lastEventId", "last_event_id")} if _get(request, "lastEventId", "last_event_id") is not None else {}),
-                **({"now": _get(request, "now")} if _get(request, "now") is not None else {}),
-            }
+            else:
+                verified = {
+                    "context": context, "method": method,
+                    "target": target,
+                    **({"body": _get(request, "body")} if _get(request, "body") is not None else {}),
+                    **({"idempotencyKey": _get(request, "idempotencyKey", "idempotency_key")} if _get(request, "idempotencyKey", "idempotency_key") is not None else {}),
+                    **({"lastEventId": _get(request, "lastEventId", "last_event_id")} if _get(request, "lastEventId", "last_event_id") is not None else {}),
+                    **({"now": _get(request, "now")} if _get(request, "now") is not None else {}),
+                }
         body = self._services.core.handle(verified)
         return {"statusCode": _status(body), "headers": dict(_RESPONSE_HEADERS), "body": body}
 
@@ -116,9 +126,6 @@ class GatewayHttpRoute:
         empty: dict[str, Any] = {}
         if not is_host_api_compatible(self._services.host_version, self._services.host_api):
             return {"statusCode": 503, "headers": dict(_RESPONSE_HEADERS), "body": _failure(empty, "HOST_INCOMPATIBLE")}
-        verifier = self._services.verify_request
-        if verifier is None:
-            return {"statusCode": 401, "headers": dict(_RESPONSE_HEADERS), "body": _failure(empty, "AUTHENTICATION_REQUIRED")}
         method = _get(request, "method")
         target = _get(request, "url", "target")
         if method not in {"GET", "POST", "PUT", "DELETE"} or not isinstance(target, str) or not target.startswith("/"):
@@ -128,6 +135,22 @@ class GatewayHttpRoute:
             return {"statusCode": 400, "headers": dict(_RESPONSE_HEADERS), "body": _failure(empty, "REQUEST_BODY_INVALID")}
         if len(body) > self._services.max_body_bytes:
             return {"statusCode": 413, "headers": dict(_RESPONSE_HEADERS), "body": _failure(empty, "REQUEST_BODY_TOO_LARGE")}
+        if method == "POST" and target == "/agent-life/v2/negotiate":
+            try:
+                decoded = _strict_json(body)
+            except (UnicodeDecodeError, ValueError, json.JSONDecodeError):
+                return {"statusCode": 400, "headers": dict(_RESPONSE_HEADERS), "body": _failure(empty, "SCHEMA_INVALID")}
+            response_body = self._services.core.handle({
+                "method": method,
+                "target": target,
+                "body": decoded,
+                "requestId": str(_get(request, "requestId", "request_id", default="agent-life-negotiate")),
+                "correlationId": str(_get(request, "correlationId", "correlation_id", default="agent-life-negotiate")),
+            })
+            return {"statusCode": _status(response_body), "headers": dict(_RESPONSE_HEADERS), "body": response_body}
+        verifier = self._services.verify_request
+        if verifier is None:
+            return {"statusCode": 401, "headers": dict(_RESPONSE_HEADERS), "body": _failure(empty, "AUTHENTICATION_REQUIRED")}
         try:
             verified = verifier({
                 "request": request, "req": request, "method": method, "target": target,
@@ -161,6 +184,18 @@ def _raw_body(request: Any) -> bytes | None:
     if isinstance(body, (bytes, bytearray, memoryview)):
         return bytes(body)
     return None
+
+
+def _strict_json(body: bytes) -> Any:
+    def pairs(items: list[tuple[str, Any]]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, value in items:
+            if key in result:
+                raise ValueError("duplicate JSON key")
+            result[key] = value
+        return result
+
+    return json.loads(body.decode("utf-8"), object_pairs_hook=pairs)
 
 
 def _set_response(response: Any, status: int, headers: Mapping[str, str], body: Mapping[str, Any]) -> None:

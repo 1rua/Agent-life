@@ -1,6 +1,11 @@
 import sys
 import hashlib
+import json
+import shutil
+import sqlite3
 from pathlib import Path
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -8,6 +13,7 @@ from agent_life_gateway.account_paths import account_paths
 from agent_life_gateway.core import (
     GatewayError,
     GatewayResponse,
+    ContractRegistry,
     VerifiedGatewayRequest,
     VerifiedRequestContext,
     create_gateway_core,
@@ -319,7 +325,7 @@ def _device_input(request_id, risk="read", now="2026-08-24T12:00:00.000Z"):
             "pluginId": "org.agentlife.sms",
             "authorKeyId": "sha256:" + "a" * 64,
         },
-        "parameters": {},
+        "parameters": {"query": "from:alice"},
         "correlation_id": "cor_device",
         "now": now,
     }
@@ -610,3 +616,330 @@ def test_account_uses_the_dedicated_audit_store_module(tmp_path):
     account = create_gateway_core(storage_root=tmp_path).open_gateway_account("acct_audit")
 
     assert isinstance(account.audit, AuditStore)
+
+
+def _registry_copy(tmp_path, mutate):
+    source = Path(__file__).resolve().parents[3] / "gateway-contract"
+    target = tmp_path / "gateway-contract"
+    shutil.copytree(source, target)
+    registry_path = target / "vectors" / "dispatched-schema-fixtures.json"
+    registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    mutate(registry)
+    registry_path.write_text(json.dumps(registry, ensure_ascii=False, indent=2), encoding="utf-8")
+    return target
+
+
+@pytest.mark.parametrize(
+    "name,mutate",
+    [
+        ("unknown top-level field", lambda value: value.update({"unexpected": True})),
+        ("extra binding set", lambda value: value["bindingSets"].append({"id": "untrusted-extra", "bindings": []})),
+        ("missing catalog entry", lambda value: value["catalogEntries"].pop()),
+        ("reordered catalog entries", lambda value: value["catalogEntries"].reverse()),
+        ("unknown nested field", lambda value: value["catalogEntries"][0].update({"unexpected": True})),
+        (
+            "duplicate logical key",
+            lambda value: value["catalogEntries"][1].update({"key": dict(value["catalogEntries"][0]["key"])}),
+        ),
+        (
+            "digest mismatch",
+            lambda value: value["catalogEntries"][0]["key"].update({"schemaSha256": "sha256:" + "f" * 64}),
+        ),
+    ],
+)
+def test_dispatched_registry_rejects_malformed_copied_assets(tmp_path, name, mutate):
+    registry_root = _registry_copy(tmp_path, mutate)
+
+    with pytest.raises(GatewayError) as error:
+        ContractRegistry(registry_root)
+
+    assert error.value.code == "DISPATCHED_REGISTRY_INVALID"
+
+
+def test_dispatched_registry_only_accepts_the_fixed_binding_set(tmp_path):
+    registry = ContractRegistry()
+    value = {
+        "correlationId": "correlation_1",
+        "occurredAt": "2026-08-27T00:00:00.000Z",
+        "payload": {"noticeCode": "maintenance"},
+    }
+
+    assert registry.validate_dispatched(
+        "gateway-core-fixtures-v1", {"kind": "event", "eventType": "gateway.notice"}, value
+    ) is True
+    assert registry.validate_dispatched(
+        "untrusted-extra", {"kind": "event", "eventType": "gateway.notice"}, value
+    ) is False
+    assert registry.validate_dispatched(
+        "gateway-core-fixtures-v1",
+        {"kind": "event", "eventType": "gateway.notice", "schemaSha256": "sha256:" + "a" * 64},
+        value,
+    ) is False
+
+
+def _negotiate_body(core, schema_hash="sha256:" + "a" * 64):
+    return {
+        "negotiationId": "neg_pre_auth",
+        "protocol": {"major": 2, "minor": 0},
+        "client": {"installationId": "install_pre", "appVersion": "2.0.0", "platform": "android", "platformApi": 35},
+        "features": {
+            "auth": ["password", "refresh"], "messages": ["chat-v1"],
+            "attachments": ["staged-sha256-v1"], "events": ["sse-cursor-v1"],
+            "deviceRequests": ["risk-queue-v1"],
+        },
+        "schemaHashes": {"core": schema_hash},
+    }
+
+
+def test_pre_auth_negotiate_does_not_require_account_context_and_rejects_unknown_core_hash(tmp_path):
+    core = create_gateway_core(storage_root=tmp_path)
+    valid = core.handle({
+        "requestId": "req_pre_auth", "correlationId": "cor_pre_auth",
+        "method": "POST", "target": "/agent-life/v2/negotiate",
+        "body": _negotiate_body(core),
+    })
+    invalid = core.handle({
+        "requestId": "req_pre_auth_bad", "correlationId": "cor_pre_auth_bad",
+        "method": "POST", "target": "/agent-life/v2/negotiate",
+        "body": _negotiate_body(core, "sha256:" + "f" * 64),
+    })
+
+    assert valid["data"]["protocol"] == {"major": 2, "minor": 0}
+    assert invalid["error"]["code"] == "PROTOCOL_INCOMPATIBLE"
+
+
+def test_authenticated_request_with_unbound_negotiation_fails_closed(tmp_path):
+    core = create_gateway_core(storage_root=tmp_path)
+    negotiation = core.handle({
+        "requestId": "req_pre_auth", "correlationId": "cor_pre_auth",
+        "method": "POST", "target": "/agent-life/v2/negotiate",
+        "body": _negotiate_body(core),
+    })
+    assert negotiation["data"]
+    unbound = core.handle({
+        "context": {**_context(requestId="req_unbound"), "negotiationId": "neg_pre_auth", "installationId": "install_pre"},
+        "method": "POST", "target": "/agent-life/v2/conversations",
+        "idempotencyKey": "req_unbound",
+        "body": {"clientConversationId": "conv_unbound"},
+    })
+
+    assert unbound["error"]["code"] == "PROTOCOL_INCOMPATIBLE"
+    core.bind_negotiation("neg_pre_auth", "acct_alice", "install_pre")
+    bound = core.handle({
+        "context": {**_context(requestId="req_bound"), "negotiationId": "neg_pre_auth", "installationId": "install_pre"},
+        "method": "POST", "target": "/agent-life/v2/conversations",
+        "idempotencyKey": "req_bound",
+        "body": {"clientConversationId": "conv_bound"},
+    })
+    assert bound["data"]["conversation"]["clientConversationId"] == "conv_bound"
+    with pytest.raises(GatewayError, match="PROTOCOL_INCOMPATIBLE"):
+        core.bind_negotiation("neg_pre_auth", "acct_bob", "install_pre")
+
+
+def test_device_request_event_get_and_list_preserve_full_contract_metadata(tmp_path):
+    core = create_gateway_core(storage_root=tmp_path)
+    account = core.open_gateway_account("acct_alice")
+    request = account.device_requests.enqueue(
+        request_id="device_req_metadata", device_id="dev_1", pairing_generation=4,
+        grant_revision=7, risk="read",
+        capability={"id": "org.agentlife.sms.query", "version": "1.0.0"},
+        provider={"pluginId": "org.agentlife.sms", "authorKeyId": "sha256:" + "a" * 64},
+        parameters={"query": "from:alice", "senders": ["alice"]},
+        requires_foreground_confirmation=True,
+        correlation_id="cor_metadata", now="2026-08-27T00:00:00.000Z",
+    )
+    event = account.events.read_after(None, "2026-08-27T00:00:01.000Z")[0]
+    listed = account.device_requests.list()
+
+    assert request["capability"] == {"id": "org.agentlife.sms.query", "version": "1.0.0"}
+    assert request["provider"]["pluginId"] == "org.agentlife.sms"
+    assert request["parameters"]["senders"] == ["alice"]
+    assert request["createdAt"] == "2026-08-27T00:00:00.000Z"
+    assert request["requiresForegroundConfirmation"] is True
+    assert event["eventType"] == "device.requested"
+    assert event["payload"]["parameters"] == request["parameters"]
+    assert event["payload"]["expiresAt"] == request["expiresAt"]
+    assert listed[0] == request
+
+
+def test_device_enqueue_rejects_parameters_without_the_trusted_dispatched_binding(tmp_path):
+    core = create_gateway_core(storage_root=tmp_path)
+    account = core.open_gateway_account("acct_alice")
+
+    with pytest.raises(GatewayError, match="SCHEMA_INVALID"):
+        account.device_requests.enqueue(
+            request_id="device_req_untrusted", device_id="dev_1", pairing_generation=1,
+            grant_revision=1, risk="read",
+            capability={"id": "org.agentlife.sms.query", "version": "1.0.0"},
+            provider={"pluginId": "org.agentlife.sms", "authorKeyId": "sha256:" + "a" * 64},
+            parameters={"unexpected": True}, correlation_id="cor_untrusted",
+        )
+
+
+def test_device_enqueue_rolls_back_row_event_and_audit_when_event_persistence_fails(tmp_path):
+    core = create_gateway_core(storage_root=tmp_path)
+    account = core.open_gateway_account("acct_alice")
+    account.store.database.execute(
+        """
+        CREATE TRIGGER fail_device_event
+        BEFORE INSERT ON events
+        WHEN NEW.event_type = 'device.requested'
+        BEGIN SELECT RAISE(ABORT, 'device event forced failure'); END;
+        """
+    )
+
+    with pytest.raises(sqlite3.Error, match="device event forced failure"):
+        account.device_requests.enqueue(**_device_input("device_req_atomic"))
+
+    assert account.store.database.execute(
+        "SELECT COUNT(*) FROM device_requests WHERE request_id = 'device_req_atomic'"
+    ).fetchone()[0] == 0
+    assert account.store.database.execute(
+        "SELECT COUNT(*) FROM events WHERE event_type = 'device.requested'"
+    ).fetchone()[0] == 0
+    assert "device_req_atomic" not in str(account.audit.list())
+
+
+def test_expired_claimed_result_commits_outcome_unknown_before_returning_error(tmp_path):
+    core = create_gateway_core(storage_root=tmp_path)
+    account = core.open_gateway_account("acct_alice")
+    account.device_requests.enqueue(**_device_input("device_req_claimed_expiry", "write", "2026-08-27T00:00:00.000Z"))
+    claim = account.device_requests.claim(
+        request_id="device_req_claimed_expiry", device_id="dev_1", pairing_generation=4,
+        grant_revision=7, correlation_id="cor_claimed_expiry", now="2026-08-27T00:01:00.000Z",
+    )
+
+    with pytest.raises(GatewayError, match="OUTCOME_UNKNOWN"):
+        account.device_requests.submit_result(
+            request_id="device_req_claimed_expiry", device_id="dev_1", pairing_generation=4,
+            grant_revision=7, claim_id=claim["claimId"], result={"outcome": "succeeded"},
+            correlation_id="cor_late_result", now="2026-08-27T00:16:00.000Z",
+        )
+
+    assert account.device_requests.get("device_req_claimed_expiry")["state"] == "outcome_unknown"
+    account.close()
+    reopened = core.open_gateway_account("acct_alice")
+    assert reopened.device_requests.get("device_req_claimed_expiry")["state"] == "outcome_unknown"
+
+
+def test_expired_cancel_requested_result_commits_outcome_unknown_before_returning_error(tmp_path):
+    core = create_gateway_core(storage_root=tmp_path)
+    account = core.open_gateway_account("acct_alice")
+    account.device_requests.enqueue(**_device_input("device_req_cancel_expiry", "write", "2026-08-27T01:00:00.000Z"))
+    claim = account.device_requests.claim(
+        request_id="device_req_cancel_expiry", device_id="dev_1", pairing_generation=4,
+        grant_revision=7, correlation_id="cor_cancel_claim", now="2026-08-27T01:01:00.000Z",
+    )
+    account.device_requests.cancel(
+        request_id="device_req_cancel_expiry", device_id="dev_1", pairing_generation=4,
+        grant_revision=7, correlation_id="cor_cancel", now="2026-08-27T01:02:00.000Z",
+    )
+
+    with pytest.raises(GatewayError, match="OUTCOME_UNKNOWN"):
+        account.device_requests.submit_result(
+            request_id="device_req_cancel_expiry", device_id="dev_1", pairing_generation=4,
+            grant_revision=7, claim_id=claim["claimId"], result={"outcome": "cancelled"},
+            correlation_id="cor_cancel_late_result", now="2026-08-27T01:16:00.000Z",
+        )
+
+    assert account.device_requests.get("device_req_cancel_expiry")["state"] == "outcome_unknown"
+
+
+def test_expired_claimed_cancel_commits_outcome_unknown_before_returning_error(tmp_path):
+    core = create_gateway_core(storage_root=tmp_path)
+    account = core.open_gateway_account("acct_alice")
+    account.device_requests.enqueue(**_device_input("device_req_cancel_late", "write", "2026-08-27T02:00:00.000Z"))
+    account.device_requests.claim(
+        request_id="device_req_cancel_late", device_id="dev_1", pairing_generation=4,
+        grant_revision=7, correlation_id="cor_cancel_late_claim", now="2026-08-27T02:01:00.000Z",
+    )
+
+    with pytest.raises(GatewayError, match="OUTCOME_UNKNOWN"):
+        account.device_requests.cancel(
+            request_id="device_req_cancel_late", device_id="dev_1", pairing_generation=4,
+            grant_revision=7, correlation_id="cor_cancel_late", now="2026-08-27T02:16:00.000Z",
+        )
+
+    assert account.device_requests.get("device_req_cancel_late")["state"] == "outcome_unknown"
+
+
+def test_commit_failure_does_not_corrupt_transaction_depth_or_connection(tmp_path):
+    def fail_commit_once():
+        fail_commit_once.calls += 1
+        if fail_commit_once.calls == 1:
+            raise sqlite3.OperationalError("commit forced failure")
+
+    fail_commit_once.calls = 0
+    core = create_gateway_core(storage_root=tmp_path, commit_hook=fail_commit_once)
+    account = core.open_gateway_account("acct_commit_fault")
+
+    with pytest.raises(GatewayError, match="OUTCOME_UNKNOWN"):
+        with account.store.transaction():
+            account.store.database.execute("INSERT INTO account_metadata(key, value) VALUES ('commit_probe', 'value')")
+
+    assert account.store._transaction_depth == 0
+    with account.store.transaction():
+        assert account.store.database.execute(
+            "SELECT value FROM account_metadata WHERE key = 'commit_probe'"
+        ).fetchone() is None
+
+
+def test_commit_unknown_marks_idempotent_request_and_blocks_duplicate_side_effect(tmp_path):
+    def fail_commit_once():
+        fail_commit_once.calls += 1
+        if fail_commit_once.calls == 1:
+            raise sqlite3.OperationalError("commit forced failure")
+
+    fail_commit_once.calls = 0
+    core = create_gateway_core(storage_root=tmp_path, commit_hook=fail_commit_once)
+    request = {
+        "context": _context(requestId="req_commit_unknown", correlationId="cor_commit_unknown"),
+        "method": "POST", "target": "/agent-life/v2/conversations",
+        "idempotencyKey": "req_commit_unknown",
+        "body": {"clientConversationId": "conv_commit_unknown"},
+    }
+
+    first = core.handle(request)
+    second = core.handle(request)
+
+    assert first["error"]["code"] == "OUTCOME_UNKNOWN"
+    assert second["error"]["code"] == "OUTCOME_UNKNOWN"
+    account = core.open_gateway_account("acct_alice")
+    assert account.store.database.execute(
+        "SELECT COUNT(*) FROM uncertain_outcomes WHERE device_id = 'dev_1' AND request_id = 'req_commit_unknown'"
+    ).fetchone()[0] == 1
+    assert account.store.database.execute(
+        "SELECT COUNT(*) FROM conversations WHERE client_conversation_id = 'conv_commit_unknown'"
+    ).fetchone()[0] <= 1
+
+
+def test_ledger_persistence_failure_returns_unknown_marker_instead_of_internal_error(tmp_path):
+    core = create_gateway_core(storage_root=tmp_path)
+    account = core.open_gateway_account("acct_alice")
+    account.store.database.execute(
+        """
+        CREATE TRIGGER fail_ledger_persistence
+        BEFORE INSERT ON idempotency_ledger
+        BEGIN SELECT RAISE(ABORT, 'ledger forced failure'); END;
+        """
+    )
+    account.close()
+    request = {
+        "context": _context(requestId="req_ledger_unknown", correlationId="cor_ledger_unknown"),
+        "method": "POST", "target": "/agent-life/v2/conversations",
+        "idempotencyKey": "req_ledger_unknown",
+        "body": {"clientConversationId": "conv_ledger_unknown"},
+    }
+
+    first = core.handle(request)
+    second = core.handle(request)
+
+    assert first["error"]["code"] == "OUTCOME_UNKNOWN"
+    assert second["error"]["code"] == "OUTCOME_UNKNOWN"
+    account = core.open_gateway_account("acct_alice")
+    assert account.store.database.execute(
+        "SELECT COUNT(*) FROM uncertain_outcomes WHERE device_id = 'dev_1' AND request_id = 'req_ledger_unknown'"
+    ).fetchone()[0] == 1
+    assert account.store.database.execute(
+        "SELECT COUNT(*) FROM conversations WHERE client_conversation_id = 'conv_ledger_unknown'"
+    ).fetchone()[0] == 0

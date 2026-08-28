@@ -8,6 +8,7 @@ from typing import Any, Mapping, Protocol
 from .admin import (
     HERMES_HOST_API,
     AdminService,
+    bind_admin_service,
     create_admin_cli_registrar,
     create_admin_panel,
     create_admin_service,
@@ -22,9 +23,10 @@ HERMES_PLUGIN_MANIFEST = {
     "backend": "hermes",
     "protocolVersion": "gateway-protocol-v2",
     "hostApi": {
-        "min": HERMES_HOST_API.min_version,
-        "max": HERMES_HOST_API.max_version,
-        "commit": HERMES_HOST_API.verified_commit,
+        "status": "unverified",
+        "min": None,
+        "max": None,
+        "commit": None,
     },
     "exposureModes": list(EXPOSURE_MODES),
     "management": {
@@ -164,6 +166,7 @@ def compose_gateway_services(ctx: Any) -> GatewayServices:
 
 def register(ctx: HermesPluginContext) -> None:
     services = compose_gateway_services(ctx)
+    bind_admin_service(services.admin)
     ctx.register_platform(GatewayPlatform(services.core, services.exposure, services.admin))
     ctx.register_admin(AdminSurface(services.admin))
     register_route = _attr(ctx, "register_http_route", "registerHttpRoute", "register_route", default=None)

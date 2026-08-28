@@ -47,7 +47,7 @@ def test_portable_backup_excludes_active_identity_credentials_queue_and_content(
         risk="read",
         capability={"id": "org.agentlife.sms.query", "version": "1.0.0"},
         provider={"pluginId": "org.agentlife.sms", "authorKeyId": "sha256:" + "a" * 64},
-        parameters={},
+        parameters={"query": "from:alice"},
         correlation_id="cor_device",
         now="2026-08-27T00:00:00.000Z",
     )

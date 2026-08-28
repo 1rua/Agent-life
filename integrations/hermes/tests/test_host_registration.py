@@ -3,6 +3,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from agent_life_gateway.admin import run_admin_command
 from agent_life_gateway.plugin import register
 
 
@@ -65,3 +66,12 @@ def test_registration_marks_unknown_host_read_only_before_writes(tmp_path):
     result = context.admin_surfaces[0].create_account({"accountId": "acct", "localConfirmation": True})
     assert result["error"]["code"] == "HOST_INCOMPATIBLE"
     assert not (Path(tmp_path) / "agent-life-gateway" / "accounts").exists()
+
+
+def test_registered_no_argument_cli_reuses_the_panel_admin_service(tmp_path):
+    context = FakeHermesContext(tmp_path)
+
+    register(context)
+
+    panel = context.admin_surfaces[0].panel
+    assert run_admin_command(["status"]) == panel.status()

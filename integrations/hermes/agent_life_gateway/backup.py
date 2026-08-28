@@ -47,6 +47,10 @@ class GatewayBackupService:
                 {"pluginId": row["plugin_id"], "manifest": row["manifest_json"]}
                 for row in account.store.database.execute("SELECT plugin_id, manifest_json FROM plugin_registry ORDER BY plugin_id").fetchall()
             ]
+            audit = [
+                record for record in account.audit.list()
+                if record["eventType"] != "device.request.enqueued"
+            ]
             return {
                 "format": "agent-life-gateway-portable-backup-v1",
                 "accountId": account_id,
@@ -55,7 +59,7 @@ class GatewayBackupService:
                 "plugins": plugins,
                 "attachments": attachments,
                 "conversations": conversations,
-                "audit": account.audit.list(),
+                "audit": audit,
             }
         finally:
             account.close()

@@ -5,9 +5,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from agent_life_gateway.admin import (
     HERMES_HOST_API,
+    HostApiCompatibility,
     create_admin_cli_registrar,
     create_admin_panel,
     create_admin_service,
+    is_host_api_compatible,
     run_admin_command,
 )
 
@@ -46,7 +48,11 @@ def find_command(root, names):
 
 
 def test_admin_panel_and_local_cli_share_confirmed_write_semantics(tmp_path):
-    service = create_admin_service(storage_root=tmp_path, host_version="1.0.0")
+    service = create_admin_service(
+        storage_root=tmp_path,
+        host_version="1.0.0",
+        host_api=HostApiCompatibility("1.0.0", "1.0.0", "0123456789abcdef0123456789abcdef01234567"),
+    )
     panel = create_admin_panel(service)
     program = Command("hermes")
     create_admin_cli_registrar(service)(program)
@@ -77,4 +83,23 @@ def test_incompatible_hermes_host_keeps_panel_and_cli_read_only(tmp_path):
     assert result["readOnly"] is True
     assert result["error"]["code"] == "HOST_INCOMPATIBLE"
     assert service.status()["data"]["readOnly"] is True
-    assert HERMES_HOST_API.min_version == "1.0.0"
+    assert HERMES_HOST_API.verified_commit == ""
+
+
+def test_admin_status_uses_openclaw_canonical_host_field_names(tmp_path):
+    service = create_admin_service(
+        storage_root=tmp_path,
+        host_version="1.0.0",
+        host_api=HostApiCompatibility("1.0.0", "1.0.0", "0123456789abcdef0123456789abcdef01234567"),
+    )
+
+    status = service.status()
+
+    assert set(status["data"]) == {
+        "hostVersion", "minHostVersion", "maxHostVersion", "verifiedHostCommit", "readOnly",
+    }
+
+
+def test_default_hermes_host_api_is_explicitly_unverified_and_never_compatible():
+    assert HERMES_HOST_API.verified_commit == ""
+    assert is_host_api_compatible("1.0.0", HERMES_HOST_API) is False
