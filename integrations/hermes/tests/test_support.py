@@ -64,3 +64,10 @@ class HermesSecretStoreDouble:
 
 def make_secret_store() -> HermesSecretStoreDouble:
     return HermesSecretStoreDouble()
+
+
+class IdentityProofVerifierDouble:
+    """Test-only verifier for the structured identity continuity seam."""
+
+    def verify(self, payload: bytes, signature: str, previous_identity_ref: str) -> bool:
+        return bool(payload) and previous_identity_ref and signature == "valid-rotation-proof"

@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from agent_life_gateway.backup import GatewayBackupService
 from agent_life_gateway.core import GatewayError, create_gateway_core
 from agent_life_gateway.identity_rotation import IdentityRotationService
-from test_support import make_secret_store
+from test_support import IdentityProofVerifierDouble, make_secret_store
 
 
 _real_create_gateway_core = create_gateway_core
@@ -20,6 +20,20 @@ _real_create_gateway_core = create_gateway_core
 def create_gateway_core(storage_root=None, **options):
     options.setdefault("secret_store", make_secret_store())
     return _real_create_gateway_core(storage_root=storage_root, **options)
+
+
+def _rotation_proof(
+    previous_identity_ref="spki_initial", next_identity_ref="spki_new",
+    next_tls_spki_sha256="sha256:" + "1" * 64, pairing_generation=1,
+    signature="valid-rotation-proof",
+):
+    return {
+        "previousIdentityRef": previous_identity_ref,
+        "nextIdentityRef": next_identity_ref,
+        "nextTlsSpkiSha256": next_tls_spki_sha256,
+        "pairingGeneration": pairing_generation,
+        "signature": signature,
+    }
 
 
 def test_portable_backup_excludes_active_identity_credentials_queue_and_content(tmp_path):
@@ -63,16 +77,19 @@ def test_portable_backup_excludes_active_identity_credentials_queue_and_content(
     )
     account.close()
 
-    receipt = IdentityRotationService(storage_root=tmp_path).rotate(
+    receipt = IdentityRotationService(
+        core=core, proof_verifier=IdentityProofVerifierDouble()
+    ).rotate(
         account_id="acct_alice",
         previous_identity_ref="spki_initial",
         next_identity_ref="spki_new",
-        signed_by_previous="rotation_proof",
+        signed_by_previous=_rotation_proof(),
         correlation_id="cor_rotate",
     )
     assert receipt["accountId"] == "acct_alice"
     assert receipt["previousIdentityRef"] == "spki_initial"
     assert receipt["nextIdentityRef"] == "spki_new"
+    assert receipt["nextTlsSpkiSha256"] == "sha256:" + "1" * 64
     assert receipt["masterKeyRef"] == initial_master_key_ref
 
     reopened = core.open_gateway_account("acct_alice")
@@ -117,3 +134,133 @@ def test_refresh_rotation_and_reuse_revokes_all_credentials_for_the_device(tmp_p
             correlation_id="cor_reuse", now="2026-08-27T00:02:00.000Z",
         )
     assert account.sessions.active_refresh_credential_count(first["deviceId"]) == 0
+
+
+def test_identity_rotation_rejects_an_arbitrary_string_as_continuity_proof(tmp_path):
+    core = create_gateway_core(storage_root=tmp_path)
+    account = core.open_gateway_account("acct_rotation_proof")
+    account.close()
+
+    with pytest.raises(GatewayError) as error:
+        IdentityRotationService(core=core).rotate(
+            account_id="acct_rotation_proof",
+            previous_identity_ref="spki_initial",
+            next_identity_ref="spki_new",
+            signed_by_previous="arbitrary-string-is-not-a-proof",
+            correlation_id="cor_rotation_proof",
+        )
+
+    assert error.value.code == "IDENTITY_ROTATION_PROOF_INVALID"
+
+
+def test_identity_rotation_updates_the_tls_fingerprint_atomically(tmp_path):
+    core = create_gateway_core(storage_root=tmp_path)
+    account = core.open_gateway_account("acct_rotation_tls")
+    account.close()
+
+    next_fingerprint = "sha256:" + "2" * 64
+    IdentityRotationService(core=core, proof_verifier=IdentityProofVerifierDouble()).rotate(
+        account_id="acct_rotation_tls",
+        previous_identity_ref="spki_initial",
+        next_identity_ref="spki_new",
+        signed_by_previous=_rotation_proof(next_tls_spki_sha256=next_fingerprint),
+        correlation_id="cor_rotation_tls",
+    )
+
+    rotated = core.open_gateway_account("acct_rotation_tls")
+    fingerprint = rotated.store.database.execute(
+        "SELECT value FROM account_metadata WHERE key = 'tls_spki_sha256'"
+    ).fetchone()[0]
+    assert fingerprint == next_fingerprint
+    negotiation = core._build_negotiation_response(
+        {
+            "negotiationId": "neg_rotation_tls",
+            "protocol": {"major": 2, "minor": 0},
+            "client": {
+                "installationId": "install_rotation_tls", "appVersion": "2.0.0",
+                "platform": "android", "platformApi": 35,
+            },
+            "features": {
+                "auth": ["password"], "messages": ["chat-v1"],
+                "attachments": ["staged-sha256-v1"], "events": ["sse-cursor-v1"],
+                "deviceRequests": ["risk-queue-v1"],
+            },
+            "schemaHashes": {"core": "sha256:" + "a" * 64},
+        },
+        rotated,
+    )
+    assert negotiation["gatewayIdentity"]["tlsSpkiSha256"] == next_fingerprint
+    rotated.close()
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda proof: proof.update({"unexpected": True}),
+        lambda proof: proof.update({"pairingGeneration": 2}),
+        lambda proof: proof.update({"nextTlsSpkiSha256": "sha256:" + "0" * 64}),
+        lambda proof: proof.update({"nextTlsSpkiSha256": "sha256:" + "A" * 64}),
+        lambda proof: proof.update({"previousIdentityRef": "spki_other"}),
+        lambda proof: proof.update({"nextIdentityRef": "spki_other"}),
+    ],
+)
+def test_invalid_rotation_proof_leaves_identity_metadata_unchanged(tmp_path, mutate):
+    core = create_gateway_core(storage_root=tmp_path)
+    account = core.open_gateway_account("acct_invalid_rotation")
+    account.close()
+    proof = _rotation_proof()
+    mutate(proof)
+
+    with pytest.raises(GatewayError) as error:
+        IdentityRotationService(
+            core=core, proof_verifier=IdentityProofVerifierDouble()
+        ).rotate(
+            account_id="acct_invalid_rotation",
+            previous_identity_ref="spki_initial",
+            next_identity_ref="spki_new",
+            signed_by_previous=proof,
+            correlation_id="cor_invalid_rotation",
+        )
+
+    assert error.value.code == "IDENTITY_ROTATION_PROOF_INVALID"
+    unchanged = core.open_gateway_account("acct_invalid_rotation")
+    values = {
+        row["key"]: row["value"] for row in unchanged.store.database.execute(
+            "SELECT key, value FROM account_metadata WHERE key IN ('gateway_identity_ref', 'pairing_generation', 'tls_spki_sha256')"
+        ).fetchall()
+    }
+    assert values == {
+        "gateway_identity_ref": "spki_initial",
+        "pairing_generation": "1",
+        "tls_spki_sha256": "sha256:" + "0" * 64,
+    }
+    assert unchanged.store.database.execute(
+        "SELECT COUNT(*) FROM identity_rotation_receipts"
+    ).fetchone()[0] == 0
+    unchanged.close()
+
+
+def test_rotation_requires_a_verifier_and_rejects_a_false_signature(tmp_path):
+    core = create_gateway_core(storage_root=tmp_path)
+    account = core.open_gateway_account("acct_false_rotation")
+    account.close()
+    proof = _rotation_proof()
+
+    with pytest.raises(GatewayError, match="IDENTITY_ROTATION_PROOF_UNVERIFIED"):
+        IdentityRotationService(core=core).rotate(
+            account_id="acct_false_rotation",
+            previous_identity_ref="spki_initial",
+            next_identity_ref="spki_new",
+            signed_by_previous=proof,
+            correlation_id="cor_no_verifier",
+        )
+    with pytest.raises(GatewayError, match="IDENTITY_ROTATION_PROOF_UNVERIFIED"):
+        IdentityRotationService(
+            core=core, proof_verifier=IdentityProofVerifierDouble()
+        ).rotate(
+            account_id="acct_false_rotation",
+            previous_identity_ref="spki_initial",
+            next_identity_ref="spki_new",
+            signed_by_previous=_rotation_proof(signature="wrong-proof"),
+            correlation_id="cor_false_signature",
+        )
