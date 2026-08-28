@@ -1110,7 +1110,7 @@ class AttachmentStore:
                 )
                 expired += 1
             for path in paths:
-                self._move_to_trash(path)
+                self._move_unreferenced_path(path)
         return expired
 
     def cleanup(self, now: datetime | str | None = None) -> int:
@@ -1170,7 +1170,7 @@ class AttachmentStore:
                 row = self._row(attachment_id)
                 expired = True
         for path in paths:
-            self._move_to_trash(path)
+            self._move_unreferenced_path(path)
         return row, expired
 
     def _row(self, attachment_id: str) -> sqlite3.Row:
@@ -1201,6 +1201,15 @@ class AttachmentStore:
             return True
         except OSError:
             return False
+
+    def _move_unreferenced_path(self, path: Path) -> bool:
+        if path.parent == self.cas_dir:
+            referenced = self.store.database.execute(
+                "SELECT 1 FROM attachments WHERE cas_path = ? LIMIT 1", (str(path),)
+            ).fetchone()
+            if referenced is not None:
+                return False
+        return self._move_to_trash(path)
 
     def _reconcile_staged_files(self) -> set[Path]:
         protected: set[Path] = set()

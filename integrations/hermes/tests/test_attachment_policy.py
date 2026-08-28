@@ -246,6 +246,27 @@ def test_cleanup_expires_overdue_attachment_before_deleting_references(tmp_path)
     assert row["cas_path"] is None
 
 
+def test_expiring_one_attachment_does_not_remove_a_shared_cas_reference(tmp_path):
+    core = create_gateway_core(storage_root=tmp_path)
+    account = core.open_gateway_account("acct_shared_cas_expiry")
+    first = _create(account, client_id="att_shared_expiry_first")
+    second = _create(account, client_id="att_shared_expiry_second")
+    for attachment in (first, second):
+        account.attachments.upload_content(attachment["attachmentId"], b"body")
+        account.attachments.commit(attachment["attachmentId"])
+
+    _expire_row(account, first["attachmentId"])
+    assert account.attachments.get(first["attachmentId"])["state"] == "expired"
+
+    second_record = account.attachments.get(second["attachmentId"])
+    assert second_record["state"] == "verified"
+    second_row = account.store.database.execute(
+        "SELECT cas_path FROM attachments WHERE attachment_id = ?",
+        (second["attachmentId"],),
+    ).fetchone()
+    assert Path(second_row["cas_path"]).is_file()
+
+
 class _RawRequest:
     def __init__(self, body, url):
         self.method = "PUT"
