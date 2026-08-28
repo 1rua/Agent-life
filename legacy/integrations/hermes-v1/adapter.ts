@@ -4,7 +4,7 @@ import {
   type AdapterOptions,
   type AdapterProfile,
   type FakeAdapter,
-} from "../shared/adapter.js";
+} from "../../../integrations/shared/adapter.js";
 
 export const HERMES_PLUGIN_MANIFEST = Object.freeze({
   backend: "hermes",

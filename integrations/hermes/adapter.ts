@@ -1,0 +1,5 @@
+/**
+ * Legacy/test-only compatibility shim.
+ * Production Hermes uses the native Python plugin in agent_life_gateway.
+ */
+export * from "../../legacy/integrations/hermes-v1/adapter.js";
