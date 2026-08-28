@@ -1,0 +1,235 @@
+"""Hermes HTTP exposure boundary for Gateway Protocol v2."""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Callable, Mapping
+
+from .admin import (
+    HERMES_HOST_API,
+    HostApiCompatibility,
+    is_host_api_compatible,
+    normalize_host_api,
+)
+from .core import GatewayCore, create_gateway_core
+
+
+EXPOSURE_MODES = ("host-route", "loopback-reverse-proxy", "direct-tls")
+DEFAULT_MAX_BODY_BYTES = 1024 * 1024
+_RESPONSE_HEADERS = {"content-type": "application/json; charset=utf-8"}
+
+
+def _get(value: Any, *names: str, default: Any = None) -> Any:
+    for name in names:
+        if isinstance(value, Mapping) and name in value:
+            return value[name]
+        if hasattr(value, name):
+            return getattr(value, name)
+    return default
+
+
+def _identity(request: Any) -> tuple[str, str]:
+    verified = _get(request, "verifiedRequest", "verified_request")
+    context = _get(verified, "context", default={})
+    return (
+        str(_get(context, "requestId", "request_id", default="agent-life-route")),
+        str(_get(context, "correlationId", "correlation_id", default="agent-life-route")),
+    )
+
+
+def _failure(request: Any, code: str, details: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    request_id, correlation_id = _identity(request)
+    return {
+        "requestId": request_id, "correlationId": correlation_id, "protocol": "2.0",
+        "error": {
+            "code": code, "message": code, "retryable": False,
+            "retryAfterSeconds": None, "details": dict(details or {}),
+        },
+    }
+
+
+def _status(body: Mapping[str, Any]) -> int:
+    code = _get(_get(body, "error", default={}), "code")
+    if code == "HOST_INCOMPATIBLE":
+        return 503
+    if code == "AUTHENTICATION_REQUIRED":
+        return 401
+    if code == "REQUEST_BODY_TOO_LARGE":
+        return 413
+    return 400 if "error" in body else 200
+
+
+@dataclass(frozen=True)
+class ExposureAdmin:
+    local_only: bool = True
+    remote_port: None = None
+
+    @property
+    def localOnly(self) -> bool:
+        return self.local_only
+
+    @property
+    def remotePort(self) -> None:
+        return self.remote_port
+
+
+class GatewayHttpRoute:
+    def __init__(self, path: str, match: str, services: "_RouteServices"):
+        self.path = path
+        self.match = match
+        self.auth = "plugin"
+        self._services = services
+
+    def handle(self, request: Any) -> dict[str, Any]:
+        if not is_host_api_compatible(self._services.host_version, self._services.host_api):
+            return {"statusCode": 503, "headers": dict(_RESPONSE_HEADERS), "body": _failure(request, "HOST_INCOMPATIBLE", {
+                "hostVersion": self._services.host_version,
+                "minVersion": self._services.host_api.min_version,
+                "maxVersion": self._services.host_api.max_version,
+                "verifiedCommit": self._services.host_api.verified_commit,
+            })}
+        verified = _get(request, "verifiedRequest", "verified_request")
+        if verified is None:
+            context = _get(request, "context")
+            method = _get(request, "method")
+            if context is None or method not in {"GET", "POST", "PUT", "DELETE"}:
+                return {"statusCode": 401, "headers": dict(_RESPONSE_HEADERS), "body": _failure(request, "AUTHENTICATION_REQUIRED")}
+            verified = {
+                "context": context, "method": method,
+                "target": _get(request, "target", default=self.path),
+                **({"body": _get(request, "body")} if _get(request, "body") is not None else {}),
+                **({"idempotencyKey": _get(request, "idempotencyKey", "idempotency_key")} if _get(request, "idempotencyKey", "idempotency_key") is not None else {}),
+                **({"lastEventId": _get(request, "lastEventId", "last_event_id")} if _get(request, "lastEventId", "last_event_id") is not None else {}),
+                **({"now": _get(request, "now")} if _get(request, "now") is not None else {}),
+            }
+        body = self._services.core.handle(verified)
+        return {"statusCode": _status(body), "headers": dict(_RESPONSE_HEADERS), "body": body}
+
+    def handler(self, request: Any, response: Any) -> bool:
+        result = self._handle_raw(request)
+        _set_response(response, result["statusCode"], result["headers"], result["body"])
+        return True
+
+    def _handle_raw(self, request: Any) -> dict[str, Any]:
+        empty: dict[str, Any] = {}
+        if not is_host_api_compatible(self._services.host_version, self._services.host_api):
+            return {"statusCode": 503, "headers": dict(_RESPONSE_HEADERS), "body": _failure(empty, "HOST_INCOMPATIBLE")}
+        verifier = self._services.verify_request
+        if verifier is None:
+            return {"statusCode": 401, "headers": dict(_RESPONSE_HEADERS), "body": _failure(empty, "AUTHENTICATION_REQUIRED")}
+        method = _get(request, "method")
+        target = _get(request, "url", "target")
+        if method not in {"GET", "POST", "PUT", "DELETE"} or not isinstance(target, str) or not target.startswith("/"):
+            return {"statusCode": 401, "headers": dict(_RESPONSE_HEADERS), "body": _failure(empty, "AUTHENTICATION_REQUIRED")}
+        body = _raw_body(request)
+        if body is None:
+            return {"statusCode": 400, "headers": dict(_RESPONSE_HEADERS), "body": _failure(empty, "REQUEST_BODY_INVALID")}
+        if len(body) > self._services.max_body_bytes:
+            return {"statusCode": 413, "headers": dict(_RESPONSE_HEADERS), "body": _failure(empty, "REQUEST_BODY_TOO_LARGE")}
+        try:
+            verified = verifier({
+                "request": request, "req": request, "method": method, "target": target,
+                "headers": dict(_get(request, "headers", default={}) or {}),
+                "rawHeaders": tuple(_get(request, "rawHeaders", "raw_headers", default=()) or ()),
+                "body": body,
+            })
+        except Exception:
+            verified = None
+        if verified is None:
+            return {"statusCode": 401, "headers": dict(_RESPONSE_HEADERS), "body": _failure(empty, "AUTHENTICATION_REQUIRED")}
+        response_body = self._services.core.handle(verified)
+        return {"statusCode": _status(response_body), "headers": dict(_RESPONSE_HEADERS), "body": response_body}
+
+
+@dataclass(frozen=True)
+class _RouteServices:
+    core: Any
+    host_version: str | None
+    host_api: HostApiCompatibility
+    verify_request: Callable[[Mapping[str, Any]], Any] | None
+    max_body_bytes: int
+
+
+def _raw_body(request: Any) -> bytes | None:
+    body = _get(request, "body")
+    if body is None:
+        return b""
+    if isinstance(body, str):
+        return body.encode("utf-8")
+    if isinstance(body, (bytes, bytearray, memoryview)):
+        return bytes(body)
+    return None
+
+
+def _set_response(response: Any, status: int, headers: Mapping[str, str], body: Mapping[str, Any]) -> None:
+    if hasattr(type(response), "status_code") or hasattr(response, "status_code"):
+        try:
+            response.status_code = status
+        except Exception:
+            pass
+    try:
+        response.statusCode = status
+    except Exception:
+        pass
+    setter = _get(response, "set_header", "setHeader")
+    if callable(setter):
+        for name, value in headers.items():
+            setter(name, value)
+    end = _get(response, "end")
+    if callable(end):
+        end(json.dumps(body, ensure_ascii=False, separators=(",", ":")))
+
+
+def create_gateway_routes(
+    core: Any, host_version: str | None = None,
+    host_api: HostApiCompatibility | Mapping[str, Any] | None = None,
+    verify_request: Callable[[Mapping[str, Any]], Any] | None = None,
+    max_body_bytes: int | None = None,
+) -> list[GatewayHttpRoute]:
+    services = _RouteServices(
+        core=core, host_version=host_version, host_api=normalize_host_api(host_api),
+        verify_request=verify_request,
+        max_body_bytes=DEFAULT_MAX_BODY_BYTES if max_body_bytes is None or max_body_bytes < 0 else int(max_body_bytes),
+    )
+    definitions = (
+        ("/agent-life/v2/negotiate", "exact"), ("/agent-life/v2/events", "exact"),
+        ("/agent-life/v2/conversations", "exact"), ("/agent-life/v2/conversations/", "prefix"),
+        ("/agent-life/v2/attachments", "exact"), ("/agent-life/v2/attachments/", "prefix"),
+        ("/agent-life/v2/device-requests/", "prefix"),
+    )
+    return [GatewayHttpRoute(path, match, services) for path, match in definitions]
+
+
+class GatewayExposure:
+    def __init__(self, mode: str, routes: list[GatewayHttpRoute], listener: Mapping[str, Any]):
+        self.mode = mode
+        self.routes = routes
+        self.listener = dict(listener)
+        self.admin = ExposureAdmin()
+
+
+def create_gateway_exposure(
+    mode: str, core: Any | None = None, storage_root: str | Path | None = None,
+    host_version: str | None = None, host_api: HostApiCompatibility | Mapping[str, Any] | None = None,
+    verify_request: Callable[[Mapping[str, Any]], Any] | None = None,
+    max_body_bytes: int | None = None,
+) -> GatewayExposure:
+    if mode not in EXPOSURE_MODES:
+        raise ValueError("SCHEMA_INVALID")
+    active_core = core or create_gateway_core(storage_root)
+    routes = create_gateway_routes(active_core, host_version, host_api, verify_request, max_body_bytes)
+    listener = {
+        "mode": mode,
+        "protocol": "https",
+        "network": "host-route" if mode == "host-route" else "loopback",
+        "tlsTerminator": "host" if mode == "host-route" else ("reverse-proxy" if mode == "loopback-reverse-proxy" else "explicit-certificate"),
+    }
+    return GatewayExposure(mode, routes, listener)
+
+
+# Host-adapter naming aliases.
+createGatewayExposure = create_gateway_exposure
+createGatewayRoutes = create_gateway_routes
+isHostApiCompatible = is_host_api_compatible

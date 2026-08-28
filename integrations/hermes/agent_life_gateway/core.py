@@ -1,0 +1,1809 @@
+"""Independent Python Gateway Core for the Hermes host.
+
+The module intentionally owns its SQLite connection and account directory.  It
+does not import another host implementation or a legacy runtime.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import re
+import secrets
+import shutil
+import sqlite3
+import uuid
+from contextlib import contextmanager
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Any, Iterator, Mapping
+from urllib.parse import urlsplit
+
+from .account_paths import (
+    AccountPaths,
+    account_paths,
+    default_hermes_gateway_root,
+    ensure_account_directories,
+)
+from .audit import AuditStore
+
+
+class GatewayError(Exception):
+    """A protocol or state-machine error with a stable code."""
+
+    def __init__(self, code: str, details: Mapping[str, Any] | None = None):
+        super().__init__(code)
+        self.code = code
+        self.details = dict(details or {})
+
+
+@dataclass(frozen=True, init=False)
+class VerifiedRequestContext:
+    account_id: str
+    device_id: str
+    session_id: str
+    request_id: str
+    correlation_id: str
+    pairing_generation: int
+    grant_revision: int
+
+    def __init__(self, account_id: str | None = None, device_id: str | None = None,
+                 session_id: str | None = None, request_id: str | None = None,
+                 correlation_id: str | None = None, pairing_generation: int = 1,
+                 grant_revision: int = 1, **aliases: Any):
+        object.__setattr__(self, "account_id", account_id if account_id is not None else aliases.pop("accountId"))
+        object.__setattr__(self, "device_id", device_id if device_id is not None else aliases.pop("deviceId"))
+        object.__setattr__(self, "session_id", session_id if session_id is not None else aliases.pop("sessionId"))
+        object.__setattr__(self, "request_id", request_id if request_id is not None else aliases.pop("requestId"))
+        object.__setattr__(self, "correlation_id", correlation_id if correlation_id is not None else aliases.pop("correlationId"))
+        object.__setattr__(self, "pairing_generation", aliases.pop("pairingGeneration", pairing_generation))
+        object.__setattr__(self, "grant_revision", aliases.pop("grantRevision", grant_revision))
+
+    @property
+    def accountId(self) -> str:
+        return self.account_id
+
+    @property
+    def deviceId(self) -> str:
+        return self.device_id
+
+    @property
+    def sessionId(self) -> str:
+        return self.session_id
+
+    @property
+    def requestId(self) -> str:
+        return self.request_id
+
+    @property
+    def correlationId(self) -> str:
+        return self.correlation_id
+
+    @property
+    def pairingGeneration(self) -> int:
+        return self.pairing_generation
+
+    @property
+    def grantRevision(self) -> int:
+        return self.grant_revision
+
+
+@dataclass(frozen=True, init=False)
+class VerifiedGatewayRequest:
+    context: Any
+    method: str
+    target: str
+    body: Any
+    idempotency_key: str | None
+    last_event_id: str | None
+    now: datetime | str | None
+
+    def __init__(self, context: Any, method: str, target: str, body: Any = None,
+                 idempotency_key: str | None = None, last_event_id: str | None = None,
+                 now: datetime | str | None = None, **aliases: Any):
+        object.__setattr__(self, "context", context)
+        object.__setattr__(self, "method", method)
+        object.__setattr__(self, "target", target)
+        object.__setattr__(self, "body", body)
+        object.__setattr__(self, "idempotency_key", aliases.pop("idempotencyKey", idempotency_key))
+        object.__setattr__(self, "last_event_id", aliases.pop("lastEventId", last_event_id))
+        object.__setattr__(self, "now", now)
+
+    @property
+    def idempotencyKey(self) -> str | None:
+        return self.idempotency_key
+
+    @property
+    def lastEventId(self) -> str | None:
+        return self.last_event_id
+
+
+class GatewayResponse(dict[str, Any]):
+    @property
+    def requestId(self) -> str:
+        return str(self["requestId"])
+
+    @property
+    def request_id(self) -> str:
+        return self.requestId
+
+    @property
+    def correlationId(self) -> str:
+        return str(self["correlationId"])
+
+    @property
+    def correlation_id(self) -> str:
+        return self.correlationId
+
+    @property
+    def protocol(self) -> str:
+        return str(self["protocol"])
+
+    @property
+    def data(self) -> Mapping[str, Any] | None:
+        return self.get("data")
+
+    @property
+    def error(self) -> Mapping[str, Any] | None:
+        return self.get("error")
+
+
+def _jcs(value: Any) -> str:
+    """The contract fixtures use JSON values whose JCS form is this subset."""
+
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
+
+
+def _contract_root(explicit: str | Path | None = None) -> Path:
+    candidates: list[Path] = []
+    if explicit is not None:
+        given = Path(explicit).resolve()
+        candidates.extend([given, given / "gateway-contract"])
+    source = Path(__file__).resolve()
+    candidates.extend(parent / "gateway-contract" for parent in source.parents)
+    cwd = Path.cwd().resolve()
+    candidates.extend(parent / "gateway-contract" for parent in (cwd, *cwd.parents))
+    for candidate in candidates:
+        if (candidate / "schemas" / "envelope.schema.json").is_file() and (candidate / "vectors" / "vector-set-1.0.0.schema.json").is_file():
+            return candidate
+    raise GatewayError("INTERNAL_ERROR", {"reason": "gateway-contract assets unavailable"})
+
+
+def canonicalize_target(target: str) -> str:
+    """Canonicalize the protocol origin-form target without URL normalization."""
+
+    if not isinstance(target, str) or not target or target == "*" or "#" in target:
+        raise GatewayError("SCHEMA_INVALID")
+    if any(ord(char) <= 0x20 or ord(char) == 0x7F or ord(char) > 0x7F for char in target):
+        raise GatewayError("SCHEMA_INVALID")
+    if not target.startswith("/") or target.startswith("//"):
+        raise GatewayError("SCHEMA_INVALID")
+    path, separator, query = target.partition("?")
+    if not path.startswith("/agent-life/v2") or (len(path) > len("/agent-life/v2") and not path.startswith("/agent-life/v2/")):
+        raise GatewayError("SCHEMA_INVALID")
+
+    def encoded_bytes(value: str) -> bytes:
+        result = bytearray()
+        index = 0
+        while index < len(value):
+            char = value[index]
+            if char == "%":
+                if index + 2 >= len(value) or not re.fullmatch(r"[0-9A-Fa-f]{2}", value[index + 1:index + 3]):
+                    raise GatewayError("SCHEMA_INVALID")
+                result.append(int(value[index + 1:index + 3], 16))
+                index += 3
+                continue
+            result.extend(char.encode("ascii"))
+            index += 1
+        return bytes(result)
+
+    def encode_component(value: str) -> str:
+        raw = encoded_bytes(value)
+        return "".join(chr(byte) if (65 <= byte <= 90 or 97 <= byte <= 122 or 48 <= byte <= 57 or byte in b"._~-") else f"%{byte:02X}" for byte in raw)
+
+    segments = path.split("/")
+    if any(segment == "" for segment in segments[1:]):
+        raise GatewayError("SCHEMA_INVALID")
+    canonical_segments: list[str] = []
+    for segment in segments:
+        decoded = encoded_bytes(segment)
+        if decoded in (b".", b"..") or b"/" in decoded or b"\\" in decoded:
+            raise GatewayError("SCHEMA_INVALID")
+        canonical_segments.append(encode_component(segment))
+    canonical_path = "/".join(canonical_segments)
+    if separator == "" and query:
+        raise GatewayError("SCHEMA_INVALID")
+    if separator and not query:
+        raise GatewayError("SCHEMA_INVALID")
+    if not separator:
+        return canonical_path
+    pairs: list[tuple[str, str]] = []
+    for item in query.split("&"):
+        if not item:
+            raise GatewayError("SCHEMA_INVALID")
+        name, equals, value = item.partition("=")
+        if not name:
+            raise GatewayError("SCHEMA_INVALID")
+        encoded_name = encode_component(name)
+        encoded_value = encode_component(value if equals else "")
+        pairs.append((encoded_name, encoded_value))
+    pairs.sort(key=lambda pair: (pair[0].encode("ascii"), pair[1].encode("ascii")))
+    return canonical_path + "?" + "&".join(f"{name}={value}" for name, value in pairs)
+
+
+def request_signature_preimage(input: Mapping[str, Any]) -> bytes:
+    method = input.get("method")
+    if method not in {"GET", "POST", "PUT", "DELETE"}:
+        raise GatewayError("SCHEMA_INVALID")
+    target = input.get("target")
+    canonical = canonicalize_target(target)
+    if target != canonical:
+        raise GatewayError("NON_CANONICAL_TARGET")
+    body_hex = input.get("bodyHex")
+    if not isinstance(body_hex, str) or re.fullmatch(r"(?:[0-9a-f]{2})*", body_hex) is None:
+        raise GatewayError("SCHEMA_INVALID")
+    fields = [
+        "AGENT-LIFE-REQUEST-V2", method, canonical, input.get("accountId"), input.get("deviceId"),
+        input.get("sessionId"), input.get("requestId"), input.get("timestamp"), input.get("nonce"),
+        hashlib.sha256(bytes.fromhex(body_hex)).hexdigest(),
+    ]
+    if not all(isinstance(field, str) for field in fields):
+        raise GatewayError("SCHEMA_INVALID")
+    try:
+        return "\n".join(fields).encode("ascii")
+    except UnicodeEncodeError as exc:
+        raise GatewayError("SCHEMA_INVALID") from exc
+
+
+class ContractRegistry:
+    """Read-only consumer of the repository's shared Schema and fixture registry."""
+
+    schema_definitions = {
+        "negotiate.request": ("negotiate.schema.json", "request"),
+        "negotiate.response": ("negotiate.schema.json", "response"),
+        "session.password": ("session.schema.json", "password"),
+        "session.refresh": ("session.schema.json", "refresh"),
+        "session.device": ("session.schema.json", "device"),
+        "conversation.create": ("conversation.schema.json", "create"),
+        "message.create": ("conversation.schema.json", "messageCreate"),
+        "attachment.create": ("attachment.schema.json", "create"),
+        "event": ("event.schema.json", "event"),
+        "device.request": ("device-request.schema.json", "request"),
+        "response.success": ("envelope.schema.json", "success"),
+        "response.failure": ("envelope.schema.json", "failure"),
+    }
+
+    def __init__(self, contract_root: str | Path | None = None):
+        self.root = _contract_root(contract_root)
+        schema_dir = self.root / "schemas"
+        self.documents: dict[str, dict[str, Any]] = {}
+        for path in schema_dir.glob("*.schema.json"):
+            document = json.loads(path.read_text(encoding="utf-8"))
+            self.documents[document["$id"]] = document
+        self._catalog: dict[tuple[Any, ...], dict[str, Any]] = {}
+        self._bindings: dict[str, dict[tuple[Any, ...], str]] = {}
+        self._load_dispatched_registry()
+
+    @staticmethod
+    def _logical_key(key: Mapping[str, Any]) -> tuple[Any, ...]:
+        return tuple((name, key[name]) for name in sorted(key) if name != "schemaSha256")
+
+    def _load_dispatched_registry(self) -> None:
+        registry = json.loads((self.root / "vectors" / "dispatched-schema-fixtures.json").read_text(encoding="utf-8"))
+        for entry in registry["catalogEntries"]:
+            key = self._logical_key(entry["key"])
+            if key in self._catalog:
+                raise GatewayError("INTERNAL_ERROR", {"reason": "duplicate dispatched catalog key"})
+            expected = entry["key"]["schemaSha256"]
+            actual = "sha256:" + hashlib.sha256(_jcs(entry["schema"]).encode("utf-8")).hexdigest()
+            if expected != actual:
+                raise GatewayError("INTERNAL_ERROR", {"reason": "dispatched schema digest mismatch"})
+            self._catalog[key] = {"schemaSha256": expected, "schema": entry["schema"]}
+        for binding_set in registry["bindingSets"]:
+            binding_map: dict[tuple[Any, ...], str] = {}
+            for binding in binding_set["bindings"]:
+                key = self._logical_key({**binding["key"], "schemaSha256": binding["schemaSha256"]})
+                if key in binding_map or key not in self._catalog or binding_map.get(key) == binding["schemaSha256"]:
+                    if key in binding_map:
+                        raise GatewayError("INTERNAL_ERROR", {"reason": "duplicate dispatched binding key"})
+                if self._catalog[key]["schemaSha256"] != binding["schemaSha256"]:
+                    raise GatewayError("INTERNAL_ERROR", {"reason": "binding points to wrong schema"})
+                binding_map[key] = binding["schemaSha256"]
+            self._bindings[binding_set["id"]] = binding_map
+
+    def _resolve_ref(self, ref: str, current_document: Mapping[str, Any]) -> tuple[Mapping[str, Any], Mapping[str, Any]]:
+        if ref.startswith("#/$defs/"):
+            document = current_document
+            name = ref[len("#/$defs/"):]
+        else:
+            marker = "#/$defs/"
+            if marker not in ref:
+                raise GatewayError("SCHEMA_INVALID")
+            document_id, name = ref.split(marker, 1)
+            document = self.documents.get(document_id)
+            if document is None:
+                raise GatewayError("SCHEMA_INVALID")
+        definition = document.get("$defs", {}).get(name)
+        if not isinstance(definition, Mapping):
+            raise GatewayError("SCHEMA_INVALID")
+        return document, definition
+
+    def _valid(self, schema: Any, value: Any, current_document: Mapping[str, Any]) -> bool:
+        if schema is True:
+            return True
+        if schema is False or not isinstance(schema, Mapping):
+            return False
+        if "$ref" in schema:
+            document, resolved = self._resolve_ref(str(schema["$ref"]), current_document)
+            return self._valid(resolved, value, document)
+        if "const" in schema and value != schema["const"]:
+            return False
+        if "enum" in schema and value not in schema["enum"]:
+            return False
+        if "allOf" in schema and not all(self._valid(child, value, current_document) for child in schema["allOf"]):
+            return False
+        if "anyOf" in schema and not any(self._valid(child, value, current_document) for child in schema["anyOf"]):
+            return False
+        if "oneOf" in schema and sum(self._valid(child, value, current_document) for child in schema["oneOf"]) != 1:
+            return False
+        schema_type = schema.get("type")
+        if schema_type == "object":
+            if not isinstance(value, Mapping):
+                return False
+        elif schema_type == "array":
+            if not isinstance(value, list):
+                return False
+        elif schema_type == "string":
+            if not isinstance(value, str):
+                return False
+        elif schema_type == "integer":
+            if not isinstance(value, int) or isinstance(value, bool):
+                return False
+        elif schema_type == "number":
+            if not isinstance(value, (int, float)) or isinstance(value, bool):
+                return False
+        elif schema_type == "boolean" and not isinstance(value, bool):
+            return False
+        elif schema_type == "null" and value is not None:
+            return False
+        if isinstance(value, str):
+            if len(value) < int(schema.get("minLength", 0)) or ("maxLength" in schema and len(value) > int(schema["maxLength"])):
+                return False
+            pattern = schema.get("pattern")
+            if pattern is not None and re.fullmatch(str(pattern), value) is None:
+                return False
+            if schema.get("format") == "date-time":
+                try:
+                    datetime.fromisoformat(value.replace("Z", "+00:00"))
+                except ValueError:
+                    return False
+        if isinstance(value, (int, float)) and "minimum" in schema and value < schema["minimum"]:
+            return False
+        if isinstance(value, list):
+            if len(value) < int(schema.get("minItems", 0)):
+                return False
+            if schema.get("uniqueItems") and len({_jcs(item) for item in value}) != len(value):
+                return False
+            if "items" in schema and not all(self._valid(schema["items"], item, current_document) for item in value):
+                return False
+        if isinstance(value, Mapping):
+            required = schema.get("required", [])
+            if any(key not in value for key in required):
+                return False
+            properties = schema.get("properties", {})
+            if schema.get("additionalProperties") is False and any(key not in properties for key in value):
+                return False
+            for key, child in properties.items():
+                if key in value and not self._valid(child, value[key], current_document):
+                    return False
+            additional = schema.get("additionalProperties")
+            if isinstance(additional, Mapping):
+                if any(key not in properties and not self._valid(additional, child, current_document) for key, child in value.items()):
+                    return False
+        return True
+
+    def validate(self, name: str, value: Any) -> bool:
+        target = self.schema_definitions.get(name)
+        if target is None:
+            raise GatewayError("SCHEMA_INVALID")
+        document = self.documents.get(next((doc_id for doc_id, doc in self.documents.items() if doc_id.endswith(target[0])), ""))
+        if document is None:
+            raise GatewayError("INTERNAL_ERROR", {"reason": f"missing schema document: {target[0]}"})
+        return self._valid(document["$defs"][target[1]], value, document)
+
+    def validate_dispatched(self, binding_set_id: str, dispatch: Mapping[str, Any], value: Any) -> bool:
+        if not isinstance(dispatch, Mapping) or binding_set_id not in self._bindings:
+            return False
+        kind = dispatch.get("kind")
+        if kind == "event":
+            if not self.validate("event", value):
+                return False
+            logical = (('eventType', dispatch.get("eventType")), ('kind', "event"))
+            payload = value.get("payload") if isinstance(value, Mapping) else None
+        elif kind == "device.request":
+            if not self.validate("device.request", value):
+                return False
+            provider = value.get("provider", {})
+            capability = value.get("capability", {})
+            logical = (('authorKeyId', provider.get("authorKeyId")), ('capabilityId', capability.get("id")), ('capabilityVersion', capability.get("version")), ('kind', "device.request"), ('pluginId', provider.get("pluginId")))
+            payload = value.get("parameters")
+        elif kind == "response.success":
+            if not self.validate("response.success", value):
+                return False
+            logical = (('kind', "response.success"), ('operation', dispatch.get("operation")), ('status', dispatch.get("status")))
+            payload = value.get("data") if isinstance(value, Mapping) else None
+        elif kind == "response.failure":
+            if not self.validate("response.failure", value):
+                return False
+            error = value.get("error", {})
+            logical = (('errorCode', error.get("code")), ('kind', "response.failure"))
+            payload = error.get("details") if isinstance(error, Mapping) else None
+        else:
+            return False
+        schema = self._bindings[binding_set_id].get(logical)
+        if schema is None:
+            return False
+        entry = next((item for key, item in self._catalog.items() if key == logical and item["schemaSha256"] == schema), None)
+        return entry is not None and self._valid(entry["schema"], payload, self.documents[next(iter(self.documents))])
+
+
+def _now(value: datetime | str | None = None) -> datetime:
+    if value is None:
+        return datetime.now(timezone.utc)
+    if isinstance(value, str):
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    else:
+        parsed = value
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def iso_millis(value: datetime | str | None = None) -> str:
+    return _now(value).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def _json(value: Any) -> str:
+    def encode(child: Any) -> Any:
+        if isinstance(child, (bytes, bytearray, memoryview)):
+            return {"bytesSha256": hashlib.sha256(bytes(child)).hexdigest()}
+        if isinstance(child, Mapping):
+            return {str(key): encode(item) for key, item in child.items()}
+        if isinstance(child, (list, tuple)):
+            return [encode(item) for item in child]
+        return child
+
+    encoded = encode(value)
+    return json.dumps(encoded, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
+
+
+def _hash_input(method: str, target: str, body: Any) -> str:
+    return hashlib.sha256(_json({"method": method, "target": target, "body": body}).encode("utf-8")).hexdigest()
+
+
+def _value(value: Any, *names: str, default: Any = None) -> Any:
+    for name in names:
+        if isinstance(value, Mapping) and name in value:
+            return value[name]
+        if hasattr(value, name):
+            return getattr(value, name)
+    return default
+
+
+def _context_value(context: Any, camel: str, snake: str, default: Any = None) -> Any:
+    return _value(context, camel, snake, default=default)
+
+
+def _request_context(request: Any) -> dict[str, Any]:
+    context = _value(request, "context")
+    if context is None:
+        raise GatewayError("AUTHENTICATION_REQUIRED")
+    result = {
+        "accountId": _context_value(context, "accountId", "account_id"),
+        "deviceId": _context_value(context, "deviceId", "device_id"),
+        "sessionId": _context_value(context, "sessionId", "session_id"),
+        "requestId": _context_value(context, "requestId", "request_id"),
+        "correlationId": _context_value(context, "correlationId", "correlation_id"),
+        "pairingGeneration": _context_value(context, "pairingGeneration", "pairing_generation", 1),
+        "grantRevision": _context_value(context, "grantRevision", "grant_revision", 1),
+    }
+    if any(result[name] is None for name in ("accountId", "deviceId", "sessionId", "requestId", "correlationId")):
+        raise GatewayError("AUTHENTICATION_REQUIRED")
+    return result
+
+
+def _request_body(request: Any) -> Any:
+    return _value(request, "body", default=None)
+
+
+def _request_now(request: Any) -> datetime:
+    return _now(_value(request, "now", default=None))
+
+
+def _success(context: Mapping[str, Any], data: Mapping[str, Any]) -> GatewayResponse:
+    return GatewayResponse({
+        "requestId": context["requestId"],
+        "correlationId": context["correlationId"],
+        "protocol": "2.0",
+        "data": dict(data),
+    })
+
+
+def _failure(context: Mapping[str, Any], code: str, details: Mapping[str, Any] | None = None) -> GatewayResponse:
+    return GatewayResponse({
+        "requestId": context["requestId"],
+        "correlationId": context["correlationId"],
+        "protocol": "2.0",
+        "error": {
+            "code": code,
+            "message": code,
+            "retryable": False,
+            "retryAfterSeconds": None,
+            "details": dict(details or {}),
+        },
+    })
+
+
+class AccountStore:
+    """One SQLite connection for one already-resolved account directory."""
+
+    def __init__(self, paths: AccountPaths, master_key_ref: str | None = None):
+        ensure_account_directories(paths)
+        self.database = sqlite3.connect(str(paths.database), isolation_level=None, check_same_thread=False)
+        self.database.row_factory = sqlite3.Row
+        self.database.execute("PRAGMA journal_mode = WAL")
+        self.database.execute("PRAGMA foreign_keys = ON")
+        self._transaction_depth = 0
+        self.database.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS account_metadata (
+              key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS refresh_credentials (
+              credential_hash TEXT PRIMARY KEY NOT NULL,
+              installation_id TEXT NOT NULL, device_id TEXT NOT NULL,
+              session_id TEXT NOT NULL, status TEXT NOT NULL,
+              created_at TEXT NOT NULL, replaced_by_hash TEXT
+            );
+            CREATE TABLE IF NOT EXISTS access_sessions (
+              session_id TEXT PRIMARY KEY NOT NULL,
+              installation_id TEXT NOT NULL, device_id TEXT NOT NULL,
+              access_token_hash TEXT, status TEXT NOT NULL,
+              created_at TEXT NOT NULL, expires_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS idempotency_ledger (
+              device_id TEXT NOT NULL, request_id TEXT NOT NULL,
+              input_hash TEXT NOT NULL, outcome_json TEXT NOT NULL,
+              expires_at TEXT NOT NULL,
+              PRIMARY KEY (device_id, request_id)
+            );
+            CREATE TABLE IF NOT EXISTS events (
+              event_id TEXT PRIMARY KEY NOT NULL, event_type TEXT NOT NULL,
+              correlation_id TEXT NOT NULL, occurred_at TEXT NOT NULL,
+              payload_json TEXT NOT NULL, expires_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS attachments (
+              attachment_id TEXT PRIMARY KEY NOT NULL,
+              client_attachment_id TEXT NOT NULL, filename TEXT NOT NULL,
+              media_type TEXT NOT NULL, size_bytes INTEGER NOT NULL,
+              sha256 TEXT NOT NULL, state TEXT NOT NULL,
+              content_path TEXT, cas_path TEXT, created_at TEXT NOT NULL,
+              expires_at TEXT NOT NULL, delivered_at TEXT,
+              acknowledged_at TEXT
+            );
+            CREATE TABLE IF NOT EXISTS conversations (
+              conversation_id TEXT PRIMARY KEY NOT NULL,
+              client_conversation_id TEXT NOT NULL, title TEXT,
+              created_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS messages (
+              message_id TEXT PRIMARY KEY NOT NULL,
+              conversation_id TEXT NOT NULL, client_message_id TEXT NOT NULL,
+              created_at TEXT NOT NULL, attachment_ids_json TEXT NOT NULL,
+              FOREIGN KEY (conversation_id) REFERENCES conversations(conversation_id)
+            );
+            CREATE TABLE IF NOT EXISTS device_requests (
+              request_id TEXT PRIMARY KEY NOT NULL, device_id TEXT NOT NULL,
+              pairing_generation INTEGER NOT NULL, grant_revision INTEGER NOT NULL,
+              risk TEXT NOT NULL, state TEXT NOT NULL,
+              capability_json TEXT NOT NULL, provider_json TEXT NOT NULL,
+              parameters_json TEXT NOT NULL, created_at TEXT NOT NULL,
+              expires_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS claim_receipts (
+              claim_id TEXT PRIMARY KEY NOT NULL, request_id TEXT NOT NULL UNIQUE,
+              device_id TEXT NOT NULL, pairing_generation INTEGER NOT NULL,
+              grant_revision INTEGER NOT NULL, created_at TEXT NOT NULL,
+              FOREIGN KEY (request_id) REFERENCES device_requests(request_id)
+            );
+            CREATE TABLE IF NOT EXISTS audit_events (
+              audit_id INTEGER PRIMARY KEY AUTOINCREMENT,
+              event_type TEXT NOT NULL, actor_json TEXT NOT NULL,
+              subject_json TEXT NOT NULL, correlation_id TEXT NOT NULL,
+              occurred_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS identity_rotation_receipts (
+              receipt_id TEXT PRIMARY KEY NOT NULL,
+              previous_identity_ref TEXT NOT NULL, next_identity_ref TEXT NOT NULL,
+              proof_hash TEXT NOT NULL, master_key_ref TEXT NOT NULL,
+              rotated_at TEXT NOT NULL, correlation_id TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS plugin_registry (
+              plugin_id TEXT PRIMARY KEY NOT NULL, manifest_json TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS negotiations (
+              negotiation_id TEXT PRIMARY KEY NOT NULL, response_json TEXT NOT NULL,
+              created_at TEXT NOT NULL, expires_at TEXT NOT NULL
+            );
+            """
+        )
+        self._metadata("master_key_ref", master_key_ref or f"host-secret:{paths.root.name}")
+        self._metadata("gateway_identity_ref", "spki_initial")
+        self._metadata("pairing_generation", "1")
+        self._metadata("deployment_id", f"deploy_{hashlib.sha256(str(paths.root.parent.parent).encode('utf-8')).hexdigest()[:16]}")
+        self._metadata("tls_spki_sha256", "sha256:" + "0" * 64)
+
+    def _metadata(self, key: str, value: str) -> None:
+        self.database.execute(
+            "INSERT OR IGNORE INTO account_metadata(key, value) VALUES (?, ?)",
+            (key, value),
+        )
+
+    @contextmanager
+    def transaction(self) -> Iterator[sqlite3.Connection]:
+        nested = self._transaction_depth > 0
+        if not nested:
+            self.database.execute("BEGIN IMMEDIATE")
+        self._transaction_depth += 1
+        try:
+            yield self.database
+            self._transaction_depth -= 1
+            if not nested:
+                self.database.execute("COMMIT")
+        except BaseException:
+            self._transaction_depth -= 1
+            if not nested:
+                try:
+                    self.database.execute("ROLLBACK")
+                except sqlite3.Error:
+                    pass
+            raise
+
+    def close(self) -> None:
+        self.database.close()
+
+
+class EventStore:
+    def __init__(self, store: AccountStore, retention_seconds: int = 86_400):
+        self.store = store
+        self.retention_seconds = retention_seconds
+
+    def append(
+        self,
+        event_type: str,
+        correlation_id: str,
+        payload: Mapping[str, Any],
+        now: datetime | str | None = None,
+    ) -> dict[str, Any]:
+        current = _now(now)
+        event = {
+            "eventId": f"evt_{uuid.uuid4()}",
+            "eventType": event_type,
+            "correlationId": correlation_id,
+            "occurredAt": iso_millis(current),
+            "payload": dict(payload),
+            "expiresAt": iso_millis(current + timedelta(seconds=self.retention_seconds)),
+        }
+        self.store.database.execute(
+            "INSERT INTO events(event_id, event_type, correlation_id, occurred_at, payload_json, expires_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (event["eventId"], event_type, correlation_id, event["occurredAt"], _json(payload), event["expiresAt"]),
+        )
+        return event
+
+    def read_after(self, cursor: str | None, now: datetime | str | None = None) -> list[dict[str, Any]]:
+        current = _now(now)
+        current_iso = iso_millis(current)
+        if cursor is not None:
+            row = self.store.database.execute("SELECT expires_at FROM events WHERE event_id = ?", (cursor,)).fetchone()
+            if row is None or _now(row["expires_at"]) <= current:
+                raise GatewayError("CURSOR_EXPIRED")
+            rows = self.store.database.execute(
+                """
+                SELECT * FROM events
+                WHERE expires_at > ? AND (occurred_at, event_id) >
+                  (SELECT occurred_at, event_id FROM events WHERE event_id = ?)
+                ORDER BY occurred_at, event_id
+                """,
+                (current_iso, cursor),
+            ).fetchall()
+        else:
+            rows = self.store.database.execute(
+                "SELECT * FROM events WHERE expires_at > ? ORDER BY occurred_at, event_id", (current_iso,)
+            ).fetchall()
+        return [self._map(row) for row in rows]
+
+    @staticmethod
+    def _map(row: sqlite3.Row) -> dict[str, Any]:
+        return {
+            "eventId": row["event_id"],
+            "eventType": row["event_type"],
+            "correlationId": row["correlation_id"],
+            "occurredAt": row["occurred_at"],
+            "payload": json.loads(row["payload_json"]),
+            "expiresAt": row["expires_at"],
+        }
+
+    readAfter = read_after
+
+
+class AttachmentStore:
+    def __init__(self, account_id: str, paths: AccountPaths, store: AccountStore, audit: AuditStore):
+        self.account_id = account_id
+        self.paths = paths
+        self.store = store
+        self.audit = audit
+        self.cas_dir = paths.attachments / "cas"
+        self.cas_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        try:
+            self.cas_dir.chmod(0o700)
+        except OSError:
+            pass
+        self._reconcile_staged_files()
+
+    def create(self, **input: Any) -> dict[str, Any]:
+        current = _now(input.get("now"))
+        attachment_id = f"att_{uuid.uuid4()}"
+        expires_at = input.get("expires_at") or input.get("expiresAt") or iso_millis(current + timedelta(hours=1))
+        self.store.database.execute(
+            """
+            INSERT INTO attachments(attachment_id, client_attachment_id, filename, media_type, size_bytes,
+              sha256, state, content_path, cas_path, created_at, expires_at, delivered_at, acknowledged_at)
+            VALUES (?, ?, ?, ?, ?, ?, 'created', NULL, NULL, ?, ?, NULL, NULL)
+            """,
+            (
+                attachment_id,
+                input["client_attachment_id"] if "client_attachment_id" in input else input["clientAttachmentId"],
+                input["filename"], input["media_type"] if "media_type" in input else input["mediaType"],
+                int(input["size_bytes"] if "size_bytes" in input else input["sizeBytes"]),
+                input["sha256"], iso_millis(current), expires_at,
+            ),
+        )
+        self.audit.append(
+            "attachment.created", {"accountId": self.account_id},
+            {"attachmentId": attachment_id, "mediaType": input.get("mediaType", input.get("media_type")), "sizeBytes": input.get("sizeBytes", input.get("size_bytes"))},
+            input["correlation_id"] if "correlation_id" in input else input["correlationId"], current,
+        )
+        return self.get(attachment_id)
+
+    def get(self, attachment_id: str) -> dict[str, Any]:
+        row = self.store.database.execute("SELECT * FROM attachments WHERE attachment_id = ?", (attachment_id,)).fetchone()
+        if row is None:
+            raise GatewayError("ATTACHMENT_EXPIRED")
+        path = row["content_path"]
+        return {
+            "attachmentId": row["attachment_id"], "state": row["state"],
+            "filename": row["filename"], "mediaType": row["media_type"],
+            "sizeBytes": int(row["size_bytes"]), "sha256": row["sha256"],
+            "hasStagedBytes": bool(path and Path(path).is_file()), "expiresAt": row["expires_at"],
+        }
+
+    def require_verified_for_message(self, attachment_id: str) -> None:
+        if self.get(attachment_id)["state"] != "verified":
+            raise GatewayError("ATTACHMENT_EXPIRED")
+
+    def upload_content(self, attachment_id: str, content: bytes) -> dict[str, Any]:
+        stage_path = self.paths.attachments / f"{attachment_id}.stage"
+        try:
+            with self.store.transaction():
+                row = self._row(attachment_id)
+                if int(row["size_bytes"]) != len(content):
+                    raise GatewayError("ATTACHMENT_DIGEST_MISMATCH")
+                next_state = next_attachment_state(row["state"], "begin_upload")
+                stage_path.write_bytes(bytes(content))
+                try:
+                    stage_path.chmod(0o600)
+                except OSError:
+                    pass
+                self.store.database.execute(
+                    "UPDATE attachments SET state = ?, content_path = ? WHERE attachment_id = ?",
+                    (next_state, str(stage_path), attachment_id),
+                )
+        except BaseException:
+            # A filesystem write may have preceded a rolled-back database row;
+            # retain and reconcile that unique stage rather than discarding it.
+            self._reconcile_staged_files()
+            raise
+        return self.get(attachment_id)
+
+    def commit(self, attachment_id: str) -> dict[str, Any]:
+        mismatch = False
+        with self.store.transaction():
+            row = self._row(attachment_id)
+            stage_path = self._require_content_path(row)
+            content = stage_path.read_bytes()
+            digest = hashlib.sha256(content).hexdigest()
+            if digest != row["sha256"] or len(content) != int(row["size_bytes"]):
+                self.store.database.execute(
+                    "UPDATE attachments SET state = ?, content_path = ? WHERE attachment_id = ?",
+                    (next_attachment_state(row["state"], "fail"), str(stage_path), attachment_id),
+                )
+                mismatch = True
+            else:
+                cas_path = self.cas_dir / row["sha256"]
+                if not cas_path.exists():
+                    shutil.copyfile(stage_path, cas_path)
+                    try:
+                        cas_path.chmod(0o600)
+                    except OSError:
+                        pass
+                self.store.database.execute(
+                    "UPDATE attachments SET state = ?, cas_path = ? WHERE attachment_id = ?",
+                    (next_attachment_state(row["state"], "verify"), str(cas_path), attachment_id),
+                )
+        if mismatch:
+            raise GatewayError("ATTACHMENT_DIGEST_MISMATCH")
+        return self.get(attachment_id)
+
+    def mark_delivered(self, attachment_id: str, now: datetime | str | None = None) -> dict[str, Any]:
+        current = _now(now)
+        with self.store.transaction():
+            row = self._row(attachment_id)
+            state = next_attachment_state(row["state"], "deliver")
+            self.store.database.execute(
+                "UPDATE attachments SET state = ?, delivered_at = ? WHERE attachment_id = ?",
+                (state, iso_millis(current), attachment_id),
+            )
+        return self.get(attachment_id)
+
+    def acknowledge(self, attachment_id: str, correlation_id: str, now: datetime | str | None = None) -> dict[str, Any]:
+        current = _now(now)
+        paths: list[Path] = []
+        with self.store.transaction():
+            row = self._row(attachment_id)
+            for key in ("content_path", "cas_path"):
+                if row[key]:
+                    paths.append(Path(row[key]))
+            state = next_attachment_state(row["state"], "acknowledge")
+            self.store.database.execute(
+                "UPDATE attachments SET state = ?, content_path = NULL, cas_path = NULL, acknowledged_at = ? WHERE attachment_id = ?",
+                (state, iso_millis(current), attachment_id),
+            )
+            self.audit.append(
+                "attachment.acknowledged", {"accountId": self.account_id},
+                {"attachmentId": attachment_id}, correlation_id, current,
+            )
+        cas_path = next((path for path in paths if path.parent == self.cas_dir), None)
+        if cas_path is not None:
+            remaining = self.store.database.execute(
+                "SELECT 1 FROM attachments WHERE cas_path = ? LIMIT 1", (str(cas_path),)
+            ).fetchone()
+            if remaining is not None:
+                paths = [path for path in paths if path != cas_path]
+        for path in paths:
+            self._move_to_trash(path)
+        return self.get(attachment_id)
+
+    def expire_due(self, now: datetime | str | None = None) -> int:
+        current = _now(now)
+        self._reconcile_staged_files()
+        rows = self.store.database.execute(
+            "SELECT attachment_id FROM attachments WHERE expires_at <= ? AND state IN ('created', 'uploading', 'verified', 'delivered')",
+            (iso_millis(current),),
+        ).fetchall()
+        expired = 0
+        for row_ref in rows:
+            paths: list[Path] = []
+            with self.store.transaction():
+                row = self._row(row_ref["attachment_id"])
+                if _now(row["expires_at"]) > current or row["state"] not in {"created", "uploading", "verified", "delivered"}:
+                    continue
+                for key in ("content_path", "cas_path"):
+                    if row[key]:
+                        paths.append(Path(row[key]))
+                state = next_attachment_state(row["state"], "expire")
+                self.store.database.execute(
+                    "UPDATE attachments SET state = ?, content_path = NULL, cas_path = NULL WHERE attachment_id = ?",
+                    (state, row["attachment_id"]),
+                )
+                expired += 1
+            for path in paths:
+                self._move_to_trash(path)
+        return expired
+
+    def cleanup(self) -> int:
+        protected = self._reconcile_staged_files()
+        paths: list[Path] = []
+        with self.store.transaction():
+            rows = self.store.database.execute(
+                "SELECT attachment_id, content_path, cas_path, state FROM attachments WHERE state IN ('acknowledged', 'failed', 'expired')"
+            ).fetchall()
+            for row in rows:
+                for key in ("content_path", "cas_path"):
+                    if row[key]:
+                        paths.append(Path(row[key]))
+                if row["content_path"] or row["cas_path"]:
+                    self.store.database.execute(
+                        "UPDATE attachments SET state = ?, content_path = NULL, cas_path = NULL WHERE attachment_id = ?",
+                        (next_attachment_state(row["state"], "cleanup"), row["attachment_id"]),
+                    )
+            referenced = {
+                Path(item[0]) for item in self.store.database.execute(
+                    "SELECT content_path FROM attachments WHERE content_path IS NOT NULL"
+                ).fetchall()
+            }
+            referenced.update(
+                Path(item[0]) for item in self.store.database.execute(
+                    "SELECT cas_path FROM attachments WHERE cas_path IS NOT NULL"
+                ).fetchall()
+            )
+            for staged in self.paths.attachments.glob("*.stage"):
+                if staged not in referenced and staged not in protected:
+                    paths.append(staged)
+            for cas in self.cas_dir.glob("*"):
+                if cas.is_file() and cas not in referenced:
+                    paths.append(cas)
+        deleted = 0
+        for path in set(paths):
+            if self._move_to_trash(path):
+                deleted += 1
+        return deleted
+
+    def _row(self, attachment_id: str) -> sqlite3.Row:
+        row = self.store.database.execute("SELECT * FROM attachments WHERE attachment_id = ?", (attachment_id,)).fetchone()
+        if row is None:
+            raise GatewayError("ATTACHMENT_EXPIRED")
+        return row
+
+    def _require_content_path(self, row: sqlite3.Row) -> Path:
+        path = Path(row["content_path"]) if row["content_path"] else None
+        if path is None or not path.is_file():
+            raise GatewayError("ATTACHMENT_EXPIRED")
+        return path
+
+    @staticmethod
+    def _trash_root() -> Path:
+        root = Path("/tmp/Agent-life-trash")
+        root.mkdir(parents=True, exist_ok=True, mode=0o700)
+        return root
+
+    @classmethod
+    def _move_to_trash(cls, path: Path) -> bool:
+        if not path.exists():
+            return False
+        destination = cls._trash_root() / f"{uuid.uuid4()}-{path.name}"
+        try:
+            shutil.move(str(path), str(destination))
+            return True
+        except OSError:
+            return False
+
+    def _reconcile_staged_files(self) -> set[Path]:
+        protected: set[Path] = set()
+        for path in self.paths.attachments.glob("*.stage"):
+            attachment_id = path.name[:-len(".stage")]
+            row = self.store.database.execute("SELECT state, content_path FROM attachments WHERE attachment_id = ?", (attachment_id,)).fetchone()
+            if row is None or row["state"] not in {"created", "uploading", "verified", "delivered", "failed"}:
+                continue
+            if row["content_path"] != str(path) or row["state"] == "created":
+                try:
+                    self.store.database.execute(
+                        "UPDATE attachments SET state = ?, content_path = ? WHERE attachment_id = ?",
+                        ("uploading" if row["state"] == "created" else row["state"], str(path), attachment_id),
+                    )
+                except sqlite3.Error:
+                    protected.add(path)
+        return protected
+
+    uploadContent = upload_content
+    markDelivered = mark_delivered
+    expireDue = expire_due
+    requireVerifiedForMessage = require_verified_for_message
+
+
+class DeviceRequestStore:
+    def __init__(self, account_id: str, store: AccountStore, audit: AuditStore, events: EventStore):
+        self.account_id = account_id
+        self.store = store
+        self.audit = audit
+        self.events = events
+
+    def enqueue(
+        self, request_id: str | None = None, device_id: str | None = None,
+        pairing_generation: int | None = None, grant_revision: int | None = None,
+        risk: str | None = None, capability: Mapping[str, Any] | None = None,
+        provider: Mapping[str, Any] | None = None, parameters: Mapping[str, Any] | None = None,
+        correlation_id: str | None = None, now: datetime | str | None = None, **aliases: Any,
+    ) -> dict[str, Any]:
+        request_id = request_id if request_id is not None else aliases.pop("requestId")
+        device_id = device_id if device_id is not None else aliases.pop("deviceId")
+        pairing_generation = pairing_generation if pairing_generation is not None else aliases.pop("pairingGeneration")
+        grant_revision = grant_revision if grant_revision is not None else aliases.pop("grantRevision")
+        risk = risk if risk is not None else aliases.pop("risk")
+        capability = capability if capability is not None else aliases.pop("capability")
+        provider = provider if provider is not None else aliases.pop("provider")
+        parameters = parameters if parameters is not None else aliases.pop("parameters")
+        correlation_id = correlation_id if correlation_id is not None else aliases.pop("correlationId")
+        current = _now(now)
+        ttl = maximum_device_request_queue_seconds(risk)
+        state = "expired" if ttl == 0 else "pending"
+        expires_at = iso_millis(current + timedelta(seconds=ttl))
+        self.store.database.execute(
+            """
+            INSERT INTO device_requests(request_id, device_id, pairing_generation, grant_revision, risk, state,
+              capability_json, provider_json, parameters_json, created_at, expires_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (request_id, device_id, pairing_generation, grant_revision, risk, state,
+             _json(capability), _json(provider), _json(parameters), iso_millis(current), expires_at),
+        )
+        if state == "pending":
+            self.events.append("device.requested", correlation_id, {
+                "requestId": request_id, "risk": risk, "grantRevision": grant_revision,
+            }, current)
+        return self.get(request_id)
+
+    def claim(
+        self, request_id: str, device_id: str, pairing_generation: int,
+        grant_revision: int, correlation_id: str, now: datetime | str | None = None,
+    ) -> dict[str, Any]:
+        current = _now(now)
+        expired = False
+        with self.store.transaction():
+            row = self._row(request_id)
+            self._assert_binding(row, device_id, pairing_generation, grant_revision)
+            if self._expire_if_due(row, current):
+                expired = True
+            else:
+                receipt = self.store.database.execute("SELECT * FROM claim_receipts WHERE request_id = ?", (request_id,)).fetchone()
+                if receipt is not None:
+                    return self._receipt(receipt)
+                if row["state"] != "pending":
+                    raise GatewayError("OUTCOME_UNKNOWN")
+                changed = self.store.database.execute(
+                    "UPDATE device_requests SET state = 'claimed' WHERE request_id = ? AND state = 'pending' AND device_id = ? AND pairing_generation = ? AND grant_revision = ?",
+                    (request_id, device_id, pairing_generation, grant_revision),
+                ).rowcount
+                if changed != 1:
+                    raise GatewayError("OUTCOME_UNKNOWN")
+                claim_id = f"claim_{uuid.uuid4()}"
+                self.store.database.execute(
+                    "INSERT INTO claim_receipts(claim_id, request_id, device_id, pairing_generation, grant_revision, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                    (claim_id, request_id, device_id, pairing_generation, grant_revision, iso_millis(current)),
+                )
+                self.audit.append(
+                    "device.request.claimed", {"accountId": self.account_id, "deviceId": device_id},
+                    {"requestId": request_id, "claimId": claim_id, "grantRevision": grant_revision},
+                    correlation_id, current,
+                )
+                return {
+                    "claimId": claim_id, "requestId": request_id, "accountId": self.account_id,
+                    "deviceId": device_id, "pairingGeneration": pairing_generation,
+                    "grantRevision": grant_revision,
+                }
+        if expired:
+            raise GatewayError("OUTCOME_UNKNOWN")
+        raise GatewayError("OUTCOME_UNKNOWN")
+
+    def submit_result(
+        self, request_id: str, device_id: str, pairing_generation: int,
+        grant_revision: int, claim_id: str, result: Mapping[str, Any],
+        correlation_id: str, now: datetime | str | None = None,
+    ) -> dict[str, Any]:
+        current = _now(now)
+        with self.store.transaction():
+            row = self._row(request_id)
+            self._assert_binding(row, device_id, pairing_generation, grant_revision)
+            if self._expire_if_due(row, current):
+                raise GatewayError("OUTCOME_UNKNOWN")
+            receipt = self.store.database.execute(
+                "SELECT * FROM claim_receipts WHERE request_id = ? AND claim_id = ?", (request_id, claim_id)
+            ).fetchone()
+            if receipt is None:
+                raise GatewayError("OUTCOME_UNKNOWN")
+            self._assert_binding(receipt, device_id, pairing_generation, grant_revision)
+            if row["state"] not in {"claimed", "cancel_requested"}:
+                raise GatewayError("OUTCOME_UNKNOWN")
+            outcome = result.get("outcome")
+            event = "result_outcome_unknown" if outcome == "outcome_unknown" else f"result_{outcome}"
+            next_state = next_device_request_state(row["state"], event)
+            self.store.database.execute("UPDATE device_requests SET state = ? WHERE request_id = ?", (next_state, request_id))
+            self.audit.append(
+                "device.request.result", {"accountId": self.account_id, "deviceId": device_id},
+                {"requestId": request_id, "claimId": claim_id, "outcome": outcome},
+                correlation_id, current,
+            )
+            return self.get(request_id)
+
+    def validate_claim_replay(
+        self, request_id: str, device_id: str, pairing_generation: int,
+        grant_revision: int, now: datetime | str | None = None,
+    ) -> str | None:
+        current = _now(now)
+        with self.store.transaction():
+            row = self._row(request_id)
+            self._assert_binding(row, device_id, pairing_generation, grant_revision)
+            if self._expire_if_due(row, current):
+                return "OUTCOME_UNKNOWN"
+            receipt = self.store.database.execute("SELECT * FROM claim_receipts WHERE request_id = ?", (request_id,)).fetchone()
+            if receipt is None:
+                raise GatewayError("OUTCOME_UNKNOWN")
+            self._assert_binding(receipt, device_id, pairing_generation, grant_revision)
+            return None
+
+    def validate_result_replay(
+        self, request_id: str, device_id: str, pairing_generation: int,
+        grant_revision: int, claim_id: str, now: datetime | str | None = None,
+    ) -> str | None:
+        current = _now(now)
+        with self.store.transaction():
+            row = self._row(request_id)
+            self._assert_binding(row, device_id, pairing_generation, grant_revision)
+            if self._expire_if_due(row, current):
+                return "OUTCOME_UNKNOWN"
+            receipt = self.store.database.execute(
+                "SELECT * FROM claim_receipts WHERE request_id = ? AND claim_id = ?", (request_id, claim_id)
+            ).fetchone()
+            if receipt is None:
+                raise GatewayError("OUTCOME_UNKNOWN")
+            self._assert_binding(receipt, device_id, pairing_generation, grant_revision)
+            return None
+
+    def recover_expired(self, now: datetime | str | None = None) -> int:
+        current = _now(now)
+        rows = self.store.database.execute(
+            "SELECT request_id, state FROM device_requests WHERE expires_at <= ? AND state IN ('pending', 'claimed', 'cancel_requested')",
+            (iso_millis(current),),
+        ).fetchall()
+        recovered = 0
+        for row in rows:
+            with self.store.transaction():
+                event = "expire" if row["state"] == "pending" else "recover_outcome_unknown"
+                self.store.database.execute(
+                    "UPDATE device_requests SET state = ? WHERE request_id = ?",
+                    (next_device_request_state(row["state"], event), row["request_id"]),
+                )
+                recovered += 1
+        return recovered
+
+    def cancel(self, request_id: str, device_id: str, pairing_generation: int, grant_revision: int, correlation_id: str, now: datetime | str | None = None) -> dict[str, Any]:
+        current = _now(now)
+        with self.store.transaction():
+            row = self._row(request_id)
+            self._assert_binding(row, device_id, pairing_generation, grant_revision)
+            if self._expire_if_due(row, current):
+                raise GatewayError("OUTCOME_UNKNOWN")
+            next_state = next_device_request_state(row["state"], "cancel")
+            self.store.database.execute("UPDATE device_requests SET state = ? WHERE request_id = ?", (next_state, request_id))
+            self.events.append("device.request.cancel.requested", correlation_id, {"requestId": request_id}, current)
+            return self.get(request_id)
+
+    def get(self, request_id: str) -> dict[str, Any]:
+        row = self._row(request_id)
+        return {
+            "requestId": row["request_id"], "deviceId": row["device_id"],
+            "pairingGeneration": int(row["pairing_generation"]), "grantRevision": int(row["grant_revision"]),
+            "risk": row["risk"], "state": row["state"], "expiresAt": row["expires_at"],
+        }
+
+    def _row(self, request_id: str) -> sqlite3.Row:
+        row = self.store.database.execute("SELECT * FROM device_requests WHERE request_id = ?", (request_id,)).fetchone()
+        if row is None:
+            raise GatewayError("OUTCOME_UNKNOWN")
+        return row
+
+    @staticmethod
+    def _assert_binding(row: sqlite3.Row, device_id: str, pairing_generation: int, grant_revision: int) -> None:
+        if row["device_id"] != device_id or int(row["pairing_generation"]) != pairing_generation:
+            raise GatewayError("PAIRING_GENERATION_STALE")
+        if int(row["grant_revision"]) != grant_revision:
+            raise GatewayError("GRANT_STALE")
+
+    def _expire_if_due(self, row: sqlite3.Row, current: datetime) -> bool:
+        if _now(row["expires_at"]) > current or row["state"] not in {"pending", "claimed", "cancel_requested"}:
+            return False
+        event = "expire" if row["state"] == "pending" else "recover_outcome_unknown"
+        self.store.database.execute(
+            "UPDATE device_requests SET state = ? WHERE request_id = ?",
+            (next_device_request_state(row["state"], event), row["request_id"]),
+        )
+        return True
+
+    def _receipt(self, row: sqlite3.Row) -> dict[str, Any]:
+        return {
+            "claimId": row["claim_id"], "requestId": row["request_id"], "accountId": self.account_id,
+            "deviceId": row["device_id"], "pairingGeneration": int(row["pairing_generation"]),
+            "grantRevision": int(row["grant_revision"]),
+        }
+
+    submitResult = submit_result
+    validateClaimReplay = validate_claim_replay
+    validateResultReplay = validate_result_replay
+    recoverExpired = recover_expired
+
+
+class ConversationPort:
+    def __init__(self, account_id: str, store: AccountStore, attachments: AttachmentStore, audit: AuditStore):
+        self.account_id = account_id
+        self.store = store
+        self.attachments = attachments
+        self.audit = audit
+
+    def create(self, client_conversation_id: str, title: str | None, correlation_id: str, now: datetime | str | None = None) -> dict[str, Any]:
+        current = _now(now)
+        conversation_id = f"conv_{uuid.uuid4()}"
+        self.store.database.execute(
+            "INSERT INTO conversations(conversation_id, client_conversation_id, title, created_at) VALUES (?, ?, ?, ?)",
+            (conversation_id, client_conversation_id, title, iso_millis(current)),
+        )
+        self.audit.append(
+            "conversation.created", {"accountId": self.account_id},
+            {"conversationId": conversation_id, "clientConversationId": client_conversation_id},
+            correlation_id, current,
+        )
+        return {"conversationId": conversation_id, "clientConversationId": client_conversation_id, "title": title}
+
+    def accept_message(
+        self, conversation_id: str, client_message_id: str, text: str,
+        attachment_ids: list[str], device_id: str, request_id: str,
+        correlation_id: str, now: datetime | str | None = None,
+    ) -> dict[str, Any]:
+        current = _now(now)
+        with self.store.transaction():
+            row = self.store.database.execute("SELECT conversation_id FROM conversations WHERE conversation_id = ?", (conversation_id,)).fetchone()
+            if row is None:
+                raise GatewayError("SCHEMA_INVALID")
+            for attachment_id in attachment_ids:
+                self.attachments.require_verified_for_message(attachment_id)
+            message_id = f"msg_{uuid.uuid4()}"
+            self.store.database.execute(
+                "INSERT INTO messages(message_id, conversation_id, client_message_id, created_at, attachment_ids_json) VALUES (?, ?, ?, ?, ?)",
+                (message_id, conversation_id, client_message_id, iso_millis(current), _json(attachment_ids)),
+            )
+            self.audit.append(
+                "conversation.message.accepted", {"accountId": self.account_id, "deviceId": device_id},
+                {"conversationId": conversation_id, "messageId": message_id, "attachmentCount": len(attachment_ids)},
+                correlation_id, current,
+            )
+            return {"status": "accepted", "messageId": message_id, "conversationId": conversation_id}
+
+    def list(self) -> list[dict[str, Any]]:
+        rows = self.store.database.execute("SELECT conversation_id, client_conversation_id, title FROM conversations ORDER BY conversation_id").fetchall()
+        return [{"conversationId": r[0], "clientConversationId": r[1], "title": r[2]} for r in rows]
+
+    def get(self, conversation_id: str) -> dict[str, Any]:
+        row = self.store.database.execute(
+            "SELECT conversation_id, client_conversation_id, title FROM conversations WHERE conversation_id = ?",
+            (conversation_id,),
+        ).fetchone()
+        if row is None:
+            raise GatewayError("SCHEMA_INVALID")
+        return {"conversationId": row[0], "clientConversationId": row[1], "title": row[2]}
+
+    acceptMessage = accept_message
+
+
+class GatewayAccount:
+    def __init__(self, account_id: str, paths: AccountPaths, store: AccountStore):
+        self.account_id = account_id
+        self.accountId = account_id
+        self.paths = paths
+        self.store = store
+        self.master_key_ref = str(store.database.execute("SELECT value FROM account_metadata WHERE key = 'master_key_ref'").fetchone()[0])
+        self.masterKeyRef = self.master_key_ref
+        self.audit = AuditStore(store, account_id)
+        self.events = EventStore(store)
+        self.attachments = AttachmentStore(account_id, paths, store, self.audit)
+        self.device_requests = DeviceRequestStore(account_id, store, self.audit, self.events)
+        self.conversations = ConversationPort(account_id, store, self.attachments, self.audit)
+        self.sessions = SessionService(account_id, store, self.audit)
+        self.deviceRequests = self.device_requests
+        self.masterKeyRef = self.master_key_ref
+        self._closed = False
+
+    def close(self) -> None:
+        if not self._closed:
+            self.store.close()
+            self._closed = True
+
+
+class SessionService:
+    def __init__(self, account_id: str, store: AccountStore, audit: AuditStore):
+        self.account_id = account_id
+        self.store = store
+        self.audit = audit
+
+    @staticmethod
+    def _digest(value: str) -> str:
+        return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _secret(prefix: str) -> str:
+        return f"{prefix}_{secrets.token_urlsafe(32)}"
+
+    def create_password_session(
+        self, username: str, password: str, installation: Mapping[str, Any],
+        correlation_id: str, now: datetime | str | None = None,
+    ) -> dict[str, Any]:
+        if not username or not password:
+            raise GatewayError("AUTHENTICATION_FAILED")
+        current = _now(now)
+        with self.store.transaction():
+            bundle = self._issue(str(installation["installationId"]), f"dev_{uuid.uuid4()}", current)
+            self.audit.append(
+                "session.password.created",
+                {"accountId": self.account_id, "deviceId": bundle["deviceId"], "installationId": installation["installationId"]},
+                {"method": "password", "displayName": installation.get("displayName")}, correlation_id, current,
+            )
+            return bundle
+
+    def refresh(
+        self, refresh_credential: str, installation_id: str, device_id: str,
+        correlation_id: str, now: datetime | str | None = None,
+    ) -> dict[str, Any]:
+        current = _now(now)
+        reused = False
+        bundle: dict[str, Any] | None = None
+        with self.store.transaction():
+            digest = self._digest(refresh_credential)
+            row = self.store.database.execute(
+                "SELECT * FROM refresh_credentials WHERE credential_hash = ?", (digest,)
+            ).fetchone()
+            if row is None or row["installation_id"] != installation_id or row["device_id"] != device_id:
+                raise GatewayError("AUTHENTICATION_FAILED")
+            if row["status"] != "active":
+                self.store.database.execute(
+                    "UPDATE refresh_credentials SET status = 'revoked' WHERE installation_id = ? AND device_id = ?",
+                    (installation_id, device_id),
+                )
+                self.audit.append(
+                    "session.refresh.reused",
+                    {"accountId": self.account_id, "deviceId": device_id, "installationId": installation_id},
+                    {"reused": True}, correlation_id, current,
+                )
+                reused = True
+            else:
+                bundle = self._issue(installation_id, device_id, current)
+                self.store.database.execute(
+                    "UPDATE refresh_credentials SET status = 'used', replaced_by_hash = ? WHERE credential_hash = ?",
+                    (self._digest(bundle["refreshCredential"]), digest),
+                )
+                self.audit.append(
+                    "session.refresh.rotated",
+                    {"accountId": self.account_id, "deviceId": device_id, "installationId": installation_id},
+                    {"rotated": True}, correlation_id, current,
+                )
+        if reused:
+            raise GatewayError("REFRESH_REUSED")
+        if bundle is None:
+            raise GatewayError("AUTHENTICATION_FAILED")
+        return bundle
+
+    def active_refresh_credential_count(self, device_id: str) -> int:
+        row = self.store.database.execute(
+            "SELECT COUNT(*) FROM refresh_credentials WHERE device_id = ? AND status = 'active'", (device_id,)
+        ).fetchone()
+        return int(row[0])
+
+    def verify_access_token(self, access_token: str, session_id: str, device_id: str, now: datetime | str | None = None) -> bool:
+        row = self.store.database.execute(
+            "SELECT access_token_hash, device_id, status, expires_at FROM access_sessions WHERE session_id = ?",
+            (session_id,),
+        ).fetchone()
+        return bool(
+            row is not None and row["access_token_hash"] == self._digest(access_token)
+            and row["device_id"] == device_id and row["status"] == "active"
+            and _now(row["expires_at"]) > _now(now)
+        )
+
+    def revoke_session(self, session_id: str, correlation_id: str, now: datetime | str | None = None) -> None:
+        current = _now(now)
+        with self.store.transaction():
+            self.store.database.execute("UPDATE access_sessions SET status = 'revoked' WHERE session_id = ?", (session_id,))
+            self.audit.append(
+                "session.revoked", {"accountId": self.account_id}, {"sessionId": session_id}, correlation_id, current,
+            )
+
+    def _issue(self, installation_id: str, device_id: str, current: datetime) -> dict[str, Any]:
+        session_id = f"sess_{uuid.uuid4()}"
+        access_token = self._secret("access")
+        refresh_credential = self._secret("refresh")
+        expires_at = iso_millis(current + timedelta(minutes=15))
+        self.store.database.execute(
+            "INSERT INTO access_sessions(session_id, installation_id, device_id, access_token_hash, status, created_at, expires_at) VALUES (?, ?, ?, ?, 'active', ?, ?)",
+            (session_id, installation_id, device_id, self._digest(access_token), iso_millis(current), expires_at),
+        )
+        self.store.database.execute(
+            "INSERT INTO refresh_credentials(credential_hash, installation_id, device_id, session_id, status, created_at, replaced_by_hash) VALUES (?, ?, ?, ?, 'active', ?, NULL)",
+            (self._digest(refresh_credential), installation_id, device_id, session_id, iso_millis(current)),
+        )
+        return {
+            "sessionId": session_id, "deviceId": device_id,
+            "accessToken": access_token, "refreshCredential": refresh_credential,
+            "expiresAt": expires_at,
+        }
+
+    createPasswordSession = create_password_session
+    activeRefreshCredentialCount = active_refresh_credential_count
+
+
+_ATTACHMENT_TRANSITIONS: dict[str, dict[str, str]] = {
+    "created": {"begin_upload": "uploading", "fail": "failed", "expire": "expired"},
+    "uploading": {"verify": "verified", "fail": "failed", "expire": "expired"},
+    "verified": {"deliver": "delivered", "fail": "failed", "expire": "expired"},
+    "delivered": {"acknowledge": "acknowledged", "expire": "expired"},
+    "acknowledged": {"cleanup": "deleted"},
+    "failed": {"cleanup": "deleted"},
+    "expired": {"cleanup": "deleted"},
+    "deleted": {},
+}
+
+_DEVICE_TRANSITIONS: dict[str, dict[str, str]] = {
+    "pending": {"claim": "claimed", "cancel": "cancelled", "expire": "expired"},
+    "claimed": {
+        "cancel": "cancel_requested", "expire": "outcome_unknown",
+        "result_succeeded": "succeeded", "result_failed": "failed",
+        "result_denied": "denied", "result_cancelled": "cancelled",
+        "result_outcome_unknown": "outcome_unknown", "recover_outcome_unknown": "outcome_unknown",
+    },
+    "cancel_requested": {
+        "expire": "outcome_unknown", "result_succeeded": "succeeded",
+        "result_failed": "failed", "result_denied": "denied",
+        "result_cancelled": "cancelled", "result_outcome_unknown": "outcome_unknown",
+        "recover_outcome_unknown": "outcome_unknown",
+    },
+    "succeeded": {}, "failed": {}, "denied": {}, "cancelled": {},
+    "expired": {}, "outcome_unknown": {},
+}
+
+
+def next_attachment_state(current: str, event: str) -> str:
+    try:
+        return _ATTACHMENT_TRANSITIONS[current][event]
+    except KeyError as exc:
+        raise GatewayError("INVALID_STATE_TRANSITION") from exc
+
+
+def next_device_request_state(current: str, event: str) -> str:
+    try:
+        return _DEVICE_TRANSITIONS[current][event]
+    except KeyError as exc:
+        raise GatewayError("INVALID_STATE_TRANSITION") from exc
+
+
+def maximum_device_request_queue_seconds(risk: str) -> int:
+    if risk in {"read", "sync"}:
+        return 86_400
+    if risk == "write":
+        return 900
+    if risk == "high-privilege-ephemeral":
+        return 0
+    raise GatewayError("SCHEMA_INVALID")
+
+
+_PERSISTABLE_ERRORS = {
+    "SCHEMA_INVALID", "IDENTITY_OVERRIDE_REJECTED", "PAIRING_GENERATION_STALE",
+    "GRANT_STALE", "IDEMPOTENCY_CONFLICT", "OUTCOME_UNKNOWN", "ATTACHMENT_DIGEST_MISMATCH",
+    "ATTACHMENT_EXPIRED", "CURSOR_CONFLICT", "CURSOR_EXPIRED", "INVALID_STATE_TRANSITION",
+}
+
+
+def _contains_identity_override(value: Any) -> bool:
+    if isinstance(value, Mapping):
+        if any(key in {"accountId", "account_id", "deviceId", "device_id", "principalId", "principal_id", "pairingGeneration", "pairing_generation"} for key in value):
+            return True
+        return any(_contains_identity_override(child) for child in value.values())
+    if isinstance(value, list):
+        return any(_contains_identity_override(child) for child in value)
+    return False
+
+
+class GatewayCore:
+    def __init__(self, storage_root: str | Path | None = None, secret_store: Any = None, contract_root: str | Path | None = None):
+        self.storage_root = Path(storage_root or default_hermes_gateway_root()).resolve()
+        self.secret_store = secret_store
+        self.contract_root = Path(contract_root).resolve() if contract_root is not None else None
+        self._contracts: ContractRegistry | None = None
+
+    @property
+    def contracts(self) -> ContractRegistry:
+        if self._contracts is None:
+            self._contracts = ContractRegistry(self.contract_root)
+        return self._contracts
+
+    def _master_key_ref(self, paths: AccountPaths, account_id: str) -> str:
+        if self.secret_store is not None:
+            for name in ("get_or_create", "get_or_create_secret", "reference_for"):
+                method = getattr(self.secret_store, name, None)
+                if callable(method):
+                    try:
+                        return str(method(f"agent-life-gateway/{account_id}"))
+                    except TypeError:
+                        return str(method(account_id))
+        return f"host-secret:{paths.root.name}"
+
+    def open_gateway_account(self, account_id: str) -> GatewayAccount:
+        # Resolve and validate the opaque account ID before constructing SQLite.
+        paths = account_paths(self.storage_root, account_id)
+        store = AccountStore(paths, self._master_key_ref(paths, account_id))
+        return GatewayAccount(account_id, paths, store)
+
+    def _negotiate(self, account: GatewayAccount, context: Mapping[str, Any], body: Any, now: datetime) -> Mapping[str, Any]:
+        if not isinstance(body, Mapping) or not self.contracts.validate("negotiate.request", body):
+            raise GatewayError("SCHEMA_INVALID")
+        protocol = body["protocol"]
+        if protocol["major"] != 2:
+            raise GatewayError("PROTOCOL_INCOMPATIBLE")
+        requested = body["features"]
+        supported_auth = {"password", "account-invitation", "refresh", "device-key"}
+        auth = [item for item in requested["auth"] if item in supported_auth]
+        required = {
+            "messages": "chat-v1", "attachments": "staged-sha256-v1",
+            "events": "sse-cursor-v1", "deviceRequests": "risk-queue-v1",
+        }
+        if any(required[key] not in requested[key] for key in required):
+            raise GatewayError("PROTOCOL_INCOMPATIBLE")
+        metadata = {
+            row["key"]: row["value"] for row in account.store.database.execute(
+                "SELECT key, value FROM account_metadata WHERE key IN ('deployment_id', 'tls_spki_sha256')"
+            ).fetchall()
+        }
+        response = {
+            "protocol": {"major": 2, "minor": 0},
+            "features": {"auth": auth, **required},
+            "limits": {
+                "maxSingleAttachmentBytes": 26_214_400,
+                "maxMessageAttachmentBytes": 52_428_800,
+                "allowedMediaTypes": ["image/jpeg", "image/png", "image/webp", "application/pdf", "text/plain", "audio/mp4"],
+                "attachmentTtlSeconds": 3600, "eventRetentionSeconds": 86_400, "maxClockSkewSeconds": 120,
+            },
+            "gatewayIdentity": {
+                "deploymentId": metadata.get("deployment_id", "deploy_hermes"),
+                "tlsSpkiSha256": metadata.get("tls_spki_sha256", "sha256:" + "0" * 64),
+            },
+        }
+        if not self.contracts.validate("negotiate.response", response):
+            raise GatewayError("INTERNAL_ERROR")
+        account.store.database.execute(
+            "INSERT OR REPLACE INTO negotiations(negotiation_id, response_json, created_at, expires_at) VALUES (?, ?, ?, ?)",
+            (body["negotiationId"], _json(response), iso_millis(now), iso_millis(now + timedelta(hours=24))),
+        )
+        return response
+
+    def _run_idempotent(self, account: GatewayAccount, request: Any, context: Mapping[str, Any], work: Any, replay_check: Any = None) -> dict[str, Any]:
+        method = _value(request, "method")
+        if method == "GET":
+            return work()
+        request_id = context["requestId"]
+        idempotency_key = _value(request, "idempotencyKey", "idempotency_key")
+        if idempotency_key != request_id:
+            return _failure(context, "IDEMPOTENCY_CONFLICT")
+        now = _request_now(request)
+        input_hash = _hash_input(method, _value(request, "target"), _request_body(request))
+        with account.store.transaction():
+            existing = account.store.database.execute(
+                "SELECT input_hash, outcome_json, expires_at FROM idempotency_ledger WHERE device_id = ? AND request_id = ?",
+                (context["deviceId"], request_id),
+            ).fetchone()
+            if existing is not None:
+                if existing["input_hash"] != input_hash:
+                    return _failure(context, "IDEMPOTENCY_CONFLICT")
+                if _now(existing["expires_at"]) <= now:
+                    return _failure(context, "OUTCOME_UNKNOWN")
+                if replay_check is not None:
+                    replay_error = replay_check()
+                    if replay_error is not None:
+                        return _failure(context, replay_error)
+                return GatewayResponse(json.loads(existing["outcome_json"]))
+            try:
+                response = work()
+            except GatewayError as exc:
+                if exc.code not in _PERSISTABLE_ERRORS:
+                    raise
+                response = _failure(context, exc.code, exc.details)
+            account.store.database.execute(
+                "INSERT INTO idempotency_ledger(device_id, request_id, input_hash, outcome_json, expires_at) VALUES (?, ?, ?, ?, ?)",
+                (context["deviceId"], request_id, input_hash, _json(response), iso_millis(now + timedelta(days=30))),
+            )
+            return response
+
+    def handle(self, request: Any) -> dict[str, Any]:
+        try:
+            context = _request_context(request)
+            account = self.open_gateway_account(context["accountId"])
+            try:
+                body = _request_body(request)
+                if _contains_identity_override(body):
+                    return _failure(context, "IDENTITY_OVERRIDE_REJECTED")
+                method = _value(request, "method")
+                target = _value(request, "target")
+                if method == "GET" and isinstance(target, str) and target.startswith("/agent-life/v2/events"):
+                    query = urlsplit(target).query
+                    cursor = None
+                    for part in query.split("&") if query else []:
+                        if part.startswith("cursor="):
+                            cursor = part[7:]
+                    last_event_id = _value(request, "lastEventId", "last_event_id")
+                    if last_event_id is not None and last_event_id != cursor:
+                        return _failure(context, "CURSOR_CONFLICT")
+                    try:
+                        return _success(context, {"events": account.events.read_after(cursor, _request_now(request))})
+                    except GatewayError as exc:
+                        if exc.code == "CURSOR_EXPIRED":
+                            return _failure(context, "CURSOR_EXPIRED", {"recoverableResources": ["conversations", "attachments", "device-requests"]})
+                        raise
+
+                def work() -> dict[str, Any]:
+                    if method == "POST" and target == "/agent-life/v2/negotiate":
+                        return _success(context, self._negotiate(account, context, body, _request_now(request)))
+                    if method == "POST" and target == "/agent-life/v2/conversations":
+                        body_map = body if isinstance(body, Mapping) else None
+                        if body_map is None or not self.contracts.validate("conversation.create", body_map):
+                            raise GatewayError("SCHEMA_INVALID")
+                        return _success(context, {"conversation": account.conversations.create(
+                            str(body_map["clientConversationId"]),
+                            body_map.get("title"), context["correlationId"], _request_now(request),
+                        )})
+                    if method == "GET" and target == "/agent-life/v2/conversations":
+                        return _success(context, {"conversations": account.conversations.list()})
+                    conversation_get = re.fullmatch(r"/agent-life/v2/conversations/([^/]+)", str(target))
+                    if method == "GET" and conversation_get:
+                        return _success(context, {"conversation": account.conversations.get(conversation_get.group(1))})
+                    message_match = re.fullmatch(r"/agent-life/v2/conversations/([^/]+)/messages", str(target))
+                    if method == "POST" and message_match:
+                        body_map = body if isinstance(body, Mapping) else None
+                        if body_map is None or not self.contracts.validate("message.create", body_map):
+                            raise GatewayError("SCHEMA_INVALID")
+                        attachments = body_map.get("attachments", [])
+                        attachment_ids = [str(item["attachmentId"]) for item in attachments] if isinstance(attachments, list) else []
+                        return _success(context, {"message": account.conversations.accept_message(
+                            message_match.group(1), str(body_map["clientMessageId"]), str(body_map["text"]),
+                            attachment_ids, context["deviceId"], context["requestId"], context["correlationId"], _request_now(request),
+                        )})
+                    if method == "POST" and target == "/agent-life/v2/attachments":
+                        body_map = body if isinstance(body, Mapping) else None
+                        if body_map is None or not self.contracts.validate("attachment.create", body_map):
+                            raise GatewayError("SCHEMA_INVALID")
+                        return _success(context, {"attachment": account.attachments.create(
+                            clientAttachmentId=str(body_map["clientAttachmentId"]),
+                            filename=str(body_map["filename"]), mediaType=str(body_map["mediaType"]),
+                            sizeBytes=int(body_map["sizeBytes"]), sha256=str(body_map["sha256"]),
+                            correlationId=context["correlationId"], now=_request_now(request),
+                        )})
+                    attachment_content = re.fullmatch(r"/agent-life/v2/attachments/([^/]+)/content", str(target))
+                    if method == "PUT" and attachment_content:
+                        if not isinstance(body, (bytes, bytearray, memoryview)):
+                            raise GatewayError("SCHEMA_INVALID")
+                        return _success(context, {"attachment": account.attachments.upload_content(
+                            attachment_content.group(1), bytes(body),
+                        )})
+                    attachment_commit = re.fullmatch(r"/agent-life/v2/attachments/([^/]+)/commit", str(target))
+                    if method == "POST" and attachment_commit:
+                        return _success(context, {"attachment": account.attachments.commit(attachment_commit.group(1))})
+                    attachment_get = re.fullmatch(r"/agent-life/v2/attachments/([^/]+)", str(target))
+                    if method == "GET" and attachment_get:
+                        return _success(context, {"attachment": account.attachments.get(attachment_get.group(1))})
+                    claim_match = re.fullmatch(r"/agent-life/v2/device-requests/([^/]+)/claim", str(target))
+                    if method == "POST" and claim_match:
+                        return _success(context, {"receipt": account.device_requests.claim(
+                            request_id=claim_match.group(1), device_id=context["deviceId"],
+                            pairing_generation=int(context["pairingGeneration"]), grant_revision=int(context["grantRevision"]),
+                            correlation_id=context["correlationId"], now=_request_now(request),
+                        )})
+                    result_match = re.fullmatch(r"/agent-life/v2/device-requests/([^/]+)/result", str(target))
+                    if method == "POST" and result_match:
+                        body_map = body if isinstance(body, Mapping) else None
+                        if body_map is None or int(body_map.get("grantRevision", -1)) != int(context["grantRevision"]):
+                            raise GatewayError("GRANT_STALE")
+                        result_value = body_map.get("result")
+                        if not isinstance(result_value, Mapping) or result_value.get("outcome") not in {"succeeded", "failed", "denied", "cancelled", "outcome_unknown"}:
+                            raise GatewayError("SCHEMA_INVALID")
+                        return _success(context, {"deviceRequest": account.device_requests.submit_result(
+                            request_id=result_match.group(1), device_id=context["deviceId"],
+                            pairing_generation=int(context["pairingGeneration"]), grant_revision=int(context["grantRevision"]),
+                            claim_id=str(body_map.get("claimId")), result=result_value,
+                            correlation_id=context["correlationId"], now=_request_now(request),
+                        )})
+                    device_get = re.fullmatch(r"/agent-life/v2/device-requests/([^/]+)", str(target))
+                    if method == "GET" and device_get:
+                        return _success(context, {"deviceRequest": account.device_requests.get(device_get.group(1))})
+                    return _failure(context, "SCHEMA_INVALID")
+
+                replay_check = None
+                claim_match = re.fullmatch(r"/agent-life/v2/device-requests/([^/]+)/claim", str(target))
+                if method == "POST" and claim_match:
+                    replay_check = lambda: account.device_requests.validate_claim_replay(
+                        claim_match.group(1), context["deviceId"], int(context["pairingGeneration"]),
+                        int(context["grantRevision"]), _request_now(request),
+                    )
+                result_match = re.fullmatch(r"/agent-life/v2/device-requests/([^/]+)/result", str(target))
+                if method == "POST" and result_match and isinstance(body, Mapping):
+                    replay_check = lambda: account.device_requests.validate_result_replay(
+                        result_match.group(1), context["deviceId"], int(context["pairingGeneration"]),
+                        int(context["grantRevision"]), str(body.get("claimId")), _request_now(request),
+                    )
+                return self._run_idempotent(account, request, context, work, replay_check)
+            finally:
+                account.close()
+        except GatewayError as exc:
+            try:
+                context = _request_context(request)
+            except GatewayError:
+                context = {"requestId": "agent-life-route", "correlationId": "agent-life-route"}
+            return _failure(context, exc.code, exc.details)
+        except Exception:
+            try:
+                context = _request_context(request)
+            except GatewayError:
+                context = {"requestId": "agent-life-route", "correlationId": "agent-life-route"}
+            return _failure(context, "INTERNAL_ERROR")
+
+    def run_shared_vectors(self, contract_root: str | Path | None = None) -> list[dict[str, Any]]:
+        registry = ContractRegistry(contract_root or self.contract_root)
+        vector_files = (
+            "request-signatures.json", "protocol-negotiation.json", "auth-sessions.json",
+            "attachments.json", "sse-events.json", "device-requests.json",
+        )
+        results: list[dict[str, Any]] = []
+        for file_name in vector_files:
+            document = json.loads((registry.root / "vectors" / file_name).read_text(encoding="utf-8"))
+            for case in document["cases"]:
+                operation = case["operation"]
+                input_value = case["input"]
+                try:
+                    if operation == "request.target":
+                        actual_value = {"canonicalTarget": canonicalize_target(input_value["target"])}
+                    elif operation == "request.signature":
+                        actual_value = {"preimageHex": request_signature_preimage(input_value).hex()}
+                    elif operation == "schema.validate":
+                        if not registry.validate(input_value["schemaName"], input_value["value"]):
+                            raise GatewayError("SCHEMA_INVALID")
+                        actual_value = {"valid": True}
+                    elif operation == "schema.validate_dispatched":
+                        if not registry.validate_dispatched(input_value["fixtureBindingSetId"], input_value["dispatch"], input_value["value"]):
+                            raise GatewayError("SCHEMA_INVALID")
+                        actual_value = {"valid": True}
+                    elif operation == "attachment.transition":
+                        actual_value = {"nextState": next_attachment_state(input_value["current"], input_value["event"])}
+                    elif operation == "device.transition":
+                        actual_value = {"nextState": next_device_request_state(input_value["current"], input_value["event"])}
+                    elif operation == "device.maximum_queue_seconds":
+                        actual_value = {"seconds": maximum_device_request_queue_seconds(input_value["risk"])}
+                    else:
+                        raise GatewayError("SCHEMA_INVALID")
+                    actual = {
+                        "vectorId": case["id"], "operation": operation,
+                        "outcome": "value", "value": actual_value,
+                    }
+                except GatewayError as exc:
+                    actual = {
+                        "vectorId": case["id"], "operation": operation,
+                        "outcome": "error", "code": exc.code,
+                    }
+                expected = case["expected"]
+                expected_projection = ({"outcome": "value", "value": expected["value"]}
+                                       if expected["outcome"] == "value"
+                                       else {"outcome": "error", "code": expected["code"]})
+                actual_projection = {key: actual[key] for key in ("outcome", "value", "code") if key in actual}
+                result = {
+                    "vectorId": case["id"],
+                    "operation": operation,
+                    "implementation": "hermes-python",
+                    "status": "pass" if actual_projection == expected_projection else "fail",
+                    "resultHash": "sha256:" + hashlib.sha256(_jcs(actual).encode("utf-8")).hexdigest(),
+                }
+                results.append(result)
+        return results
+
+    openGatewayAccount = open_gateway_account
+
+
+def create_gateway_core(storage_root: str | Path | None = None, **options: Any) -> GatewayCore:
+    return GatewayCore(storage_root=storage_root, **options)
+
+
+def open_gateway_account(account_id: str, storage_root: str | Path | None = None) -> GatewayAccount:
+    return create_gateway_core(storage_root).open_gateway_account(account_id)
+
+
+createGatewayCore = create_gateway_core
