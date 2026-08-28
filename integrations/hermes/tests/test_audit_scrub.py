@@ -79,6 +79,15 @@ def test_scrub_recursively_denies_sensitive_field_name_variants() -> None:
     _assert_no_sensitive_values(scrubbed)
 
 
+def test_scrub_denies_sensitive_fields_inside_json_serializable_tuples() -> None:
+    scrubbed = scrub({
+        "safe": ("kept", {"signature": "signature-sentinel", "ok": True}),
+    })
+
+    assert scrubbed == {"safe": ("kept", {"ok": True})}
+    _assert_no_sensitive_values(scrubbed)
+
+
 def test_audit_list_and_backup_audit_are_metadata_only(tmp_path: Path) -> None:
     core = create_gateway_core(storage_root=tmp_path)
     account = core.open_gateway_account("acct_audit_scrub")

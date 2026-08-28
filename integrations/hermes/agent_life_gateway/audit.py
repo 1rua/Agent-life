@@ -76,6 +76,8 @@ def _json(value: Any) -> str:
 def scrub(value: Any) -> Any:
     if isinstance(value, list):
         return [scrub(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(scrub(item) for item in value)
     if not isinstance(value, Mapping):
         return value
     return {
