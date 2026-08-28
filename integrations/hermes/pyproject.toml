@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "agent-life-hermes-gateway"
 version = "2.0.0"
 description = "Native Python Gateway Protocol v2 plugin for Hermes"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = []
 
 [tool.setuptools.packages.find]

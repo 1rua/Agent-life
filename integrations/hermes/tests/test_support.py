@@ -5,6 +5,12 @@ from __future__ import annotations
 import hashlib
 import hmac
 import secrets
+from collections.abc import Mapping
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from agent_life_gateway.core import VerifiedGatewayRequest, VerifiedRequestContext
 
 
 class HermesAeadProviderDouble:
@@ -24,9 +30,12 @@ class HermesAeadProviderDouble:
 
     def _stream(self, nonce: bytes, length: int) -> bytes:
         blocks: list[bytes] = []
+        total = 0
         counter = 0
-        while sum(len(block) for block in blocks) < length:
-            blocks.append(hmac.new(self._key, nonce + counter.to_bytes(4, "big"), hashlib.sha256).digest())
+        while total < length:
+            block = hmac.new(self._key, nonce + counter.to_bytes(4, "big"), hashlib.sha256).digest()
+            blocks.append(block)
+            total += len(block)
             counter += 1
         return b"".join(blocks)[:length]
 
@@ -71,3 +80,46 @@ class IdentityProofVerifierDouble:
 
     def verify(self, payload: bytes, signature: str, previous_identity_ref: str) -> bool:
         return bool(payload) and previous_identity_ref and signature == "valid-rotation-proof"
+
+
+class PasswordVerifierDouble:
+    """Test-only credential verifier; no password is persisted by the Gateway."""
+
+    def verify(self, account_id, username, password, installation):
+        return (
+            bool(account_id)
+            and username == "alice"
+            and password in {"password", "backup password"}
+            and isinstance(installation, Mapping)
+            and bool(installation.get("installationId"))
+            and bool(installation.get("devicePublicKey"))
+        )
+
+
+def make_verified_request(value: Mapping) -> VerifiedGatewayRequest:
+    context = value["context"]
+    if not isinstance(context, VerifiedRequestContext):
+        context = VerifiedRequestContext(**dict(context))
+    return VerifiedGatewayRequest(
+        context=context,
+        method=value["method"],
+        target=value["target"],
+        body=value.get("body"),
+        idempotencyKey=value.get("idempotencyKey", value.get("idempotency_key")),
+        lastEventId=value.get("lastEventId", value.get("last_event_id")),
+        now=value.get("now"),
+    )
+
+
+def trust_core(core):
+    """Model a host verifier converting its result to the typed Core seam."""
+
+    original_handle = core.handle
+
+    def handle(request):
+        if isinstance(request, Mapping) and request.get("context") is not None:
+            request = make_verified_request(request)
+        return original_handle(request)
+
+    core.handle = handle
+    return core

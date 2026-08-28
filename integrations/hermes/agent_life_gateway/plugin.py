@@ -42,6 +42,7 @@ HERMES_PLUGIN_MANIFEST = {
 class HermesPluginContext(Protocol):
     plugin_data_dir: str | Path
     secret_store: Any
+    credential_verifier: Any
 
     def register_platform(self, platform: GatewayPlatform) -> None:
         ...
@@ -150,6 +151,7 @@ def compose_gateway_services(ctx: Any) -> GatewayServices:
             storage_root=_storage_root(ctx),
             secret_store=_attr(ctx, "secret_store", "secretStore", default=None),
             contract_root=_attr(ctx, "contract_root", "contractRoot", default=None),
+            credential_verifier=_attr(ctx, "credential_verifier", "credentialVerifier", default=None),
         )
     admin = create_admin_service(core=core, host_version=host_version, host_api=host_api)
     config = _attr(ctx, "plugin_config", "pluginConfig", default={}) or {}

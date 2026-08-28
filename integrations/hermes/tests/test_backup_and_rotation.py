@@ -11,7 +11,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from agent_life_gateway.backup import GatewayBackupService
 from agent_life_gateway.core import GatewayError, create_gateway_core
 from agent_life_gateway.identity_rotation import IdentityRotationService
-from test_support import IdentityProofVerifierDouble, make_secret_store
+from test_support import (
+    IdentityProofVerifierDouble,
+    PasswordVerifierDouble,
+    make_secret_store,
+    trust_core,
+)
 
 
 _real_create_gateway_core = create_gateway_core
@@ -19,7 +24,8 @@ _real_create_gateway_core = create_gateway_core
 
 def create_gateway_core(storage_root=None, **options):
     options.setdefault("secret_store", make_secret_store())
-    return _real_create_gateway_core(storage_root=storage_root, **options)
+    options.setdefault("credential_verifier", PasswordVerifierDouble())
+    return trust_core(_real_create_gateway_core(storage_root=storage_root, **options))
 
 
 def _rotation_proof(
@@ -134,6 +140,47 @@ def test_refresh_rotation_and_reuse_revokes_all_credentials_for_the_device(tmp_p
             correlation_id="cor_reuse", now="2026-08-27T00:02:00.000Z",
         )
     assert account.sessions.active_refresh_credential_count(first["deviceId"]) == 0
+
+
+def test_password_session_without_a_credential_verifier_fails_closed(tmp_path):
+    core = _real_create_gateway_core(storage_root=tmp_path, secret_store=make_secret_store())
+    account = core.open_gateway_account("acct_password_unverified")
+
+    with pytest.raises(GatewayError) as error:
+        account.sessions.create_password_session(
+            username="alice",
+            password="any-nonempty-password",
+            installation={"installationId": "install_1", "devicePublicKey": "key"},
+            correlation_id="cor_password_unverified",
+        )
+
+    assert error.value.code == "AUTHENTICATION_FAILED"
+    assert account.sessions.active_refresh_credential_count("dev_unknown") == 0
+
+
+def test_password_session_requires_verified_credentials_and_installation_binding(tmp_path):
+    core = create_gateway_core(storage_root=tmp_path)
+    account = core.open_gateway_account("acct_password_verified")
+
+    with pytest.raises(GatewayError, match="AUTHENTICATION_FAILED"):
+        account.sessions.create_password_session(
+            username="alice", password="wrong",
+            installation={"installationId": "install_1", "devicePublicKey": "key"},
+            correlation_id="cor_password_wrong",
+        )
+    with pytest.raises(GatewayError, match="AUTHENTICATION_FAILED"):
+        account.sessions.create_password_session(
+            username="alice", password="password",
+            installation={"installationId": "install_1"},
+            correlation_id="cor_password_no_key",
+        )
+
+    session = account.sessions.create_password_session(
+        username="alice", password="password",
+        installation={"installationId": "install_1", "devicePublicKey": "key"},
+        correlation_id="cor_password_good",
+    )
+    assert session["deviceId"].startswith("dev_")
 
 
 def test_identity_rotation_rejects_an_arbitrary_string_as_continuity_proof(tmp_path):

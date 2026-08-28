@@ -22,7 +22,7 @@ from agent_life_gateway.core import (
 from agent_life_gateway.audit import AuditStore
 from agent_life_gateway.http import DEFAULT_MAX_BODY_BYTES
 from agent_life_gateway.plugin import register
-from test_support import make_secret_store
+from test_support import make_secret_store, trust_core
 
 
 _real_create_gateway_core = create_gateway_core
@@ -30,7 +30,7 @@ _real_create_gateway_core = create_gateway_core
 
 def create_gateway_core(storage_root=None, **options):
     options.setdefault("secret_store", make_secret_store())
-    return _real_create_gateway_core(storage_root=storage_root, **options)
+    return trust_core(_real_create_gateway_core(storage_root=storage_root, **options))
 
 
 class FakeHermesContext:
@@ -166,8 +166,24 @@ def test_consumes_the_shared_schema_and_vector_registry(tmp_path):
     core = create_gateway_core(storage_root=tmp_path)
 
     results = core.run_shared_vectors()
+    vector_root = Path(__file__).resolve().parents[3] / "gateway-contract" / "vectors"
+    vector_files = {
+        "request-signatures.json", "protocol-negotiation.json", "auth-sessions.json",
+        "attachments.json", "sse-events.json", "device-requests.json",
+    }
+    discovered = {
+        path.name for path in vector_root.glob("*.json")
+        if not path.name.endswith(".schema.json") and path.name != "dispatched-schema-fixtures.json"
+    }
+    cases = [
+        case for name in vector_files
+        for case in json.loads((vector_root / name).read_text(encoding="utf-8"))["cases"]
+    ]
 
-    assert results
+    assert discovered == vector_files
+    assert len(cases) == 24
+    assert len({case["id"] for case in cases}) == 24
+    assert len(results) == 24
     assert {result["status"] for result in results} == {"pass"}
     assert {result["implementation"] for result in results} == {"hermes-python"}
 
@@ -202,6 +218,9 @@ def test_attachment_staging_is_account_local_and_expires_after_ack_or_ttl(tmp_pa
     acknowledged = alice.attachments.acknowledge(attachment["attachmentId"], "cor_ack")
     assert acknowledged["state"] == "acknowledged"
     assert acknowledged["hasStagedBytes"] is False
+    ack_events = alice.events.read_after(None)
+    assert [event["eventType"] for event in ack_events] == ["attachment.acknowledged"]
+    assert ack_events[0]["payload"] == {"attachmentId": attachment["attachmentId"]}
 
     expiring = alice.attachments.create(
         client_attachment_id="att_client_2",
@@ -582,6 +601,69 @@ def test_gateway_core_handle_routes_attachment_and_device_claim_result(tmp_path)
     assert result["data"]["deviceRequest"]["state"] == "succeeded"
 
 
+def test_invalid_state_transition_is_not_exposed_or_persisted_as_wire_error(tmp_path):
+    core = create_gateway_core(storage_root=tmp_path)
+    body = b"invalid state boundary"
+    create = core.handle({
+        "context": _context(requestId="req_invalid_state_create", correlationId="cor_invalid_state_create"),
+        "method": "POST", "target": "/agent-life/v2/attachments",
+        "idempotencyKey": "req_invalid_state_create",
+        "body": {
+            "clientAttachmentId": "att_invalid_state",
+            "filename": "invalid-state.txt", "mediaType": "text/plain",
+            "sizeBytes": len(body), "sha256": hashlib.sha256(body).hexdigest(),
+        },
+    })
+    attachment_id = create["data"]["attachment"]["attachmentId"]
+    core.handle({
+        "context": _context(requestId="req_invalid_state_upload", correlationId="cor_invalid_state_upload"),
+        "method": "PUT", "target": f"/agent-life/v2/attachments/{attachment_id}/content",
+        "idempotencyKey": "req_invalid_state_upload", "body": body,
+    })
+    first_commit = core.handle({
+        "context": _context(requestId="req_invalid_state_commit", correlationId="cor_invalid_state_commit"),
+        "method": "POST", "target": f"/agent-life/v2/attachments/{attachment_id}/commit",
+        "idempotencyKey": "req_invalid_state_commit",
+    })
+    assert first_commit["data"]["attachment"]["state"] == "verified"
+
+    repeated_commit = core.handle({
+        "context": _context(requestId="req_invalid_state_repeat", correlationId="cor_invalid_state_repeat"),
+        "method": "POST", "target": f"/agent-life/v2/attachments/{attachment_id}/commit",
+        "idempotencyKey": "req_invalid_state_repeat",
+    })
+    assert repeated_commit["error"]["code"] == "SCHEMA_INVALID"
+    account = core.open_gateway_account("acct_alice")
+    ledger = account.store.database.execute(
+        "SELECT outcome_json FROM idempotency_ledger WHERE request_id = 'req_invalid_state_repeat'"
+    ).fetchone()
+    assert ledger is None
+    account.close()
+
+
+def test_core_rejects_untrusted_mapping_and_missing_verified_binding_fields(tmp_path):
+    core = _real_create_gateway_core(storage_root=tmp_path, secret_store=make_secret_store())
+    request = {
+        "context": _context(requestId="req_untrusted_mapping"),
+        "method": "POST", "target": "/agent-life/v2/conversations",
+        "idempotencyKey": "req_untrusted_mapping",
+        "body": {"clientConversationId": "conv_untrusted_mapping"},
+    }
+
+    untrusted = core.handle(request)
+    missing_binding = core.handle({
+        **request,
+        "context": {
+            "accountId": "acct_alice", "deviceId": "dev_1", "sessionId": "sess_1",
+            "requestId": "req_missing_binding", "correlationId": "cor_missing_binding",
+        },
+        "idempotencyKey": "req_missing_binding",
+    })
+
+    assert untrusted["error"]["code"] == "AUTHENTICATION_REQUIRED"
+    assert missing_binding["error"]["code"] == "AUTHENTICATION_REQUIRED"
+
+
 def test_typed_verified_request_and_response_surfaces_keep_camel_case_protocol_names(tmp_path):
     context = VerifiedRequestContext(
         accountId="acct_alice", deviceId="dev_1", sessionId="sess_1",
@@ -597,6 +679,26 @@ def test_typed_verified_request_and_response_surfaces_keep_camel_case_protocol_n
     assert isinstance(response, GatewayResponse)
     assert response.data["conversation"]["clientConversationId"] == "conv_typed"
     assert response.requestId == "req_typed"
+    with pytest.raises(TypeError):
+        request.body["clientConversationId"] = "mutated"
+
+
+def test_gateway_response_and_nested_data_are_immutable_across_idempotent_replay(tmp_path):
+    core = create_gateway_core(storage_root=tmp_path)
+    request = {
+        "context": _context(requestId="req_immutable_response"),
+        "method": "POST", "target": "/agent-life/v2/conversations",
+        "idempotencyKey": "req_immutable_response",
+        "body": {"clientConversationId": "conv_immutable_response", "title": "stable"},
+    }
+    response = core.handle(request)
+
+    with pytest.raises(TypeError):
+        response["extra"] = True
+    with pytest.raises(TypeError):
+        response["data"]["conversation"]["title"] = "mutated"
+
+    assert core.handle(request) == response
 
 
 def test_gateway_core_negotiates_the_shared_protocol_schema_and_feature_intersection(tmp_path):

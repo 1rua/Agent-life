@@ -8,7 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from agent_life_gateway.admin import HostApiCompatibility
 from agent_life_gateway.http import EXPOSURE_MODES, create_gateway_exposure
 from agent_life_gateway.core import create_gateway_core
-from test_support import make_secret_store
+from test_support import make_secret_store, make_verified_request, trust_core
 
 
 _real_create_gateway_core = create_gateway_core
@@ -16,7 +16,7 @@ _real_create_gateway_core = create_gateway_core
 
 def create_gateway_core(storage_root=None, **options):
     options.setdefault("secret_store", make_secret_store())
-    return _real_create_gateway_core(storage_root=storage_root, **options)
+    return trust_core(_real_create_gateway_core(storage_root=storage_root, **options))
 
 
 TEST_HOST_API = HostApiCompatibility(
@@ -42,7 +42,7 @@ class FakeCore:
 
 
 def _verified(target="/agent-life/v2/negotiate"):
-    return {
+    return make_verified_request({
         "context": {
             "accountId": "account-a", "deviceId": "device-a", "sessionId": "session-a",
             "requestId": "request-a", "correlationId": "correlation-a",
@@ -51,7 +51,7 @@ def _verified(target="/agent-life/v2/negotiate"):
         "method": "POST",
         "target": target,
         "body": {},
-    }
+    })
 
 
 def test_all_three_exposure_modes_share_routes_and_verified_core_result():
@@ -67,6 +67,29 @@ def test_all_three_exposure_modes_share_routes_and_verified_core_result():
     assert results[0] == results[1] == results[2]
     assert results[0]["statusCode"] == 200
     assert results[0]["body"]["data"] == {"accepted": True, "target": "/agent-life/v2/negotiate"}
+
+
+def test_verified_route_rejects_a_plain_mapping_even_when_the_host_is_compatible():
+    core = FakeCore()
+    exposure = create_gateway_exposure(
+        "host-route", core=core, host_version="1.0.0", host_api=TEST_HOST_API
+    )
+    route = next(item for item in exposure.routes if item.path == "/agent-life/v2/conversations")
+    plain_mapping = {
+        "context": {
+            "accountId": "account-a", "deviceId": "device-a", "sessionId": "session-a",
+            "requestId": "request-a", "correlationId": "correlation-a",
+            "pairingGeneration": 1, "grantRevision": 1,
+        },
+        "method": "POST", "target": "/agent-life/v2/conversations",
+        "body": {"clientConversationId": "conv_untrusted"},
+    }
+
+    response = route.handle({"verifiedRequest": plain_mapping})
+
+    assert response["statusCode"] == 401
+    assert response["body"]["error"]["code"] == "AUTHENTICATION_REQUIRED"
+    assert core.requests == []
 
 
 def test_incompatible_or_missing_host_fails_closed_before_core_for_each_mode():
@@ -138,14 +161,21 @@ def test_raw_host_boundary_passes_exact_bytes_to_verifier_before_core():
     route.handler(RawRequest(b"{}", url="/agent-life/v2/conversations"), response)
     assert response.status_code == 200
     assert seen[0]["body"] == b"{}"
-    assert core.requests[0]["target"] == "/agent-life/v2/conversations"
+    assert core.requests[0].target == "/agent-life/v2/conversations"
 
 
 def test_verified_exposure_seam_reaches_the_independent_python_core(tmp_path):
     core = create_gateway_core(storage_root=tmp_path)
-    request = _verified("/agent-life/v2/conversations")
-    request["body"] = {"clientConversationId": "conv_exposure"}
-    request["idempotencyKey"] = "request-a"
+    request = make_verified_request({
+        "context": {
+            "accountId": "account-a", "deviceId": "device-a", "sessionId": "session-a",
+            "requestId": "request-a", "correlationId": "correlation-a",
+            "pairingGeneration": 1, "grantRevision": 1,
+        },
+        "method": "POST", "target": "/agent-life/v2/conversations",
+        "body": {"clientConversationId": "conv_exposure"},
+        "idempotencyKey": "request-a",
+    })
     exposure = create_gateway_exposure("loopback-reverse-proxy", core=core, host_version="1.0.0", host_api=TEST_HOST_API)
     route = next(item for item in exposure.routes if item.path == "/agent-life/v2/conversations")
 

@@ -2,23 +2,28 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from agent_life_gateway.admin import run_admin_command
 from agent_life_gateway.plugin import register
+from test_support import PasswordVerifierDouble
 
 
 class FakeHermesContext:
     def __init__(self, plugin_data_dir, host_version="1.0.0"):
         self.plugin_data_dir = plugin_data_dir
         self.secret_store = None
+        self.credential_verifier = PasswordVerifierDouble()
         self.host_version = host_version
         self.platform_ids = []
+        self.platforms = []
         self.admin_surfaces = []
         self.http_routes = []
         self.cli_registrations = []
 
     def register_platform(self, platform):
         self.platform_ids.append(platform.platform_id)
+        self.platforms.append(platform)
 
     def register_admin(self, admin):
         self.admin_surfaces.append(admin)
@@ -44,9 +49,17 @@ def test_registration_exposes_native_core_routes_and_local_only_management(tmp_p
 
     register(context)
 
-    platform = context.platform_ids and context.admin_surfaces[0].panel
+    platform = context.platforms[0]
     assert platform.id == "agent-life-gateway"
-    assert platform.remote_port is None
+    assert platform is not context.admin_surfaces[0].panel
+    assert platform.core is context.admin_surfaces[0].panel.service.core
+    assert platform.core.credential_verifier is context.credential_verifier
+    assert platform.read_only is True
+    platform_result = platform.handle({
+        "context": {"requestId": "req_platform", "correlationId": "cor_platform"}
+    })
+    assert platform_result["error"]["code"] == "HOST_INCOMPATIBLE"
+    assert context.admin_surfaces[0].remote_port is None
     assert context.admin_surfaces[0].local_only is True
     assert {route["path"] for route in context.http_routes} >= {
         "/agent-life/v2/negotiate",

@@ -13,7 +13,9 @@ from .admin import (
     is_host_api_compatible,
     normalize_host_api,
 )
-from .core import DEFAULT_ATTACHMENT_POLICY, GatewayCore, create_gateway_core
+from .core import (
+    DEFAULT_ATTACHMENT_POLICY, GatewayCore, VerifiedGatewayRequest, create_gateway_core,
+)
 
 
 EXPOSURE_MODES = ("host-route", "loopback-reverse-proxy", "direct-tls")
@@ -114,6 +116,14 @@ class GatewayHttpRoute:
                     **({"lastEventId": _get(request, "lastEventId", "last_event_id")} if _get(request, "lastEventId", "last_event_id") is not None else {}),
                     **({"now": _get(request, "now")} if _get(request, "now") is not None else {}),
                 }
+        if not isinstance(verified, VerifiedGatewayRequest):
+            is_pre_auth_negotiate = (
+                _get(verified, "context") is None
+                and _get(verified, "method") == "POST"
+                and _get(verified, "target") == "/agent-life/v2/negotiate"
+            )
+            if not is_pre_auth_negotiate:
+                return {"statusCode": 401, "headers": dict(_RESPONSE_HEADERS), "body": _failure(request, "AUTHENTICATION_REQUIRED")}
         body = self._services.core.handle(verified)
         return {"statusCode": _status(body), "headers": dict(_RESPONSE_HEADERS), "body": body}
 
@@ -161,6 +171,8 @@ class GatewayHttpRoute:
         except Exception:
             verified = None
         if verified is None:
+            return {"statusCode": 401, "headers": dict(_RESPONSE_HEADERS), "body": _failure(empty, "AUTHENTICATION_REQUIRED")}
+        if not isinstance(verified, VerifiedGatewayRequest):
             return {"statusCode": 401, "headers": dict(_RESPONSE_HEADERS), "body": _failure(empty, "AUTHENTICATION_REQUIRED")}
         response_body = self._services.core.handle(verified)
         return {"statusCode": _status(response_body), "headers": dict(_RESPONSE_HEADERS), "body": response_body}

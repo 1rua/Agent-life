@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from agent_life_gateway.core import GatewayError, create_gateway_core
 from agent_life_gateway.http import create_gateway_exposure
-from test_support import make_secret_store
+from test_support import make_secret_store, make_verified_request, trust_core
 
 
 _real_create_gateway_core = create_gateway_core
@@ -18,7 +18,7 @@ _real_create_gateway_core = create_gateway_core
 
 def create_gateway_core(storage_root=None, **options):
     options.setdefault("secret_store", make_secret_store())
-    return _real_create_gateway_core(storage_root=storage_root, **options)
+    return trust_core(_real_create_gateway_core(storage_root=storage_root, **options))
 
 
 NEGOTIATION_BODY = {
@@ -291,16 +291,14 @@ def test_attachment_storage_without_an_explicit_aead_key_fails_closed(tmp_path):
         "SELECT value FROM account_metadata WHERE key = 'master_key_ref'"
     ).fetchone()[0]
     assert stored_ref == ""
-    blocked = core.handle(
-        {
+    blocked = core.handle(make_verified_request({
             "context": {
                 "accountId": "acct_no_aead", "deviceId": "dev_1", "sessionId": "sess_1",
                 "requestId": "req_no_aead", "correlationId": "cor_no_aead",
                 "pairingGeneration": 1, "grantRevision": 1,
             },
             "method": "GET", "target": "/agent-life/v2/conversations",
-        }
-    )
+        }))
     assert blocked["error"]["code"] == "MASTER_KEY_UNAVAILABLE"
 
 
@@ -473,7 +471,7 @@ def test_raw_attachment_body_limit_accepts_the_negotiated_single_attachment_size
 
     def verify(request):
         seen.append(request)
-        return {
+        return make_verified_request({
             "context": {
                 "accountId": "acct_raw_attachment",
                 "deviceId": "dev_raw_attachment",
@@ -487,7 +485,7 @@ def test_raw_attachment_body_limit_accepts_the_negotiated_single_attachment_size
             "target": request["target"],
             "body": request["body"],
             "idempotencyKey": "request-raw-attachment",
-        }
+        })
 
     exposure = create_gateway_exposure(
         "direct-tls",

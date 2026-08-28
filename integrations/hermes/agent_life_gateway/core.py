@@ -81,18 +81,49 @@ class VerifiedRequestContext:
     correlation_id: str
     pairing_generation: int
     grant_revision: int
+    negotiation_id: str | None
+    installation_id: str | None
 
-    def __init__(self, account_id: str | None = None, device_id: str | None = None,
-                 session_id: str | None = None, request_id: str | None = None,
-                 correlation_id: str | None = None, pairing_generation: int = 1,
-                 grant_revision: int = 1, **aliases: Any):
-        object.__setattr__(self, "account_id", account_id if account_id is not None else aliases.pop("accountId"))
-        object.__setattr__(self, "device_id", device_id if device_id is not None else aliases.pop("deviceId"))
-        object.__setattr__(self, "session_id", session_id if session_id is not None else aliases.pop("sessionId"))
-        object.__setattr__(self, "request_id", request_id if request_id is not None else aliases.pop("requestId"))
-        object.__setattr__(self, "correlation_id", correlation_id if correlation_id is not None else aliases.pop("correlationId"))
-        object.__setattr__(self, "pairing_generation", aliases.pop("pairingGeneration", pairing_generation))
-        object.__setattr__(self, "grant_revision", aliases.pop("grantRevision", grant_revision))
+    def __init__(
+        self, account_id: str | None = None, device_id: str | None = None,
+        session_id: str | None = None, request_id: str | None = None,
+        correlation_id: str | None = None, pairing_generation: int | None = None,
+        grant_revision: int | None = None, negotiation_id: str | None = None,
+        installation_id: str | None = None, **aliases: Any,
+    ):
+        def take(primary: Any, alias: str) -> Any:
+            alternate = aliases.pop(alias, None)
+            if primary is not None and alternate is not None:
+                raise TypeError(f"duplicate context field: {alias}")
+            return primary if primary is not None else alternate
+
+        fields = {
+            "account_id": take(account_id, "accountId"),
+            "device_id": take(device_id, "deviceId"),
+            "session_id": take(session_id, "sessionId"),
+            "request_id": take(request_id, "requestId"),
+            "correlation_id": take(correlation_id, "correlationId"),
+            "pairing_generation": take(pairing_generation, "pairingGeneration"),
+            "grant_revision": take(grant_revision, "grantRevision"),
+            "negotiation_id": take(negotiation_id, "negotiationId"),
+            "installation_id": take(installation_id, "installationId"),
+        }
+        if aliases:
+            raise TypeError(f"unknown context fields: {sorted(aliases)}")
+        for name in ("account_id", "device_id", "session_id", "request_id", "correlation_id"):
+            if not isinstance(fields[name], str) or not fields[name]:
+                raise ValueError(f"missing or invalid context field: {name}")
+        for name in ("pairing_generation", "grant_revision"):
+            if (
+                not isinstance(fields[name], int) or isinstance(fields[name], bool)
+                or fields[name] < 0
+            ):
+                raise ValueError(f"missing or invalid context field: {name}")
+        for name in ("negotiation_id", "installation_id"):
+            if fields[name] is not None and (not isinstance(fields[name], str) or not fields[name]):
+                raise ValueError(f"invalid context field: {name}")
+        for name, value in fields.items():
+            object.__setattr__(self, name, value)
 
     @property
     def accountId(self) -> str:
@@ -122,10 +153,18 @@ class VerifiedRequestContext:
     def grantRevision(self) -> int:
         return self.grant_revision
 
+    @property
+    def negotiationId(self) -> str | None:
+        return self.negotiation_id
+
+    @property
+    def installationId(self) -> str | None:
+        return self.installation_id
+
 
 @dataclass(frozen=True, init=False)
 class VerifiedGatewayRequest:
-    context: Any
+    context: VerifiedRequestContext
     method: str
     target: str
     body: Any
@@ -133,15 +172,27 @@ class VerifiedGatewayRequest:
     last_event_id: str | None
     now: datetime | str | None
 
-    def __init__(self, context: Any, method: str, target: str, body: Any = None,
+    def __init__(self, context: VerifiedRequestContext, method: str, target: str, body: Any = None,
                  idempotency_key: str | None = None, last_event_id: str | None = None,
                  now: datetime | str | None = None, **aliases: Any):
+        if not isinstance(context, VerifiedRequestContext):
+            raise TypeError("GatewayCore accepts only VerifiedRequestContext")
+        if not isinstance(method, str) or not isinstance(target, str):
+            raise TypeError("verified request method and target must be strings")
+        idempotency_alias = aliases.pop("idempotencyKey", None)
+        last_event_alias = aliases.pop("lastEventId", None)
+        if idempotency_key is not None and idempotency_alias is not None:
+            raise TypeError("duplicate request field: idempotencyKey")
+        if last_event_id is not None and last_event_alias is not None:
+            raise TypeError("duplicate request field: lastEventId")
+        if aliases:
+            raise TypeError(f"unknown request fields: {sorted(aliases)}")
         object.__setattr__(self, "context", context)
         object.__setattr__(self, "method", method)
         object.__setattr__(self, "target", target)
-        object.__setattr__(self, "body", body)
-        object.__setattr__(self, "idempotency_key", aliases.pop("idempotencyKey", idempotency_key))
-        object.__setattr__(self, "last_event_id", aliases.pop("lastEventId", last_event_id))
+        object.__setattr__(self, "body", _freeze(body))
+        object.__setattr__(self, "idempotency_key", idempotency_key if idempotency_key is not None else idempotency_alias)
+        object.__setattr__(self, "last_event_id", last_event_id if last_event_id is not None else last_event_alias)
         object.__setattr__(self, "now", now)
 
     @property
@@ -153,7 +204,67 @@ class VerifiedGatewayRequest:
         return self.last_event_id
 
 
+class _FrozenDict(dict[str, Any]):
+    def _readonly(self, *_: Any, **__: Any) -> None:
+        raise TypeError("GatewayResponse is immutable")
+
+    __setitem__ = _readonly
+    __delitem__ = _readonly
+    clear = _readonly
+    pop = _readonly
+    popitem = _readonly
+    setdefault = _readonly
+    update = _readonly
+    __ior__ = _readonly
+
+
+class _FrozenList(list[Any]):
+    def _readonly(self, *_: Any, **__: Any) -> None:
+        raise TypeError("GatewayResponse is immutable")
+
+    __setitem__ = _readonly
+    __delitem__ = _readonly
+    __iadd__ = _readonly
+    __imul__ = _readonly
+    append = _readonly
+    clear = _readonly
+    extend = _readonly
+    insert = _readonly
+    pop = _readonly
+    remove = _readonly
+    reverse = _readonly
+    sort = _readonly
+
+
+def _freeze(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        frozen = _FrozenDict()
+        dict.__init__(frozen, ((key, _freeze(child)) for key, child in value.items()))
+        return frozen
+    if isinstance(value, list):
+        frozen = _FrozenList()
+        list.__init__(frozen, (_freeze(child) for child in value))
+        return frozen
+    if isinstance(value, tuple):
+        return _FrozenList(_freeze(child) for child in value)
+    return value
+
+
 class GatewayResponse(dict[str, Any]):
+    def __init__(self, value: Mapping[str, Any] | None = None, **kwargs: Any):
+        dict.__init__(self, _freeze(dict(value or {}, **kwargs)))
+
+    def _readonly(self, *_: Any, **__: Any) -> None:
+        raise TypeError("GatewayResponse is immutable")
+
+    __setitem__ = _readonly
+    __delitem__ = _readonly
+    clear = _readonly
+    pop = _readonly
+    popitem = _readonly
+    setdefault = _readonly
+    update = _readonly
+    __ior__ = _readonly
     @property
     def requestId(self) -> str:
         return str(self["requestId"])
@@ -603,25 +714,23 @@ def _context_value(context: Any, camel: str, snake: str, default: Any = None) ->
 
 def _request_context(request: Any) -> dict[str, Any]:
     context = _value(request, "context")
-    if context is None:
+    if not isinstance(context, VerifiedRequestContext):
         raise GatewayError("AUTHENTICATION_REQUIRED")
     result = {
-        "accountId": _context_value(context, "accountId", "account_id"),
-        "deviceId": _context_value(context, "deviceId", "device_id"),
-        "sessionId": _context_value(context, "sessionId", "session_id"),
-        "requestId": _context_value(context, "requestId", "request_id"),
-        "correlationId": _context_value(context, "correlationId", "correlation_id"),
-        "pairingGeneration": _context_value(context, "pairingGeneration", "pairing_generation", 1),
-        "grantRevision": _context_value(context, "grantRevision", "grant_revision", 1),
+        "accountId": context.accountId,
+        "deviceId": context.deviceId,
+        "sessionId": context.sessionId,
+        "requestId": context.requestId,
+        "correlationId": context.correlationId,
+        "pairingGeneration": context.pairingGeneration,
+        "grantRevision": context.grantRevision,
     }
-    negotiation_id = _context_value(context, "negotiationId", "negotiation_id")
-    installation_id = _context_value(context, "installationId", "installation_id")
+    negotiation_id = context.negotiationId
+    installation_id = context.installationId
     if negotiation_id is not None:
         result["negotiationId"] = negotiation_id
     if installation_id is not None:
         result["installationId"] = installation_id
-    if any(result[name] is None for name in ("accountId", "deviceId", "sessionId", "requestId", "correlationId")):
-        raise GatewayError("AUTHENTICATION_REQUIRED")
     return result
 
 
@@ -980,12 +1089,14 @@ class AttachmentStore:
     def __init__(
         self, account_id: str, paths: AccountPaths, store: AccountStore,
         audit: AuditStore, policy: AttachmentPolicy | None = None,
+        events: EventStore | None = None,
     ):
         self.account_id = account_id
         self.paths = paths
         self.store = store
         self.audit = audit
         self.policy = policy or DEFAULT_ATTACHMENT_POLICY
+        self.events = events
         self.cas_dir = paths.attachments / "cas"
         self.cas_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         try:
@@ -1153,6 +1264,12 @@ class AttachmentStore:
             self.audit.append(
                 "attachment.acknowledged", {"accountId": self.account_id},
                 {"attachmentId": attachment_id}, correlation_id, current,
+            )
+            if self.events is None:
+                raise GatewayError("INTERNAL_ERROR")
+            self.events.append(
+                "attachment.acknowledged", correlation_id,
+                {"attachmentId": attachment_id}, current,
             )
         cas_path = next((path for path in paths if path.parent == self.cas_dir), None)
         if cas_path is not None:
@@ -1674,6 +1791,7 @@ class GatewayAccount:
         self, account_id: str, paths: AccountPaths, store: AccountStore,
         contracts: ContractRegistry | None = None,
         attachment_policy: AttachmentPolicy | None = None,
+        credential_verifier: Any = None,
     ):
         self.account_id = account_id
         self.accountId = account_id
@@ -1684,10 +1802,12 @@ class GatewayAccount:
         self.audit = AuditStore(store, account_id)
         self.events = EventStore(store)
         self.attachment_policy = attachment_policy or DEFAULT_ATTACHMENT_POLICY
-        self.attachments = AttachmentStore(account_id, paths, store, self.audit, self.attachment_policy)
+        self.attachments = AttachmentStore(
+            account_id, paths, store, self.audit, self.attachment_policy, self.events
+        )
         self.device_requests = DeviceRequestStore(account_id, store, self.audit, self.events, contracts)
         self.conversations = ConversationPort(account_id, store, self.attachments, self.audit, self.attachment_policy)
-        self.sessions = SessionService(account_id, store, self.audit)
+        self.sessions = SessionService(account_id, store, self.audit, credential_verifier)
         self.deviceRequests = self.device_requests
         self.masterKeyRef = self.master_key_ref
         self._closed = False
@@ -1699,10 +1819,11 @@ class GatewayAccount:
 
 
 class SessionService:
-    def __init__(self, account_id: str, store: AccountStore, audit: AuditStore):
+    def __init__(self, account_id: str, store: AccountStore, audit: AuditStore, credential_verifier: Any = None):
         self.account_id = account_id
         self.store = store
         self.audit = audit
+        self.credential_verifier = credential_verifier
 
     @staticmethod
     def _digest(value: str) -> str:
@@ -1716,14 +1837,29 @@ class SessionService:
         self, username: str, password: str, installation: Mapping[str, Any],
         correlation_id: str, now: datetime | str | None = None,
     ) -> dict[str, Any]:
-        if not username or not password:
+        installation_id = installation.get("installationId") if isinstance(installation, Mapping) else None
+        device_public_key = installation.get("devicePublicKey") if isinstance(installation, Mapping) else None
+        if (
+            not isinstance(username, str) or not username
+            or not isinstance(password, str) or not password
+            or not isinstance(installation_id, str) or not installation_id
+            or not isinstance(device_public_key, str) or not device_public_key
+            or self.credential_verifier is None
+        ):
+            raise GatewayError("AUTHENTICATION_FAILED")
+        verifier = getattr(self.credential_verifier, "verify", self.credential_verifier)
+        try:
+            verified = verifier(self.account_id, username, password, installation)
+        except Exception as exc:
+            raise GatewayError("AUTHENTICATION_FAILED") from exc
+        if verified is not True:
             raise GatewayError("AUTHENTICATION_FAILED")
         current = _now(now)
         with self.store.transaction():
-            bundle = self._issue(str(installation["installationId"]), f"dev_{uuid.uuid4()}", current)
+            bundle = self._issue(installation_id, f"dev_{uuid.uuid4()}", current)
             self.audit.append(
                 "session.password.created",
-                {"accountId": self.account_id, "deviceId": bundle["deviceId"], "installationId": installation["installationId"]},
+                {"accountId": self.account_id, "deviceId": bundle["deviceId"], "installationId": installation_id},
                 {"method": "password", "displayName": installation.get("displayName")}, correlation_id, current,
             )
             return bundle
@@ -1878,7 +2014,6 @@ _PERSISTABLE_ERRORS = {
     "ATTACHMENT_LIMIT_EXCEEDED",
     "ATTACHMENT_EXPIRED", "MASTER_KEY_UNAVAILABLE", "MASTER_KEY_REFERENCE_MISMATCH",
     "ENCRYPTION_FAILED", "DECRYPTION_FAILED", "CURSOR_CONFLICT", "CURSOR_EXPIRED",
-    "INVALID_STATE_TRANSITION",
 }
 
 
@@ -1897,6 +2032,7 @@ class GatewayCore:
         self, storage_root: str | Path | None = None, secret_store: Any = None,
         contract_root: str | Path | None = None, commit_hook: Any = None,
         attachment_policy: AttachmentPolicy | None = None,
+        credential_verifier: Any = None,
     ):
         self.storage_root = Path(storage_root or default_hermes_gateway_root()).resolve()
         self.secret_store = secret_store
@@ -1905,6 +2041,7 @@ class GatewayCore:
         self._pending_negotiations: dict[str, dict[str, Any]] = {}
         self.commit_hook = commit_hook
         self.attachment_policy = attachment_policy or DEFAULT_ATTACHMENT_POLICY
+        self.credential_verifier = credential_verifier
 
     @property
     def contracts(self) -> ContractRegistry:
@@ -1978,7 +2115,10 @@ class GatewayCore:
         paths = account_paths(self.storage_root, account_id)
         master_key_ref, aead = self._resolve_key_binding(account_id)
         store = AccountStore(paths, master_key_ref, self.commit_hook, aead)
-        return GatewayAccount(account_id, paths, store, self.contracts, self.attachment_policy)
+        return GatewayAccount(
+            account_id, paths, store, self.contracts, self.attachment_policy,
+            self.credential_verifier,
+        )
 
     def _negotiate(self, account: GatewayAccount, context: Mapping[str, Any], body: Any, now: datetime) -> Mapping[str, Any]:
         response = self._build_negotiation_response(body, account)
@@ -2056,7 +2196,8 @@ class GatewayCore:
                 }
             return _success(context, response)
         except GatewayError as exc:
-            return _failure(context, exc.code, exc.details)
+            code = "SCHEMA_INVALID" if exc.code == "INVALID_STATE_TRANSITION" else exc.code
+            return _failure(context, code, exc.details)
 
     def bind_negotiation(
         self, negotiation_id: str, account_id: str, installation_id: str,
@@ -2155,12 +2296,14 @@ class GatewayCore:
                 raise TransactionOutcomeUnknown({"reason": "idempotency outcome persistence unknown"}) from exc
             return response
 
-    def handle(self, request: Any) -> dict[str, Any]:
+    def handle(self, request: VerifiedGatewayRequest) -> GatewayResponse:
         try:
             method = _value(request, "method")
             target = _value(request, "target")
             if method == "POST" and target == "/agent-life/v2/negotiate" and _value(request, "context") is None:
                 return self._handle_pre_auth(request)
+            if not isinstance(request, VerifiedGatewayRequest):
+                raise GatewayError("AUTHENTICATION_REQUIRED")
             context = _request_context(request)
             account = self.open_gateway_account(context["accountId"])
             try:
@@ -2286,7 +2429,8 @@ class GatewayCore:
                 context = _request_context(request)
             except GatewayError:
                 context = {"requestId": "agent-life-route", "correlationId": "agent-life-route"}
-            return _failure(context, exc.code, exc.details)
+            code = "SCHEMA_INVALID" if exc.code == "INVALID_STATE_TRANSITION" else exc.code
+            return _failure(context, code, exc.details)
         except Exception:
             try:
                 context = _request_context(request)
