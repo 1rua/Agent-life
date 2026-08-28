@@ -221,7 +221,7 @@ expect(alice.paths.database).not.toBe(bob.paths.database);
 expect(alice.paths.attachments.startsWith(bob.paths.root)).toBe(false);
 ```
 
-- [ ] **Step 2: 运行并确认红灯**
+- [x] **Step 2: 运行并确认红灯**
 
 Run: `npm --prefix integrations/openclaw test -- account-isolation.test.ts`
 
@@ -584,7 +584,7 @@ git commit -m "重构: 建立 Android 插件宿主模块边界"
 - Produces: `GatewaySessionManager.unpair(profileId): Unit`
 - Owns: Android Keystore 中的设备私钥与 refresh credential；原迁移计划 Task 2 的 TypeScript 向量不能替代本任务的 JVM/真机证据
 
-- [ ] **Step 1: 写“不保存密码、刷新凭据轮换、退出撤销”的失败测试**
+- [x] **Step 1: 写“不保存密码、刷新凭据轮换、退出撤销”的失败测试**
 
 ```kotlin
 @Test fun passwordIsNeverPersistedAndRefreshRotates() = runTest {
@@ -607,7 +607,9 @@ Run: `cd apps/android && ./gradlew :gateway-client:testDebugUnitTest`
 
 Expected: FAIL，会话组件尚不存在。
 
-- [ ] **Step 3: 实现 AccountManager profile + Keystore secret reference**
+RED 取证（2026-08-29）：`./gradlew :gateway-client:testDebugUnitTest` → `compileDebugUnitTestKotlin FAILED`，一串 `Unresolved reference 'account' / 'GatewayCredentialStore' / 'GatewayAuthTransport'`，即会话组件尚不存在。
+
+- [x] **Step 3: 实现 AccountManager profile + Keystore secret reference**
 
 ```kotlin
 data class AccountProfile(
@@ -626,11 +628,31 @@ interface GatewayCredentialStore {
 
 密码只以 `CharArray` 进入单次请求，finally 中覆盖；AccountManager 保存 profile/alias，Keystore 加密 refresh 和设备私钥。
 
-- [ ] **Step 4: 运行单元与真机 Keystore 测试**
+- [x] **Step 4: 运行单元与真机 Keystore 测试**
 
 Run: `cd apps/android && ./gradlew :gateway-client:testDebugUnitTest :gateway-client:connectedDebugAndroidTest`
 
 Expected: PASS；进程重启可恢复 refresh，退出保留 profile、移除本地账号清理 profile/插件账号数据、解除配对撤销密钥与队列，账号 A 无法读取账号 B alias。
+
+GREEN 取证（2026-08-29，真机 SM-X710 / API 36，序列号 R52X909R9QT）：
+
+- `:gateway-client:testDebugUnitTest` → 7 tests, 0 failures
+- `:gateway-client:connectedDebugAndroidTest` → 6 tests, 0 failures
+- 根 `./gradlew check` → BUILD SUCCESSFUL（架构门禁未被破坏）
+
+单元测试覆盖：密码不落盘、密码缓冲区用后清零、每次 resume 都轮换、logout 保留 profile、removeLocalAccount 清 profile 与凭据、unpair 撤销且保留 profile、无凭据时 resume 失败闭合。
+
+真机测试覆盖：进程重启（新实例读同一目录）可恢复 refresh、两账号凭据互不越权、清 A 不影响 B、unpair 删除 Keystore 密钥材料、未知 profile 返回 null、覆写不膨胀存储。
+
+变异验证（证明测试非空转）：删除 `loginWithPassword` finally 中的 `password.fill('\u0000')` → `passwordBufferIsScrubbedAfterLogin` 立即 FAILED；已还原。
+
+实现说明与偏离：
+
+- 接口按要求实现，并**新增 `clearDeviceKey(profileId)`**。理由：Interfaces 明确写明该 store 拥有"设备私钥与 refresh credential"，但给定接口只有三个 refresh 方法，`unpair` 无法删除设备密钥——缺此即无法满足"解除配对撤销密钥"。
+- 会话方法为**同步**而非 `runTest`/suspend。当前生命周期无任何异步需求，引入 `kotlinx-coroutines-test` 属无谓依赖；Task 9 接入真实 HTTPS/SSE 时再按需改签名。
+- `GatewayAuthTransport` 作为端口抽出，真实 HTTPS 实现由 Task 9 提供；Task 8 只证明生命周期本身。
+- profile 持久化用 `InMemoryAccountProfileStore`，凭据持久化用 Keystore。符合 Step 4 的"进程重启可恢复 refresh"（该要求针对 refresh，已由真机测试证明）；账号 profile 的落盘持久化随 Task 15 接线时一并落地。
+- Keystore 实现中 profileId 一律 Base64-url 编码后再拼进 alias 与文件名，避免外部输入越出目录或 alias 命名空间。
 
 - [ ] **Step 5: 提交**
 
