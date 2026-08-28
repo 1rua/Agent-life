@@ -291,6 +291,17 @@ def test_attachment_storage_without_an_explicit_aead_key_fails_closed(tmp_path):
         "SELECT value FROM account_metadata WHERE key = 'master_key_ref'"
     ).fetchone()[0]
     assert stored_ref == ""
+    blocked = core.handle(
+        {
+            "context": {
+                "accountId": "acct_no_aead", "deviceId": "dev_1", "sessionId": "sess_1",
+                "requestId": "req_no_aead", "correlationId": "cor_no_aead",
+                "pairingGeneration": 1, "grantRevision": 1,
+            },
+            "method": "GET", "target": "/agent-life/v2/conversations",
+        }
+    )
+    assert blocked["error"]["code"] == "MASTER_KEY_UNAVAILABLE"
 
 
 class _ReferenceOnlySecretStore:
@@ -370,6 +381,32 @@ def test_device_parameters_and_event_payload_are_sealed_at_rest(tmp_path):
     assert "from:alice" not in event_row["payload_json"]
     assert account.device_requests.get("device_req_sealed")["parameters"] == parameters
     assert account.events.read_after(None)[0]["payload"]["parameters"] == parameters
+
+
+def test_idempotency_outcome_is_sealed_at_rest_and_replays_through_the_provider(tmp_path):
+    core = create_gateway_core(storage_root=tmp_path)
+    request = {
+        "context": {
+            "accountId": "acct_sealed_idempotency", "deviceId": "dev_1",
+            "sessionId": "sess_1", "requestId": "req_sealed_idempotency",
+            "correlationId": "cor_sealed_idempotency", "pairingGeneration": 1,
+            "grantRevision": 1,
+        },
+        "method": "POST", "target": "/agent-life/v2/conversations",
+        "idempotencyKey": "req_sealed_idempotency",
+        "body": {"clientConversationId": "conv_sealed_idempotency", "title": "private title"},
+    }
+
+    first = core.handle(request)
+    account = core.open_gateway_account("acct_sealed_idempotency")
+    row = account.store.database.execute(
+        "SELECT outcome_json FROM idempotency_ledger WHERE request_id = 'req_sealed_idempotency'"
+    ).fetchone()
+
+    assert first["data"]["conversation"]["title"] == "private title"
+    assert row["outcome_json"].startswith("aead-v1:")
+    assert "private title" not in row["outcome_json"]
+    assert core.handle(request) == first
 
 
 def test_tampered_attachment_ciphertext_fails_closed(tmp_path):

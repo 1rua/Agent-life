@@ -2132,7 +2132,10 @@ class GatewayCore:
                     replay_error = replay_check()
                     if replay_error is not None:
                         return _failure(context, replay_error)
-                return GatewayResponse(json.loads(existing["outcome_json"]))
+                return GatewayResponse(account.store.open_json(
+                    existing["outcome_json"],
+                    f"idempotency:{context['deviceId']}:{request_id}",
+                ))
             try:
                 response = work()
             except GatewayError as exc:
@@ -2142,7 +2145,11 @@ class GatewayCore:
             try:
                 account.store.database.execute(
                     "INSERT INTO idempotency_ledger(device_id, request_id, input_hash, outcome_json, expires_at) VALUES (?, ?, ?, ?, ?)",
-                    (context["deviceId"], request_id, input_hash, _json(response), iso_millis(now + timedelta(days=30))),
+                    (
+                        context["deviceId"], request_id, input_hash,
+                        account.store.seal_json(response, f"idempotency:{context['deviceId']}:{request_id}"),
+                        iso_millis(now + timedelta(days=30)),
+                    ),
                 )
             except sqlite3.Error as exc:
                 raise TransactionOutcomeUnknown({"reason": "idempotency outcome persistence unknown"}) from exc
@@ -2157,6 +2164,7 @@ class GatewayCore:
             context = _request_context(request)
             account = self.open_gateway_account(context["accountId"])
             try:
+                account.store.require_aead()
                 self._assert_negotiation_bound(account, context, _request_now(request))
                 body = _request_body(request)
                 if _contains_identity_override(body):
