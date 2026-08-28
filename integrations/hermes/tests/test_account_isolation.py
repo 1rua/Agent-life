@@ -19,6 +19,7 @@ from agent_life_gateway.core import (
     create_gateway_core,
 )
 from agent_life_gateway.audit import AuditStore
+from agent_life_gateway.http import DEFAULT_MAX_BODY_BYTES
 from agent_life_gateway.plugin import register
 
 
@@ -199,10 +200,11 @@ def test_attachment_staging_is_account_local_and_expires_after_ack_or_ttl(tmp_pa
         size_bytes=len(body),
         sha256=digest,
         correlation_id="cor_ttl",
-        expires_at="2026-08-24T00:00:00.000Z",
+        now="2030-01-01T00:00:00.000Z",
+        expires_at="2030-01-01T01:00:00.000Z",
     )
     alice.attachments.upload_content(expiring["attachmentId"], body)
-    assert alice.attachments.expire_due("2026-08-24T00:00:01.000Z") == 1
+    assert alice.attachments.expire_due("2030-01-01T01:00:01.000Z") == 1
     assert alice.attachments.get(expiring["attachmentId"])["state"] == "expired"
     assert alice.attachments.get(expiring["attachmentId"])["hasStagedBytes"] is False
 
@@ -245,6 +247,7 @@ def test_attachment_reconciliation_recovers_an_orphaned_stage_for_the_same_accou
         size_bytes=len(body),
         sha256=hashlib.sha256(body).hexdigest(),
         correlation_id="cor_recover",
+        now="2030-01-01T00:00:00.000Z",
         expires_at="2030-01-01T00:10:00.000Z",
     )
     stage_path = account.paths.attachments / f"{attachment['attachmentId']}.stage"
@@ -268,6 +271,7 @@ def test_attachment_reconciliation_failure_protects_stage_until_next_scan(tmp_pa
         size_bytes=len(body),
         sha256=hashlib.sha256(body).hexdigest(),
         correlation_id="cor_reconcile",
+        now="2030-01-01T00:00:00.000Z",
         expires_at="2030-01-01T00:10:00.000Z",
     )
     stage_path = account.paths.attachments / f"{attachment['attachmentId']}.stage"
@@ -311,6 +315,76 @@ def test_attachment_cas_is_not_removed_while_another_account_local_attachment_re
         account.attachments.mark_delivered(item["attachmentId"])
     account.attachments.acknowledge(first["attachmentId"], "cor_cas_ack")
     assert account.attachments.get(second["attachmentId"])["hasStagedBytes"] is True
+
+
+def _attachment_input(client_id="att_policy", media_type="text/plain", size_bytes=4):
+    return {
+        "client_attachment_id": client_id,
+        "filename": "policy.txt",
+        "media_type": media_type,
+        "size_bytes": size_bytes,
+        "sha256": hashlib.sha256(b"data").hexdigest(),
+        "correlation_id": "cor_policy",
+        "now": "2030-01-01T00:00:00.000Z",
+    }
+
+
+def _force_attachment_expired(account, attachment_id):
+    account.store.database.execute(
+        "UPDATE attachments SET expires_at = ? WHERE attachment_id = ?",
+        ("2000-01-01T00:00:00.000Z", attachment_id),
+    )
+
+
+def test_attachment_policy_rejects_size_media_and_ttl_bypass(tmp_path):
+    core = create_gateway_core(storage_root=tmp_path)
+    account = core.open_gateway_account("acct_policy")
+
+    with pytest.raises(GatewayError) as too_large:
+        account.attachments.create(**_attachment_input("att_too_large", size_bytes=26_214_401))
+    assert too_large.value.code == "ATTACHMENT_LIMIT_EXCEEDED"
+
+    with pytest.raises(GatewayError) as invalid_media:
+        account.attachments.create(**_attachment_input("att_invalid_media", media_type="application/x-executable"))
+    assert invalid_media.value.code == "ATTACHMENT_LIMIT_EXCEEDED"
+
+    with pytest.raises(GatewayError) as ttl_bypass:
+        account.attachments.create(
+            **_attachment_input("att_ttl_bypass"),
+            expires_at="2026-08-29T00:00:00.000Z",
+        )
+    assert ttl_bypass.value.code == "SCHEMA_INVALID"
+    assert DEFAULT_MAX_BODY_BYTES >= 26_214_400
+
+
+def test_expired_attachment_is_rejected_at_upload_commit_read_and_message_reference(tmp_path):
+    core = create_gateway_core(storage_root=tmp_path)
+    account = core.open_gateway_account("acct_policy_expiry")
+    body = b"data"
+
+    upload_late = account.attachments.create(**_attachment_input("att_upload_late"))
+    _force_attachment_expired(account, upload_late["attachmentId"])
+    with pytest.raises(GatewayError) as late_upload:
+        account.attachments.upload_content(upload_late["attachmentId"], body)
+    assert late_upload.value.code == "ATTACHMENT_EXPIRED"
+    late_read = account.attachments.get(upload_late["attachmentId"])
+    assert late_read["state"] == "expired"
+    assert late_read["hasStagedBytes"] is False
+
+    late_commit = account.attachments.create(**_attachment_input("att_commit_late"))
+    account.attachments.upload_content(late_commit["attachmentId"], body)
+    _force_attachment_expired(account, late_commit["attachmentId"])
+    with pytest.raises(GatewayError) as commit_error:
+        account.attachments.commit(late_commit["attachmentId"])
+    assert commit_error.value.code == "ATTACHMENT_EXPIRED"
+
+    late_message = account.attachments.create(**_attachment_input("att_message_late"))
+    account.attachments.upload_content(late_message["attachmentId"], body)
+    account.attachments.commit(late_message["attachmentId"])
+    _force_attachment_expired(account, late_message["attachmentId"])
+    with pytest.raises(GatewayError) as message_error:
+        account.attachments.require_verified_for_message(late_message["attachmentId"])
+    assert message_error.value.code == "ATTACHMENT_EXPIRED"
 
 
 def _device_input(request_id, risk="read", now="2026-08-24T12:00:00.000Z"):

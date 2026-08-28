@@ -46,6 +46,31 @@ class TransactionOutcomeUnknown(GatewayError):
         super().__init__("OUTCOME_UNKNOWN", details)
 
 
+@dataclass(frozen=True)
+class AttachmentPolicy:
+    """Immutable attachment limits shared by negotiation and every data path."""
+
+    max_single_attachment_bytes: int = 26_214_400
+    max_message_attachment_bytes: int = 52_428_800
+    allowed_media_types: tuple[str, ...] = (
+        "image/jpeg", "image/png", "image/webp", "application/pdf",
+        "text/plain", "audio/mp4",
+    )
+    attachment_ttl_seconds: int = 3600
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "allowed_media_types", tuple(self.allowed_media_types))
+        if self.max_single_attachment_bytes <= 0:
+            raise ValueError("max_single_attachment_bytes must be positive")
+        if self.max_message_attachment_bytes < self.max_single_attachment_bytes:
+            raise ValueError("message attachment limit must cover one attachment")
+        if self.attachment_ttl_seconds <= 0 or not self.allowed_media_types:
+            raise ValueError("attachment policy must define positive limits and media types")
+
+
+DEFAULT_ATTACHMENT_POLICY = AttachmentPolicy()
+
+
 @dataclass(frozen=True, init=False)
 class VerifiedRequestContext:
     account_id: str
@@ -881,11 +906,15 @@ class EventStore:
 
 
 class AttachmentStore:
-    def __init__(self, account_id: str, paths: AccountPaths, store: AccountStore, audit: AuditStore):
+    def __init__(
+        self, account_id: str, paths: AccountPaths, store: AccountStore,
+        audit: AuditStore, policy: AttachmentPolicy | None = None,
+    ):
         self.account_id = account_id
         self.paths = paths
         self.store = store
         self.audit = audit
+        self.policy = policy or DEFAULT_ATTACHMENT_POLICY
         self.cas_dir = paths.attachments / "cas"
         self.cas_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         try:
@@ -897,7 +926,26 @@ class AttachmentStore:
     def create(self, **input: Any) -> dict[str, Any]:
         current = _now(input.get("now"))
         attachment_id = f"att_{uuid.uuid4()}"
-        expires_at = input.get("expires_at") or input.get("expiresAt") or iso_millis(current + timedelta(hours=1))
+        media_type = input["media_type"] if "media_type" in input else input["mediaType"]
+        size_bytes = int(input["size_bytes"] if "size_bytes" in input else input["sizeBytes"])
+        if (
+            size_bytes < 0
+            or size_bytes > self.policy.max_single_attachment_bytes
+            or media_type not in self.policy.allowed_media_types
+        ):
+            raise GatewayError("ATTACHMENT_LIMIT_EXCEEDED")
+        requested_expiry = input.get("expires_at") or input.get("expiresAt")
+        if requested_expiry is None:
+            expires_at = iso_millis(current + timedelta(seconds=self.policy.attachment_ttl_seconds))
+        else:
+            try:
+                expiry = _now(requested_expiry)
+            except (TypeError, ValueError, OverflowError) as exc:
+                raise GatewayError("SCHEMA_INVALID") from exc
+            maximum_expiry = current + timedelta(seconds=self.policy.attachment_ttl_seconds)
+            if expiry <= current or expiry > maximum_expiry:
+                raise GatewayError("SCHEMA_INVALID")
+            expires_at = iso_millis(expiry)
         self.store.database.execute(
             """
             INSERT INTO attachments(attachment_id, client_attachment_id, filename, media_type, size_bytes,
@@ -907,22 +955,19 @@ class AttachmentStore:
             (
                 attachment_id,
                 input["client_attachment_id"] if "client_attachment_id" in input else input["clientAttachmentId"],
-                input["filename"], input["media_type"] if "media_type" in input else input["mediaType"],
-                int(input["size_bytes"] if "size_bytes" in input else input["sizeBytes"]),
+                input["filename"], media_type, size_bytes,
                 input["sha256"], iso_millis(current), expires_at,
             ),
         )
         self.audit.append(
             "attachment.created", {"accountId": self.account_id},
-            {"attachmentId": attachment_id, "mediaType": input.get("mediaType", input.get("media_type")), "sizeBytes": input.get("sizeBytes", input.get("size_bytes"))},
+            {"attachmentId": attachment_id, "mediaType": media_type, "sizeBytes": size_bytes},
             input["correlation_id"] if "correlation_id" in input else input["correlationId"], current,
         )
-        return self.get(attachment_id)
+        return self.get(attachment_id, current)
 
-    def get(self, attachment_id: str) -> dict[str, Any]:
-        row = self.store.database.execute("SELECT * FROM attachments WHERE attachment_id = ?", (attachment_id,)).fetchone()
-        if row is None:
-            raise GatewayError("ATTACHMENT_EXPIRED")
+    def get(self, attachment_id: str, now: datetime | str | None = None) -> dict[str, Any]:
+        row, _ = self._expire_if_due(attachment_id, _now(now))
         path = row["content_path"]
         return {
             "attachmentId": row["attachment_id"], "state": row["state"],
@@ -931,12 +976,17 @@ class AttachmentStore:
             "hasStagedBytes": bool(path and Path(path).is_file()), "expiresAt": row["expires_at"],
         }
 
-    def require_verified_for_message(self, attachment_id: str) -> None:
-        if self.get(attachment_id)["state"] != "verified":
+    def require_verified_for_message(self, attachment_id: str, now: datetime | str | None = None) -> None:
+        if self.get(attachment_id, now)["state"] != "verified":
             raise GatewayError("ATTACHMENT_EXPIRED")
 
-    def upload_content(self, attachment_id: str, content: bytes) -> dict[str, Any]:
+    def upload_content(
+        self, attachment_id: str, content: bytes, now: datetime | str | None = None,
+    ) -> dict[str, Any]:
         stage_path = self.paths.attachments / f"{attachment_id}.stage"
+        row, expired = self._expire_if_due(attachment_id, _now(now))
+        if expired or row["state"] == "expired":
+            raise GatewayError("ATTACHMENT_EXPIRED")
         try:
             with self.store.transaction():
                 row = self._row(attachment_id)
@@ -957,10 +1007,13 @@ class AttachmentStore:
             # retain and reconcile that unique stage rather than discarding it.
             self._reconcile_staged_files()
             raise
-        return self.get(attachment_id)
+        return self.get(attachment_id, now)
 
-    def commit(self, attachment_id: str) -> dict[str, Any]:
+    def commit(self, attachment_id: str, now: datetime | str | None = None) -> dict[str, Any]:
         mismatch = False
+        row, expired = self._expire_if_due(attachment_id, _now(now))
+        if expired or row["state"] == "expired":
+            raise GatewayError("ATTACHMENT_EXPIRED")
         with self.store.transaction():
             row = self._row(attachment_id)
             stage_path = self._require_content_path(row)
@@ -986,10 +1039,13 @@ class AttachmentStore:
                 )
         if mismatch:
             raise GatewayError("ATTACHMENT_DIGEST_MISMATCH")
-        return self.get(attachment_id)
+        return self.get(attachment_id, now)
 
     def mark_delivered(self, attachment_id: str, now: datetime | str | None = None) -> dict[str, Any]:
         current = _now(now)
+        row, expired = self._expire_if_due(attachment_id, current)
+        if expired or row["state"] == "expired":
+            raise GatewayError("ATTACHMENT_EXPIRED")
         with self.store.transaction():
             row = self._row(attachment_id)
             state = next_attachment_state(row["state"], "deliver")
@@ -997,10 +1053,13 @@ class AttachmentStore:
                 "UPDATE attachments SET state = ?, delivered_at = ? WHERE attachment_id = ?",
                 (state, iso_millis(current), attachment_id),
             )
-        return self.get(attachment_id)
+        return self.get(attachment_id, now)
 
     def acknowledge(self, attachment_id: str, correlation_id: str, now: datetime | str | None = None) -> dict[str, Any]:
         current = _now(now)
+        row, expired = self._expire_if_due(attachment_id, current)
+        if expired or row["state"] == "expired":
+            raise GatewayError("ATTACHMENT_EXPIRED")
         paths: list[Path] = []
         with self.store.transaction():
             row = self._row(attachment_id)
@@ -1025,7 +1084,7 @@ class AttachmentStore:
                 paths = [path for path in paths if path != cas_path]
         for path in paths:
             self._move_to_trash(path)
-        return self.get(attachment_id)
+        return self.get(attachment_id, now)
 
     def expire_due(self, now: datetime | str | None = None) -> int:
         current = _now(now)
@@ -1054,7 +1113,8 @@ class AttachmentStore:
                 self._move_to_trash(path)
         return expired
 
-    def cleanup(self) -> int:
+    def cleanup(self, now: datetime | str | None = None) -> int:
+        self.expire_due(now)
         protected = self._reconcile_staged_files()
         paths: list[Path] = []
         with self.store.transaction():
@@ -1065,11 +1125,10 @@ class AttachmentStore:
                 for key in ("content_path", "cas_path"):
                     if row[key]:
                         paths.append(Path(row[key]))
-                if row["content_path"] or row["cas_path"]:
-                    self.store.database.execute(
-                        "UPDATE attachments SET state = ?, content_path = NULL, cas_path = NULL WHERE attachment_id = ?",
-                        (next_attachment_state(row["state"], "cleanup"), row["attachment_id"]),
-                    )
+                self.store.database.execute(
+                    "UPDATE attachments SET state = ?, content_path = NULL, cas_path = NULL WHERE attachment_id = ?",
+                    (next_attachment_state(row["state"], "cleanup"), row["attachment_id"]),
+                )
             referenced = {
                 Path(item[0]) for item in self.store.database.execute(
                     "SELECT content_path FROM attachments WHERE content_path IS NOT NULL"
@@ -1091,6 +1150,28 @@ class AttachmentStore:
             if self._move_to_trash(path):
                 deleted += 1
         return deleted
+
+    def _expire_if_due(self, attachment_id: str, current: datetime) -> tuple[sqlite3.Row, bool]:
+        paths: list[Path] = []
+        expired = False
+        with self.store.transaction():
+            row = self._row(attachment_id)
+            if (
+                _now(row["expires_at"]) <= current
+                and row["state"] in {"created", "uploading", "verified", "delivered"}
+            ):
+                for key in ("content_path", "cas_path"):
+                    if row[key]:
+                        paths.append(Path(row[key]))
+                self.store.database.execute(
+                    "UPDATE attachments SET state = 'expired', content_path = NULL, cas_path = NULL WHERE attachment_id = ?",
+                    (attachment_id,),
+                )
+                row = self._row(attachment_id)
+                expired = True
+        for path in paths:
+            self._move_to_trash(path)
+        return row, expired
 
     def _row(self, attachment_id: str) -> sqlite3.Row:
         row = self.store.database.execute("SELECT * FROM attachments WHERE attachment_id = ?", (attachment_id,)).fetchone()
@@ -1422,11 +1503,15 @@ class DeviceRequestStore:
 
 
 class ConversationPort:
-    def __init__(self, account_id: str, store: AccountStore, attachments: AttachmentStore, audit: AuditStore):
+    def __init__(
+        self, account_id: str, store: AccountStore, attachments: AttachmentStore,
+        audit: AuditStore, policy: AttachmentPolicy | None = None,
+    ):
         self.account_id = account_id
         self.store = store
         self.attachments = attachments
         self.audit = audit
+        self.policy = policy or DEFAULT_ATTACHMENT_POLICY
 
     def create(self, client_conversation_id: str, title: str | None, correlation_id: str, now: datetime | str | None = None) -> dict[str, Any]:
         current = _now(now)
@@ -1448,12 +1533,18 @@ class ConversationPort:
         correlation_id: str, now: datetime | str | None = None,
     ) -> dict[str, Any]:
         current = _now(now)
+        total_attachment_bytes = 0
+        for attachment_id in attachment_ids:
+            attachment = self.attachments.get(attachment_id, current)
+            if attachment["state"] != "verified":
+                raise GatewayError("ATTACHMENT_EXPIRED")
+            total_attachment_bytes += int(attachment["sizeBytes"])
+        if total_attachment_bytes > self.policy.max_message_attachment_bytes:
+            raise GatewayError("ATTACHMENT_LIMIT_EXCEEDED")
         with self.store.transaction():
             row = self.store.database.execute("SELECT conversation_id FROM conversations WHERE conversation_id = ?", (conversation_id,)).fetchone()
             if row is None:
                 raise GatewayError("SCHEMA_INVALID")
-            for attachment_id in attachment_ids:
-                self.attachments.require_verified_for_message(attachment_id)
             message_id = f"msg_{uuid.uuid4()}"
             self.store.database.execute(
                 "INSERT INTO messages(message_id, conversation_id, client_message_id, created_at, attachment_ids_json) VALUES (?, ?, ?, ?, ?)",
@@ -1483,7 +1574,11 @@ class ConversationPort:
 
 
 class GatewayAccount:
-    def __init__(self, account_id: str, paths: AccountPaths, store: AccountStore, contracts: ContractRegistry | None = None):
+    def __init__(
+        self, account_id: str, paths: AccountPaths, store: AccountStore,
+        contracts: ContractRegistry | None = None,
+        attachment_policy: AttachmentPolicy | None = None,
+    ):
         self.account_id = account_id
         self.accountId = account_id
         self.paths = paths
@@ -1492,9 +1587,10 @@ class GatewayAccount:
         self.masterKeyRef = self.master_key_ref
         self.audit = AuditStore(store, account_id)
         self.events = EventStore(store)
-        self.attachments = AttachmentStore(account_id, paths, store, self.audit)
+        self.attachment_policy = attachment_policy or DEFAULT_ATTACHMENT_POLICY
+        self.attachments = AttachmentStore(account_id, paths, store, self.audit, self.attachment_policy)
         self.device_requests = DeviceRequestStore(account_id, store, self.audit, self.events, contracts)
-        self.conversations = ConversationPort(account_id, store, self.attachments, self.audit)
+        self.conversations = ConversationPort(account_id, store, self.attachments, self.audit, self.attachment_policy)
         self.sessions = SessionService(account_id, store, self.audit)
         self.deviceRequests = self.device_requests
         self.masterKeyRef = self.master_key_ref
@@ -1683,6 +1779,7 @@ def maximum_device_request_queue_seconds(risk: str) -> int:
 _PERSISTABLE_ERRORS = {
     "SCHEMA_INVALID", "IDENTITY_OVERRIDE_REJECTED", "PAIRING_GENERATION_STALE",
     "GRANT_STALE", "IDEMPOTENCY_CONFLICT", "OUTCOME_UNKNOWN", "ATTACHMENT_DIGEST_MISMATCH",
+    "ATTACHMENT_LIMIT_EXCEEDED",
     "ATTACHMENT_EXPIRED", "CURSOR_CONFLICT", "CURSOR_EXPIRED", "INVALID_STATE_TRANSITION",
 }
 
@@ -1701,6 +1798,7 @@ class GatewayCore:
     def __init__(
         self, storage_root: str | Path | None = None, secret_store: Any = None,
         contract_root: str | Path | None = None, commit_hook: Any = None,
+        attachment_policy: AttachmentPolicy | None = None,
     ):
         self.storage_root = Path(storage_root or default_hermes_gateway_root()).resolve()
         self.secret_store = secret_store
@@ -1708,6 +1806,7 @@ class GatewayCore:
         self._contracts: ContractRegistry | None = None
         self._pending_negotiations: dict[str, dict[str, Any]] = {}
         self.commit_hook = commit_hook
+        self.attachment_policy = attachment_policy or DEFAULT_ATTACHMENT_POLICY
 
     @property
     def contracts(self) -> ContractRegistry:
@@ -1730,7 +1829,7 @@ class GatewayCore:
         # Resolve and validate the opaque account ID before constructing SQLite.
         paths = account_paths(self.storage_root, account_id)
         store = AccountStore(paths, self._master_key_ref(paths, account_id), self.commit_hook)
-        return GatewayAccount(account_id, paths, store, self.contracts)
+        return GatewayAccount(account_id, paths, store, self.contracts, self.attachment_policy)
 
     def _negotiate(self, account: GatewayAccount, context: Mapping[str, Any], body: Any, now: datetime) -> Mapping[str, Any]:
         response = self._build_negotiation_response(body, account)
@@ -1771,10 +1870,11 @@ class GatewayCore:
             "protocol": {"major": 2, "minor": 0},
             "features": {"auth": auth, **required},
             "limits": {
-                "maxSingleAttachmentBytes": 26_214_400,
-                "maxMessageAttachmentBytes": 52_428_800,
-                "allowedMediaTypes": ["image/jpeg", "image/png", "image/webp", "application/pdf", "text/plain", "audio/mp4"],
-                "attachmentTtlSeconds": 3600, "eventRetentionSeconds": 86_400, "maxClockSkewSeconds": 120,
+                "maxSingleAttachmentBytes": self.attachment_policy.max_single_attachment_bytes,
+                "maxMessageAttachmentBytes": self.attachment_policy.max_message_attachment_bytes,
+                "allowedMediaTypes": list(self.attachment_policy.allowed_media_types),
+                "attachmentTtlSeconds": self.attachment_policy.attachment_ttl_seconds,
+                "eventRetentionSeconds": 86_400, "maxClockSkewSeconds": 120,
             },
             "gatewayIdentity": {"deploymentId": deployment_id, "tlsSpkiSha256": tls_identity},
         }
@@ -1970,14 +2070,18 @@ class GatewayCore:
                         if not isinstance(body, (bytes, bytearray, memoryview)):
                             raise GatewayError("SCHEMA_INVALID")
                         return _success(context, {"attachment": account.attachments.upload_content(
-                            attachment_content.group(1), bytes(body),
+                            attachment_content.group(1), bytes(body), _request_now(request),
                         )})
                     attachment_commit = re.fullmatch(r"/agent-life/v2/attachments/([^/]+)/commit", str(target))
                     if method == "POST" and attachment_commit:
-                        return _success(context, {"attachment": account.attachments.commit(attachment_commit.group(1))})
+                        return _success(context, {"attachment": account.attachments.commit(
+                            attachment_commit.group(1), _request_now(request),
+                        )})
                     attachment_get = re.fullmatch(r"/agent-life/v2/attachments/([^/]+)", str(target))
                     if method == "GET" and attachment_get:
-                        return _success(context, {"attachment": account.attachments.get(attachment_get.group(1))})
+                        return _success(context, {"attachment": account.attachments.get(
+                            attachment_get.group(1), _request_now(request),
+                        )})
                     claim_match = re.fullmatch(r"/agent-life/v2/device-requests/([^/]+)/claim", str(target))
                     if method == "POST" and claim_match:
                         return _success(context, {"receipt": account.device_requests.claim(

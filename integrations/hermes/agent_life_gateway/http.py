@@ -13,11 +13,11 @@ from .admin import (
     is_host_api_compatible,
     normalize_host_api,
 )
-from .core import GatewayCore, create_gateway_core
+from .core import DEFAULT_ATTACHMENT_POLICY, GatewayCore, create_gateway_core
 
 
 EXPOSURE_MODES = ("host-route", "loopback-reverse-proxy", "direct-tls")
-DEFAULT_MAX_BODY_BYTES = 1024 * 1024
+DEFAULT_MAX_BODY_BYTES = DEFAULT_ATTACHMENT_POLICY.max_single_attachment_bytes
 _RESPONSE_HEADERS = {"content-type": "application/json; charset=utf-8"}
 
 
@@ -223,10 +223,18 @@ def create_gateway_routes(
     verify_request: Callable[[Mapping[str, Any]], Any] | None = None,
     max_body_bytes: int | None = None,
 ) -> list[GatewayHttpRoute]:
+    policy = _get(core, "attachment_policy")
+    negotiated_limit = _get(policy, "max_single_attachment_bytes", default=DEFAULT_MAX_BODY_BYTES)
+    if max_body_bytes is None or max_body_bytes < 0:
+        effective_body_limit = int(negotiated_limit)
+    else:
+        effective_body_limit = int(max_body_bytes)
+        if policy is not None and effective_body_limit < int(negotiated_limit):
+            raise ValueError("REQUEST_BODY_LIMIT_INCOMPATIBLE")
     services = _RouteServices(
         core=core, host_version=host_version, host_api=normalize_host_api(host_api),
         verify_request=verify_request,
-        max_body_bytes=DEFAULT_MAX_BODY_BYTES if max_body_bytes is None or max_body_bytes < 0 else int(max_body_bytes),
+        max_body_bytes=effective_body_limit,
     )
     definitions = (
         ("/agent-life/v2/negotiate", "exact"), ("/agent-life/v2/events", "exact"),
