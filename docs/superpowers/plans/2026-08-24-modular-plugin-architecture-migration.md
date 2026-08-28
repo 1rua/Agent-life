@@ -601,7 +601,7 @@ git commit -m "重构: 建立 Android 插件宿主模块边界"
 }
 ```
 
-- [ ] **Step 2: 运行并确认红灯**
+- [x] **Step 2: 运行并确认红灯**
 
 Run: `cd apps/android && ./gradlew :gateway-client:testDebugUnitTest`
 
@@ -684,7 +684,7 @@ git commit -m "新增: 实现多账号会话与可撤销自动登录"
 - Produces: `DeviceRequestClient.submitResult(claim: ClaimReceipt, result): Unit`
 - Owns: HTTP raw header/target/body bytes、SSE byte parser、真机 TLS 和 claim/result transport；不把本地 TypeScript 向量当作 Android 证据
 
-- [ ] **Step 1: 写分片 SSE、断线游标、取消意图、ClaimReceipt 和摘要不符失败测试**
+- [x] **Step 1: 写分片 SSE、断线游标、取消意图、ClaimReceipt 和摘要不符失败测试**
 
 ```kotlin
 @Test fun resumesAfterLastCompleteEventOnly() = runTest {
@@ -699,7 +699,9 @@ Run: `cd apps/android && ./gradlew :gateway-client:testDebugUnitTest`
 
 Expected: FAIL，HTTPS/SSE/附件实现尚不存在。
 
-- [ ] **Step 3: 基于 `HttpsURLConnection` 实现受限客户端**
+RED 取证（2026-08-29）：`./gradlew :gateway-client:testDebugUnitTest` → `compileDebugUnitTestKotlin FAILED`，`Unresolved reference` 覆盖 `SseParser`、`AttachmentUploader`、`DeviceRequestClient`、`ClaimReceipt`、`CanonicalTarget`、`RawHeaders`、`CanonicalJson`、`DispatchedSchemaRegistry`、`EventCursorStore` 等全部待测组件。
+
+- [x] **Step 3: 基于 `HttpsURLConnection` 实现受限客户端**
 
 ```kotlin
 interface GatewayByteTransport {
@@ -710,11 +712,35 @@ interface GatewayByteTransport {
 
 默认实现只接受 `https` URL、系统信任或 profile 固定 SPKI；签名必须从实际发送的 canonical raw target 和 exact body bytes 构造，并从 raw header 列表失败关闭认证和条件 singleton 的重复或折叠字段。SSE 只在完整空行后提交事件与游标，恢复时以 canonical query cursor 为权威；`device.request.cancel.requested` 只记录取消意图，不能被当作已经取消。附件使用创建 → content → commit，读取 `ContentResolver` 流时同步计算长度和 SHA-256。设备请求在任何副作用前调用幂等 claim，保存服务端 `ClaimReceipt`；`submitResult(claim, result)` 只从 receipt 原样序列化 `claimId` 与 `grantRevision`，身份/generation 由服务端 receipt 和验证上下文核对。任一绑定不匹配时失败关闭。Kotlin 的 dispatched Schema 向量测试必须读取同一 `dispatched-schema-fixtures.json`、重算四个 digest 并只接受 `gateway-core-fixtures-v1`，不得维护 Android 本地 fixture 副本。
 
-- [ ] **Step 4: 运行协议向量和 TLS 真机测试**
+- [x] **Step 4: 运行协议向量和 TLS 真机测试**
 
 Run: `cd apps/android && ./gradlew :gateway-client:testDebugUnitTest :gateway-client:connectedDebugAndroidTest`
 
 Expected: PASS；自签名未固定、指纹变化、raw header 重复/折叠、非 canonical target、游标冲突、取消意图误报终态、摘要不符、超限、未 claim 即提交结果和 ClaimReceipt 任一绑定不匹配均失败关闭。
+
+GREEN 取证（2026-08-29，真机 SM-X710 / API 36，序列号 R52X909R9QT）：
+
+- `:gateway-client:testDebugUnitTest` → 54 tests, 0 failures
+- `:gateway-client:connectedDebugAndroidTest` → 14 tests, 0 failures（6 Keystore + 8 TLS）
+- 根 `./gradlew check` → BUILD SUCCESSFUL（架构门禁未被破坏）
+
+覆盖项：分片 SSE（含 UTF-8 字符被切断）、仅在完整空行后提交游标、CRLF、多行 data、注释行、取消意图不算终态、raw header 重复/折叠/大小写变体、非 canonical target（含未排序 query、小写 percent-encoding、`..` 段）、签名 preimage 恰好十行、摘要不符与超限在上传前失败、三步顺序、commit 失败不外显为成功、未 claim 即提交失败、ClaimReceipt 各绑定篡改失败、claim 幂等、共享 fixture 四个 digest 重算、只接受 `gateway-core-fixtures-v1`、dispatch 不得自带 schema/digest。
+
+变异验证（证明测试非空转，探针均已还原）：
+
+| 注入 | 反应 |
+|---|---|
+| `SpkiPinning` 吞掉 PIN_MISMATCH | 真机 2 项失败 |
+| SSE 解析器改用整个 buffer 而非终止符前 | 单元 2 项失败（`resumesAfterLastCompleteEventOnly` 等） |
+
+实现说明与偏离：
+
+- 已自实现 JSON 解析与 RFC 8785 规范化（`schema/Json.kt`）。平台自带 `org.json` 在本地 JVM 单元测试中会被替换成"调用即抛异常"的桩，无法用于重算 digest。
+- 错误分类与 TypeScript 契约**有意不同**：契约区分 `SCHEMA_INVALID` 与 `NON_CANONICAL_TARGET`，而 Android 侧任何非规范 target 一律以 `NON_CANONICAL_TARGET` 失败——因为对 Android 而言其含义只有一个：即将签名的 target 不是规范形式。
+- 时间戳格式化用 `uuuu-MM-dd'T'HH:mm:ss.SSS'Z'`。`DateTimeFormatter.ISO_INSTANT` 在毫秒为 0 时会省略小数部分，会静默产生 Gateway 无法复现的 preimage。
+- pin 校验放在 `connect()` 之后对实际协商出的证书链执行，而非包在自定义 `SSLSocketFactory` 里；`SpkiPinning` 额外暴露证书级入口，使 pin 规则可离线确定性验证（无需外网）。
+- 真机 TLS 测试全部离线，用设备信任库中已有的真实证书做正反验证，结果不依赖网络可达性。
+- `ConversationClient` 的 `threads()` 为初次读取 + `conversation.updated` 事件驱动刷新；账号/Gateway 归属由服务端判定，客户端不在 body 中提交 accountId。
 
 - [ ] **Step 5: 提交**
 
