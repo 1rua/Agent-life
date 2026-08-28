@@ -491,7 +491,7 @@ git commit -m "新增: 建立双宿主 Gateway v2 一致性门禁"
 - Produces: 只允许 `gateway-client` 和经审计的 Companion transport adapter 拥有出站网络实现
 - Produces: App 可依赖平台内核端口，但不依赖 collector、tsnet 或具体插件实现
 
-- [ ] **Step 1: 添加真实 HTTPS connection factory 并让旧全仓禁令红灯**
+- [x] **Step 1: 添加真实 HTTPS connection factory 并让旧全仓禁令红灯**
 
 ```kotlin
 internal class HttpsConnectionFactory {
@@ -502,13 +502,31 @@ internal class HttpsConnectionFactory {
 }
 ```
 
-- [ ] **Step 2: 运行并确认当前架构红灯**
+- [x] **Step 2: 运行并确认当前架构红灯**
 
 Run: `cd apps/android && ./gradlew check`
 
 Expected: FAIL，旧 `noVpnSurfaceCheck` 仍全仓禁止 `URLConnection`。
 
-- [ ] **Step 3: 注册空的新模块并把门禁改为所有权规则**
+实际取证与前置修复（2026-08-29）：
+
+**基线在 HEAD（`5d34a09`）就已 FAIL，但原因与计划预期不同**，且必须先修复才能验证 Step 4 的 PASS。原门禁有三处缺陷：
+
+1. 扫描 `walkTopDown()` 覆盖了 `build/`，把过期的 `androidTest` 结果 XML 当成源码报违规——clean 构建后违规即消失，门禁不可复现。
+2. 两个**断言"不存在"**的审计测试被门禁自身标记：`P0tAppNoVpnSurfaceInstrumentedTest.kt` 与 `P0tVpnSurfaceInstrumentedTest.kt` 为验证"本 app 不创建 VpnService"必须写出 `VpnService` / `BIND_VPN_SERVICE`（含 KDoc 注释与测试方法名），属自指误报。
+3. 扫描根是硬编码的 14 个旧模块名，新模块注册后不会被自动覆盖——因此 Step 1 单纯加代码并不会触发红灯。
+
+对应修复（均已保留规则本意）：排除 `build/`、`.gradle/`、`.cxx/`、`generated/`；按路径窄口径豁免上述两个审计测试文件；扫描根改为从 `rootProject.subprojects` 派生。
+
+修复后基线 GREEN：`./gradlew check` → BUILD SUCCESSFUL（862 tasks）。
+
+**Ruling（关于计划内部矛盾）**：计划 Step 3 要求"保留 VpnService 全仓禁令"，同时 Step 4 要求 `./gradlew check` PASS，但仓库内存在必须写出 `VpnService` 的审计测试——两条要求无法同时满足。裁定：门禁的语义是"禁止产品**拥有或使用**这些面"，而断言其**不存在**的测试正是执行该规则的力量，不构成违规，故按路径白名单豁免（白名单显式可审计，不含通配）。若此裁定有误，代价是这两个测试文件可写出 VpnService 字样——但它们不产生任何 VPN 实现，且真机审计仍独立运行。
+
+**Ruling（关于 Step 2 红灯来源）**：为让 Step 1 的红灯真实出现，扫描根改为自动派生而非硬编码列表——这样新模块一经注册即纳入门禁。这是实现 Step 2 预期 RED 的前提。
+
+随后 Step 1 生效的真实 RED：`HttpsConnectionFactory.kt:17: forbidden surface`（`url.openConnection()`）。
+
+- [x] **Step 3: 注册空的新模块并把门禁改为所有权规则**
 
 ```kotlin
 val networkOwnerModules = setOf("gateway-client", "tailscale-companion")
@@ -519,11 +537,26 @@ val forbiddenOutsideOwners = listOf(
 
 保留 `VpnService`、路由、代理、listener 等 App 主包禁令；HTTP 类不再全仓禁止，而是在非 owner 模块出现时失败。
 
-- [ ] **Step 4: 运行根门禁**
+- [x] **Step 4: 运行根门禁**
 
 Run: `cd apps/android && ./gradlew check`
 
 Expected: PASS；`gateway-client` 可以拥有 HTTPS 实现，其他模块出现相同网络类时门禁失败。
+
+GREEN 取证（2026-08-29）：`./gradlew check` → BUILD SUCCESSFUL（1148 tasks，较基线 862 增加新模块的 286 项）。
+
+四项负向验证（证明门禁非空转，探针已全部移入 `/tmp/Agent-life-trash/`）：
+
+| 注入位置 | 内容 | 结果 |
+|---|---|---|
+| `core-model`（非 owner） | `URL(...).openConnection()` | FAIL ✓ |
+| `gateway-client`（owner） | 同上代码 | PASS ✓ |
+| `gateway-client`（owner） | 引用 `VpnService` | FAIL ✓（VpnService 仍全仓禁止） |
+| `core-model`（非 owner） | `ServerSocket()` | FAIL ✓（修复后门禁仍有效） |
+
+实现说明：`forbiddenOutsideOwners` 采用计划给定正则，并补入 `ServerSocket|DatagramSocket|Socket` 与 `\b(?:URL|openConnection|createSocket)\s*\(`，否则原 `alwaysForbidden` 中的 socket 项会在放宽 HTTP 时被一并放开，形成规则漏洞。`plugin-package` 的 namespace 用 `com.agentlife.plugin.pkg`，因 `package` 是 Kotlin 保留字。
+
+已知前向依赖：`networkOwnerModules` 含 `tailscale-companion`，但该模块要到 Task 14 才创建。届时若 Tailscale 需要 `VpnService`，会与本门禁的"VpnService 全仓禁止"冲突——Task 14 需就此单独裁定（见账本）。
 
 - [ ] **Step 5: 提交**
 

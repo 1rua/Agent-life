@@ -30,6 +30,7 @@ include(
     ":capability-sync-runtime",
     ":core-model",
     ":control-ports",
+    ":gateway-client",
     ":policy-engine",
     ":notification-collector",
     ":sms-collector",
@@ -37,4 +38,9 @@ include(
     ":tailnet-core",
     ":transport",
     ":encrypted-store",
+    ":platform-kernel",
+    ":plugin-package",
+    ":plugin-runtime-wasm",
+    ":plugin-ui",
+    ":companion-bridge",
 )
