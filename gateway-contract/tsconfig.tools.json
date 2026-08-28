@@ -1,0 +1,10 @@
+{
+  "//": "The conformance runners import the OpenClaw integration sources, so this project matches the strictness of integrations/openclaw's own typecheck rather than the stricter contract-package flags.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "exactOptionalPropertyTypes": false,
+    "noUncheckedIndexedAccess": false
+  },
+  "include": ["tools/**/*.ts"]
+}

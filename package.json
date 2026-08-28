@@ -9,6 +9,7 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
+    "gateway:v2:conformance": "tsx gateway-contract/tools/run-openclaw-conformance.ts && python3 gateway-contract/tools/run-hermes-conformance.py && vitest run gateway-contract/test/cross-host-conformance.test.ts",
     "mvp:lock:check": "node --experimental-strip-types mvp-contract/tools/check-lock.ts"
   },
   "dependencies": {

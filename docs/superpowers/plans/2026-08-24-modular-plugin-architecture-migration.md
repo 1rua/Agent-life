@@ -405,7 +405,7 @@ git commit -m "新增: 实现 Hermes 原生 Gateway 插件"
 - Produces: 标准 JSONL `{ vectorId, operation, implementation, status, resultHash }`
 - Produces: 独立 OpenClaw runner 与 Hermes runner；两者都消费每个可执行 case，不共享运行二进制
 
-- [ ] **Step 1: 写结果哈希必须一致的失败测试**
+- [x] **Step 1: 写结果哈希必须一致的失败测试**
 
 ```ts
 expect(openClawResults.map(projectResult)).toEqual(hermesResults.map(projectResult));
@@ -413,13 +413,23 @@ expect(openClawResults.map(projectResult)).toEqual(hermesResults.map(projectResu
 
 每个 runner 先验证并读取同一共享 fixture registry，为 `schema.validate_dispatched` 重算四个规范 Schema digest，并从 `gateway-core-fixtures-v1` 构造 catalog/bindings；OpenClaw 和 Hermes 禁止内联或本地替换 fixture。随后构造契约闭合的 normalized actual result：value 为 `{ vectorId, operation, outcome: "value", value }`，error 为 `{ vectorId, operation, outcome: "error", code }`。`status` 只允许 `pass|fail`；`resultHash = "sha256:" + lowercaseHex(SHA-256(JCS_UTF8(normalizedActualResult)))`，不得包含 implementation、status、vendor diagnostics、堆栈、宿主 ID、时间或路径。
 
-- [ ] **Step 2: 运行并确认两个实现尚未统一输出**
+- [x] **Step 2: 运行并确认两个实现尚未统一输出**
 
 Run: `npm test -- gateway-contract/test/cross-host-conformance.test.ts`
 
 Expected: FAIL，runner 或标准结果尚不存在。
 
-- [ ] **Step 3: 实现两个 runner 和根命令**
+RED 取证（2026-08-29）：初始红灯来自 runner 与产物均不存在，报 `CONFORMANCE_ARTIFACTS_MISSING`。为证明门禁非空转，另做了三项负向注入并全部复现红灯：
+
+| 注入 | 结果 |
+|---|---|
+| OpenClaw `preimageHex` 改为大写 | `openclaw-typescript: 22/24 pass`，流水线退出码 1 |
+| 篡改产物中一条 `resultHash` | 哈希比对测试失败 2 项 |
+| manifest `recordsDigest` 写错 | 判定 `CONFORMANCE_ARTIFACTS_STALE` |
+
+负向注入后已全部还原。
+
+- [x] **Step 3: 实现两个 runner 和根命令**
 
 ```json
 {
@@ -431,11 +441,31 @@ Expected: FAIL，runner 或标准结果尚不存在。
 
 结果哈希只覆盖契约可观察结果，不包含宿主内部 ID、时间、路径或堆栈。
 
-- [ ] **Step 4: 运行完整一致性门禁**
+实现说明（2026-08-29）：
+
+- 根脚本使用 `python3` 而非 `python`：本仓库的 `tools/run-node24` 仅支持 Linux，且多数 Linux 发行版只提供 `python3`。需要覆盖时可用 `AGENT_LIFE_PYTHON` 指定解释器。
+- 新增 `gateway-contract/tools/conformance-artifacts.ts` 作为两个 runner 共享的产物读写层，保证 JSONL 与 manifest 形状不会在两个宿主间漂移；它同时负责在产物缺失或过期时重新拉起 runner 进程。
+- OpenClaw 侧新增共享向量消费入口 `integrations/openclaw/src/core/shared-vectors.ts`，并挂到 `GatewayCore.runSharedVectors(contractRoot?)`，与 Hermes `GatewayCore.run_shared_vectors()` 对称。
+- 产物写入 `gateway-contract/.artifacts/conformance/`（已加入 `.gitignore`，可重新生成）。manifest 的 `recordsDigest` 绑定 JSONL 字节，因此手工改写结果会被判过期并触发重跑，产物无法固化错误结果。
+- 两个 runner 分别是独立进程（tsx/TypeScript 与 Python），不共享运行二进制；均先校验共享 fixture registry 并重算四个规范 digest。
+- 契约自带类型检查使用 `gateway-contract/tsconfig.tools.json`（放宽 `exactOptionalPropertyTypes`/`noUncheckedIndexedAccess` 以匹配 OpenClaw 自身的严格度），不降低 `src`/`test` 的既有严格度。
+
+- [x] **Step 4: 运行完整一致性门禁**
 
 Run: `npm run gateway:v2:conformance`
 
 Expected: PASS，协商、认证、签名、SSE、附件、队列、删除和多账号隔离向量全部等价。
+
+GREEN 取证（2026-08-29，全部使用 `./tools/run-node24` 固定工具链 v24.18.0）：
+
+- `npm run gateway:v2:conformance`：`openclaw-typescript: 24/24 pass`、`hermes-python: 24/24 pass`、一致性测试 3 passed，退出码 0。
+- 根 `vitest run`：79 files / 751 tests passed。
+- `gateway-contract` 包测试：6 files / 156 tests passed。
+- OpenClaw 测试：10 files / 43 tests passed（含新增 `test/shared-vectors.test.ts`）。
+- Hermes 测试：`pytest integrations/hermes/tests -q` → 91 passed（与 Task 5 交接基线一致）。
+- 类型检查：根 `tsc --noEmit`、`gateway-contract` 与 `gateway-contract:tools`、`integrations/openclaw` 四项均退出码 0。
+
+范围澄清：本门禁证明的是**协议层**跨宿主等价（24 个共享向量覆盖 target 规范化、签名、严格 Schema、动态分派、附件/设备状态机、四档队列 TTL）。计划文本提到的“删除”和“多账号隔离”属于宿主运行时行为（SQLite、CAS、附件 staging、账号目录），不是纯 reducer 的可观察输出，因此不进入共享向量集，改由两个宿主各自的同构测试覆盖，详见 `docs/mvp/gateway-v2-conformance.md`。
 
 - [ ] **Step 5: 提交**
 

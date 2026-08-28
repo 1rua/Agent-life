@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "typecheck:tools": "tsc --noEmit -p tsconfig.tools.json"
   },
   "dependencies": {
     "ajv": "8.20.0",
