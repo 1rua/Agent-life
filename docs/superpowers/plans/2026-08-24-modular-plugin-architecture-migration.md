@@ -654,12 +654,14 @@ GREEN 取证（2026-08-29，真机 SM-X710 / API 36，序列号 R52X909R9QT）�
 - profile 持久化用 `InMemoryAccountProfileStore`，凭据持久化用 Keystore。符合 Step 4 的"进程重启可恢复 refresh"（该要求针对 refresh，已由真机测试证明）；账号 profile 的落盘持久化随 Task 15 接线时一并落地。
 - Keystore 实现中 profileId 一律 Base64-url 编码后再拼进 alias 与文件名，避免外部输入越出目录或 alias 命名空间。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add apps/android/gateway-client
 git commit -m "新增: 实现多账号会话与可撤销自动登录"
 ```
+
+提交 `a7134ec`，10 文件 / +673 行。
 
 ### Task 9: 实现 Android HTTPS、SSE 与附件客户端
 
