@@ -6,10 +6,20 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from agent_life_gateway.backup import GatewayBackupService
 from agent_life_gateway.core import GatewayError, create_gateway_core
 from agent_life_gateway.identity_rotation import IdentityRotationService
+from test_support import make_secret_store
+
+
+_real_create_gateway_core = create_gateway_core
+
+
+def create_gateway_core(storage_root=None, **options):
+    options.setdefault("secret_store", make_secret_store())
+    return _real_create_gateway_core(storage_root=storage_root, **options)
 
 
 def test_portable_backup_excludes_active_identity_credentials_queue_and_content(tmp_path):

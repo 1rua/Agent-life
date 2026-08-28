@@ -3,10 +3,20 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from agent_life_gateway.admin import HostApiCompatibility
 from agent_life_gateway.http import EXPOSURE_MODES, create_gateway_exposure
 from agent_life_gateway.core import create_gateway_core
+from test_support import make_secret_store
+
+
+_real_create_gateway_core = create_gateway_core
+
+
+def create_gateway_core(storage_root=None, **options):
+    options.setdefault("secret_store", make_secret_store())
+    return _real_create_gateway_core(storage_root=storage_root, **options)
 
 
 TEST_HOST_API = HostApiCompatibility(

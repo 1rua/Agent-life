@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from agent_life_gateway.account_paths import account_paths
 from agent_life_gateway.core import (
@@ -21,6 +22,15 @@ from agent_life_gateway.core import (
 from agent_life_gateway.audit import AuditStore
 from agent_life_gateway.http import DEFAULT_MAX_BODY_BYTES
 from agent_life_gateway.plugin import register
+from test_support import make_secret_store
+
+
+_real_create_gateway_core = create_gateway_core
+
+
+def create_gateway_core(storage_root=None, **options):
+    options.setdefault("secret_store", make_secret_store())
+    return _real_create_gateway_core(storage_root=storage_root, **options)
 
 
 class FakeHermesContext:

@@ -6,6 +6,7 @@ does not import another host implementation or a legacy runtime.
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import re
@@ -659,10 +660,14 @@ def _failure(context: Mapping[str, Any], code: str, details: Mapping[str, Any] |
 class AccountStore:
     """One SQLite connection for one already-resolved account directory."""
 
-    def __init__(self, paths: AccountPaths, master_key_ref: str | None = None, commit_hook: Any = None):
+    def __init__(
+        self, paths: AccountPaths, master_key_ref: str | None = None,
+        commit_hook: Any = None, aead: Any = None,
+    ):
         self.paths = paths
-        self.master_key_ref = master_key_ref or f"host-secret:{paths.root.name}"
+        self.master_key_ref = str(master_key_ref or "")
         self.commit_hook = commit_hook
+        self.aead = aead
         self.fail_next_commit = False
         ensure_account_directories(paths)
         self.database = sqlite3.connect(str(paths.database), isolation_level=None, check_same_thread=False)
@@ -764,7 +769,31 @@ class AccountStore:
             );
             """
         )
-        self._metadata("master_key_ref", self.master_key_ref)
+        if self.aead is None:
+            existing_ref = self.database.execute(
+                "SELECT value FROM account_metadata WHERE key = 'master_key_ref'"
+            ).fetchone()
+            if existing_ref is None or not existing_ref[0] or str(existing_ref[0]).startswith("host-secret:"):
+                self.database.execute(
+                    "INSERT INTO account_metadata(key, value) VALUES ('master_key_ref', '') "
+                    "ON CONFLICT(key) DO UPDATE SET value = ''"
+                )
+        else:
+            existing_ref = self.database.execute(
+                "SELECT value FROM account_metadata WHERE key = 'master_key_ref'"
+            ).fetchone()
+            if (
+                existing_ref is not None
+                and existing_ref[0]
+                and not str(existing_ref[0]).startswith("host-secret:")
+                and str(existing_ref[0]) != self.master_key_ref
+            ):
+                raise GatewayError("MASTER_KEY_REFERENCE_MISMATCH")
+            self.database.execute(
+                "INSERT INTO account_metadata(key, value) VALUES ('master_key_ref', ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (self.master_key_ref,),
+            )
         self._metadata("gateway_identity_ref", "spki_initial")
         self._metadata("pairing_generation", "1")
         self._metadata("deployment_id", f"deploy_{hashlib.sha256(str(paths.root.parent.parent).encode('utf-8')).hexdigest()[:16]}")
@@ -775,6 +804,46 @@ class AccountStore:
             "INSERT OR IGNORE INTO account_metadata(key, value) VALUES (?, ?)",
             (key, value),
         )
+
+    def require_aead(self) -> Any:
+        if self.aead is None:
+            raise GatewayError("MASTER_KEY_UNAVAILABLE")
+        return self.aead
+
+    def seal_bytes(self, plaintext: bytes, purpose: str) -> str:
+        provider = self.require_aead()
+        try:
+            ciphertext = provider.encrypt(bytes(plaintext), purpose.encode("utf-8"))
+        except Exception as exc:
+            raise GatewayError("ENCRYPTION_FAILED") from exc
+        if not isinstance(ciphertext, (bytes, bytearray, memoryview)):
+            raise GatewayError("ENCRYPTION_FAILED")
+        encoded = base64.urlsafe_b64encode(bytes(ciphertext)).decode("ascii")
+        return "aead-v1:" + encoded
+
+    def open_bytes(self, sealed: str, purpose: str) -> bytes:
+        provider = self.require_aead()
+        if not isinstance(sealed, str) or not sealed.startswith("aead-v1:"):
+            raise GatewayError("DECRYPTION_FAILED")
+        try:
+            ciphertext = base64.b64decode(sealed[8:], altchars=b"-_", validate=True)
+            plaintext = provider.decrypt(ciphertext, purpose.encode("utf-8"))
+        except Exception as exc:
+            raise GatewayError("DECRYPTION_FAILED") from exc
+        if not isinstance(plaintext, (bytes, bytearray, memoryview)):
+            raise GatewayError("DECRYPTION_FAILED")
+        return bytes(plaintext)
+
+    def seal_json(self, value: Any, purpose: str) -> str:
+        return self.seal_bytes(_json(value).encode("utf-8"), purpose)
+
+    def open_json(self, sealed: str, purpose: str) -> Any:
+        try:
+            return json.loads(self.open_bytes(sealed, purpose).decode("utf-8"))
+        except GatewayError:
+            raise
+        except (UnicodeDecodeError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise GatewayError("DECRYPTION_FAILED") from exc
 
     @contextmanager
     def transaction(self, unknown_marker: Mapping[str, Any] | None = None) -> Iterator[sqlite3.Connection]:
@@ -826,7 +895,7 @@ class AccountStore:
             self.database.close()
         except sqlite3.Error:
             pass
-        replacement = AccountStore(self.paths, self.master_key_ref, self.commit_hook)
+        replacement = AccountStore(self.paths, self.master_key_ref, self.commit_hook, self.aead)
         self.database = replacement.database
         self._transaction_depth = 0
 
@@ -865,7 +934,10 @@ class EventStore:
         }
         self.store.database.execute(
             "INSERT INTO events(event_id, event_type, correlation_id, occurred_at, payload_json, expires_at) VALUES (?, ?, ?, ?, ?, ?)",
-            (event["eventId"], event_type, correlation_id, event["occurredAt"], _json(payload), event["expiresAt"]),
+            (
+                event["eventId"], event_type, correlation_id, event["occurredAt"],
+                self.store.seal_json(payload, f"event:{event['eventId']}:payload"), event["expiresAt"],
+            ),
         )
         return event
 
@@ -891,14 +963,13 @@ class EventStore:
             ).fetchall()
         return [self._map(row) for row in rows]
 
-    @staticmethod
-    def _map(row: sqlite3.Row) -> dict[str, Any]:
+    def _map(self, row: sqlite3.Row) -> dict[str, Any]:
         return {
             "eventId": row["event_id"],
             "eventType": row["event_type"],
             "correlationId": row["correlation_id"],
             "occurredAt": row["occurred_at"],
-            "payload": json.loads(row["payload_json"]),
+            "payload": self.store.open_json(row["payload_json"], f"event:{row['event_id']}:payload"),
             "expiresAt": row["expires_at"],
         }
 
@@ -924,6 +995,7 @@ class AttachmentStore:
         self._reconcile_staged_files()
 
     def create(self, **input: Any) -> dict[str, Any]:
+        self.store.require_aead()
         current = _now(input.get("now"))
         attachment_id = f"att_{uuid.uuid4()}"
         media_type = input["media_type"] if "media_type" in input else input["mediaType"]
@@ -993,7 +1065,8 @@ class AttachmentStore:
                 if int(row["size_bytes"]) != len(content):
                     raise GatewayError("ATTACHMENT_DIGEST_MISMATCH")
                 next_state = next_attachment_state(row["state"], "begin_upload")
-                stage_path.write_bytes(bytes(content))
+                encrypted = self.store.seal_bytes(bytes(content), self._attachment_aad(row["sha256"]))
+                stage_path.write_bytes(encrypted.encode("ascii"))
                 try:
                     stage_path.chmod(0o600)
                 except OSError:
@@ -1017,7 +1090,13 @@ class AttachmentStore:
         with self.store.transaction():
             row = self._row(attachment_id)
             stage_path = self._require_content_path(row)
-            content = stage_path.read_bytes()
+            try:
+                sealed = stage_path.read_bytes().decode("ascii")
+                content = self.store.open_bytes(sealed, self._attachment_aad(row["sha256"]))
+            except GatewayError:
+                raise
+            except (OSError, UnicodeDecodeError) as exc:
+                raise GatewayError("DECRYPTION_FAILED") from exc
             digest = hashlib.sha256(content).hexdigest()
             if digest != row["sha256"] or len(content) != int(row["size_bytes"]):
                 self.store.database.execute(
@@ -1179,6 +1258,9 @@ class AttachmentStore:
             raise GatewayError("ATTACHMENT_EXPIRED")
         return row
 
+    def _attachment_aad(self, sha256: str) -> str:
+        return f"agent-life:attachment:v1:{self.account_id}:{sha256}"
+
     def _require_content_path(self, row: sqlite3.Row) -> Path:
         path = Path(row["content_path"]) if row["content_path"] else None
         if path is None or not path.is_file():
@@ -1283,6 +1365,9 @@ class DeviceRequestStore:
             self.contracts.dispatched_registry_id, {"kind": "device.request"}, record
         ):
             raise GatewayError("SCHEMA_INVALID")
+        parameters_json = self.store.seal_json(
+            parameters, f"device-request:{self.account_id}:{request_id}:parameters"
+        )
         with self.store.transaction():
             self.store.database.execute(
                 """
@@ -1291,7 +1376,7 @@ class DeviceRequestStore:
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (request_id, device_id, pairing_generation, grant_revision, risk, state,
-                 _json(capability), _json(provider), _json(parameters), record["createdAt"], expires_at,
+                 _json(capability), _json(provider), parameters_json, record["createdAt"], expires_at,
                  int(record["requiresForegroundConfirmation"])),
             )
             if state == "pending":
@@ -1462,15 +1547,17 @@ class DeviceRequestStore:
         rows = self.store.database.execute("SELECT * FROM device_requests ORDER BY request_id").fetchall()
         return [self._map(row) for row in rows]
 
-    @staticmethod
-    def _map(row: sqlite3.Row) -> dict[str, Any]:
+    def _map(self, row: sqlite3.Row) -> dict[str, Any]:
         return {
             "requestId": row["request_id"], "deviceId": row["device_id"],
             "pairingGeneration": int(row["pairing_generation"]), "grantRevision": int(row["grant_revision"]),
             "risk": row["risk"], "state": row["state"],
             "capability": json.loads(row["capability_json"]),
             "provider": json.loads(row["provider_json"]),
-            "parameters": json.loads(row["parameters_json"]),
+            "parameters": self.store.open_json(
+                row["parameters_json"],
+                f"device-request:{self.account_id}:{row['request_id']}:parameters",
+            ),
             "createdAt": row["created_at"], "expiresAt": row["expires_at"],
             "requiresForegroundConfirmation": bool(row["requires_foreground_confirmation"]),
         }
@@ -1789,7 +1876,9 @@ _PERSISTABLE_ERRORS = {
     "SCHEMA_INVALID", "IDENTITY_OVERRIDE_REJECTED", "PAIRING_GENERATION_STALE",
     "GRANT_STALE", "IDEMPOTENCY_CONFLICT", "OUTCOME_UNKNOWN", "ATTACHMENT_DIGEST_MISMATCH",
     "ATTACHMENT_LIMIT_EXCEEDED",
-    "ATTACHMENT_EXPIRED", "CURSOR_CONFLICT", "CURSOR_EXPIRED", "INVALID_STATE_TRANSITION",
+    "ATTACHMENT_EXPIRED", "MASTER_KEY_UNAVAILABLE", "MASTER_KEY_REFERENCE_MISMATCH",
+    "ENCRYPTION_FAILED", "DECRYPTION_FAILED", "CURSOR_CONFLICT", "CURSOR_EXPIRED",
+    "INVALID_STATE_TRANSITION",
 }
 
 
@@ -1823,21 +1912,72 @@ class GatewayCore:
             self._contracts = ContractRegistry(self.contract_root)
         return self._contracts
 
+    @staticmethod
+    def _coerce_aead(candidate: Any) -> tuple[str, Any] | None:
+        provider = candidate
+        reference: Any = None
+        if isinstance(candidate, Mapping):
+            provider = candidate.get("aead", candidate.get("cipher", candidate.get("provider")))
+            reference = candidate.get("reference", candidate.get("keyReference"))
+        if provider is None:
+            return None
+        if reference is None:
+            reference = getattr(provider, "reference", getattr(provider, "key_reference", None))
+        algorithm = getattr(provider, "algorithm", None)
+        authenticated = getattr(provider, "authenticated", None)
+        if (
+            not isinstance(reference, str) or not reference
+            or not isinstance(algorithm, str) or not algorithm
+            or authenticated is not True
+            or not callable(getattr(provider, "encrypt", None))
+            or not callable(getattr(provider, "decrypt", None))
+        ):
+            return None
+        return reference, provider
+
+    def _resolve_key_binding(self, account_id: str) -> tuple[str, Any | None]:
+        secret_store = self.secret_store
+        if secret_store is None:
+            return "", None
+        name = f"agent-life-gateway/{account_id}"
+        for method_name in ("get_or_create_aead", "get_aead", "get_or_create_secure_key"):
+            method = getattr(secret_store, method_name, None)
+            if callable(method):
+                try:
+                    binding = self._coerce_aead(method(name))
+                except Exception:
+                    return "", None
+                return binding if binding is not None else ("", None)
+        binding = self._coerce_aead(secret_store)
+        if binding is not None:
+            return binding
+        for method_name in ("get_or_create", "get_or_create_secret", "reference_for"):
+            method = getattr(secret_store, method_name, None)
+            if not callable(method):
+                continue
+            try:
+                candidate = method(name)
+            except TypeError:
+                try:
+                    candidate = method(account_id)
+                except Exception:
+                    return "", None
+            except Exception:
+                return "", None
+            binding = self._coerce_aead(candidate)
+            return binding if binding is not None else ("", None)
+        return "", None
+
     def _master_key_ref(self, paths: AccountPaths, account_id: str) -> str:
-        if self.secret_store is not None:
-            for name in ("get_or_create", "get_or_create_secret", "reference_for"):
-                method = getattr(self.secret_store, name, None)
-                if callable(method):
-                    try:
-                        return str(method(f"agent-life-gateway/{account_id}"))
-                    except TypeError:
-                        return str(method(account_id))
-        return f"host-secret:{paths.root.name}"
+        del paths
+        reference, _ = self._resolve_key_binding(account_id)
+        return reference
 
     def open_gateway_account(self, account_id: str) -> GatewayAccount:
         # Resolve and validate the opaque account ID before constructing SQLite.
         paths = account_paths(self.storage_root, account_id)
-        store = AccountStore(paths, self._master_key_ref(paths, account_id), self.commit_hook)
+        master_key_ref, aead = self._resolve_key_binding(account_id)
+        store = AccountStore(paths, master_key_ref, self.commit_hook, aead)
         return GatewayAccount(account_id, paths, store, self.contracts, self.attachment_policy)
 
     def _negotiate(self, account: GatewayAccount, context: Mapping[str, Any], body: Any, now: datetime) -> Mapping[str, Any]:

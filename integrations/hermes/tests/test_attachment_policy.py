@@ -6,9 +6,19 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from agent_life_gateway.core import GatewayError, create_gateway_core
 from agent_life_gateway.http import create_gateway_exposure
+from test_support import make_secret_store
+
+
+_real_create_gateway_core = create_gateway_core
+
+
+def create_gateway_core(storage_root=None, **options):
+    options.setdefault("secret_store", make_secret_store())
+    return _real_create_gateway_core(storage_root=storage_root, **options)
 
 
 NEGOTIATION_BODY = {
@@ -58,6 +68,7 @@ def _create_input(size_bytes=4, media_type="text/plain", client_id="att_client")
 
 def _create(account, body=b"body", *, now=None, client_id="att_client", media_type="text/plain"):
     values = _create_input(len(body), media_type, client_id)
+    values["sha256"] = hashlib.sha256(body).hexdigest()
     if now is not None:
         values["now"] = now
     return account.attachments.create(**values)
@@ -265,6 +276,122 @@ def test_expiring_one_attachment_does_not_remove_a_shared_cas_reference(tmp_path
         (second["attachmentId"],),
     ).fetchone()
     assert Path(second_row["cas_path"]).is_file()
+
+
+def test_attachment_storage_without_an_explicit_aead_key_fails_closed(tmp_path):
+    core = _real_create_gateway_core(storage_root=tmp_path)
+    account = core.open_gateway_account("acct_no_aead")
+
+    with pytest.raises(GatewayError) as error:
+        account.attachments.create(**_create_input(client_id="att_no_aead"))
+
+    assert error.value.code == "MASTER_KEY_UNAVAILABLE"
+    assert account.master_key_ref == ""
+    stored_ref = account.store.database.execute(
+        "SELECT value FROM account_metadata WHERE key = 'master_key_ref'"
+    ).fetchone()[0]
+    assert stored_ref == ""
+
+
+class _ReferenceOnlySecretStore:
+    def get_or_create(self, name):
+        return f"operator-ref://{name}"
+
+
+def test_reference_only_secret_store_does_not_enable_plaintext_fallback(tmp_path):
+    core = _real_create_gateway_core(
+        storage_root=tmp_path, secret_store=_ReferenceOnlySecretStore()
+    )
+    account = core.open_gateway_account("acct_reference_only")
+
+    with pytest.raises(GatewayError) as error:
+        account.attachments.create(**_create_input(client_id="att_reference_only"))
+
+    assert error.value.code == "MASTER_KEY_UNAVAILABLE"
+    assert account.master_key_ref == ""
+
+
+def test_attachment_stage_and_cas_are_sealed_by_the_host_aead_provider(tmp_path):
+    core = create_gateway_core(storage_root=tmp_path)
+    account = core.open_gateway_account("acct_sealed_attachment")
+    body = b"attachment body must not be stored in plaintext"
+    attachment = _create(account, body=body, client_id="att_sealed")
+
+    uploaded = account.attachments.upload_content(attachment["attachmentId"], body)
+    stage_path = Path(
+        account.store.database.execute(
+            "SELECT content_path FROM attachments WHERE attachment_id = ?",
+            (attachment["attachmentId"],),
+        ).fetchone()[0]
+    )
+    stage_bytes = stage_path.read_bytes()
+    assert uploaded["state"] == "uploading"
+    assert body not in stage_bytes
+    assert stage_bytes.startswith(b"aead-v1:")
+
+    verified = account.attachments.commit(attachment["attachmentId"])
+    cas_path = Path(
+        account.store.database.execute(
+            "SELECT cas_path FROM attachments WHERE attachment_id = ?",
+            (attachment["attachmentId"],),
+        ).fetchone()[0]
+    )
+    assert verified["state"] == "verified"
+    assert body not in cas_path.read_bytes()
+    assert account.attachments.get(attachment["attachmentId"])["state"] == "verified"
+
+
+def test_device_parameters_and_event_payload_are_sealed_at_rest(tmp_path):
+    core = create_gateway_core(storage_root=tmp_path)
+    account = core.open_gateway_account("acct_sealed_device")
+    parameters = {"query": "from:alice", "senders": ["alice"]}
+    request = account.device_requests.enqueue(
+        **{
+            "request_id": "device_req_sealed",
+            "device_id": "dev_1",
+            "pairing_generation": 4,
+            "grant_revision": 7,
+            "risk": "read",
+            "capability": {"id": "org.agentlife.sms.query", "version": "1.0.0"},
+            "provider": {"pluginId": "org.agentlife.sms", "authorKeyId": "sha256:" + "a" * 64},
+            "parameters": parameters,
+            "correlation_id": "cor_sealed_device",
+        }
+    )
+    row = account.store.database.execute(
+        "SELECT parameters_json FROM device_requests WHERE request_id = 'device_req_sealed'"
+    ).fetchone()
+    event_row = account.store.database.execute(
+        "SELECT payload_json FROM events WHERE event_type = 'device.requested'"
+    ).fetchone()
+
+    assert request["parameters"] == parameters
+    assert "from:alice" not in row["parameters_json"]
+    assert "from:alice" not in event_row["payload_json"]
+    assert account.device_requests.get("device_req_sealed")["parameters"] == parameters
+    assert account.events.read_after(None)[0]["payload"]["parameters"] == parameters
+
+
+def test_tampered_attachment_ciphertext_fails_closed(tmp_path):
+    core = create_gateway_core(storage_root=tmp_path)
+    account = core.open_gateway_account("acct_tampered_attachment")
+    body = b"tamper me"
+    attachment = _create(account, body=body, client_id="att_tampered")
+    account.attachments.upload_content(attachment["attachmentId"], body)
+    stage_path = Path(
+        account.store.database.execute(
+            "SELECT content_path FROM attachments WHERE attachment_id = ?",
+            (attachment["attachmentId"],),
+        ).fetchone()[0]
+    )
+    stored = bytearray(stage_path.read_bytes())
+    stored[-1] ^= 1
+    stage_path.write_bytes(bytes(stored))
+
+    with pytest.raises(GatewayError) as error:
+        account.attachments.commit(attachment["attachmentId"])
+
+    assert error.value.code == "DECRYPTION_FAILED"
 
 
 class _RawRequest:
