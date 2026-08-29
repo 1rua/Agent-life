@@ -6,7 +6,9 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "build": "tsc -p tsconfig.build.json",
-    "drill": "node --import tsx tools/run-backup-restore-drill.ts"
+    "drill": "node --import tsx tools/run-backup-restore-drill.ts",
+    "typecheck:tools": "tsc --noEmit -p tsconfig.tools.json",
+    "export:v2-bootstrap": "node --import tsx tools/export-v2-bootstrap.ts"
   },
   "devDependencies": {
     "@types/node": "24.13.3",

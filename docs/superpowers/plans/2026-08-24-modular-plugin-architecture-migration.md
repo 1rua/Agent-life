@@ -1193,7 +1193,7 @@ git commit -m "重构: 将 Android App 切换为极简 Gateway 核心"
 - Export fields: Gateway 显示名、非秘密地址、证书指纹、插件 ID/作者 key ID 清单
 - Excludes: 密码、refresh、配对密钥、队列、未确认操作、正文、附件、数据库文件、主密钥
 
-- [ ] **Step 1: 写秘密字段和未知字段拒绝测试**
+- [x] **Step 1: 写秘密字段和未知字段拒绝测试**
 
 ```ts
 expect(exported).toEqual({
@@ -1204,13 +1204,15 @@ expect(exported).toEqual({
 expect(JSON.stringify(exported)).not.toMatch(/private|password|token|queue|body/i);
 ```
 
-- [ ] **Step 2: 运行并确认红灯**
+- [x] **Step 2: 运行并确认红灯**
 
 Run: `npm --prefix bridge-runtime test -- export-v2-bootstrap.test.ts`
 
 Expected: FAIL，白名单 exporter 尚不存在。
 
-- [ ] **Step 3: 实现只读白名单导出**
+实测：`Cannot find module '../tools/export-v2-bootstrap.js'`。
+
+- [x] **Step 3: 实现只读白名单导出**
 
 exporter 只通过 v1 repository 的只读端口读取明确字段，拒绝符号链接输出、已存在输出文件和 Schema 外字段；输出权限为 owner-only。导入端只创建本地 profile 和插件发现清单，并显示“需要重新配对/授权”。
 
@@ -1239,6 +1241,12 @@ Expected: PASS。
 Run: `cd apps/android && ./gradlew check connectedDebugAndroidTest`
 
 Expected: PASS，包括直接 HTTPS、插件隔离、Companion 故障和 P0t 保全测试。
+
+实测：上面五项已 PASS（根 `npx vitest run` 81 files / 782 tests；根 `npm run typecheck`
+退出码 0；`npm run gateway:v2:conformance` 3 passed；`npm --prefix bridge-runtime test`
+16 files / 87 tests；`pytest integrations/hermes/tests -q` 91 passed）。**Android
+门禁未运行**，因此 Step 4 与 Step 5 仍保持未勾选。命令与结果见
+`docs/mvp/plugin-architecture-migration-evidence.md`。
 
 - [ ] **Step 5: 记录证据并安全移动旧运行时**
 

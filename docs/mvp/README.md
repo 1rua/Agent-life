@@ -24,6 +24,11 @@
   真实依赖的 fail-closed 控制器门禁；七行依赖证据目前仍为 PENDING。
 - `docs/mvp/p0a-gate-decisions.md`：记录已确认的 Task 7 D1–D4 与 Task 9
   产品字面值。它不会替代 Task 9 技术预检、依赖锁、设备或生产部署门禁。
+- `docs/mvp/plugin-architecture-migration-evidence.md`：模块化插件架构迁移的
+  自检清单与实测证据。它逐条标注 `VERIFIED` / `PENDING` / `FINDING`，只记录
+  真正跑过的命令与结果；未运行的门禁不会写成通过。
+- `legacy/README.md`：被取代设计与冻结代码的政策。旧 `bridge-runtime` 在
+  Task 13/14/15 与 Android 门禁全部通过前**不迁入** `legacy/`。
 
 ## SDK-free checks
 

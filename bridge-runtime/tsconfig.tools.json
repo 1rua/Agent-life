@@ -1,0 +1,8 @@
+{
+  "//": "只覆盖 Task 16 新增的迁移读取工具与它的测试。bridge-runtime 已进入冻结状态，这里刻意不把其它既有测试纳入，避免把历史文件的类型问题变成新的门禁失败。",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "resolveJsonModule": true
+  },
+  "include": ["tools/**/*.ts", "test/export-v2-bootstrap.test.ts"]
+}
