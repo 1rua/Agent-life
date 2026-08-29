@@ -57,7 +57,6 @@ class KernelIsolationTest {
             trustMode = trustMode,
             nativeLoader = NativePluginLoader(trustMode),
             providerSelector = selector,
-            grants = { if (it == "pairing-a") grant else null },
             grants = grants ?: { if (it == "pairing-a") grant else null },
         )
     }

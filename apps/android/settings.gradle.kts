@@ -43,4 +43,5 @@ include(
     ":plugin-runtime-wasm",
     ":plugin-ui",
     ":companion-bridge",
+    ":tailscale-companion",
 )
