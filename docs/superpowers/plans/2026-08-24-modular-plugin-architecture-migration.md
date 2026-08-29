@@ -467,7 +467,7 @@ GREEN 取证（2026-08-29，全部使用 `./tools/run-node24` 固定工具链 v2
 
 范围澄清：本门禁证明的是**协议层**跨宿主等价（24 个共享向量覆盖 target 规范化、签名、严格 Schema、动态分派、附件/设备状态机、四档队列 TTL）。计划文本提到的“删除”和“多账号隔离”属于宿主运行时行为（SQLite、CAS、附件 staging、账号目录），不是纯 reducer 的可观察输出，因此不进入共享向量集，改由两个宿主各自的同构测试覆盖，详见 `docs/mvp/gateway-v2-conformance.md`。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add gateway-contract integrations docs/mvp/gateway-v2-conformance.md package.json
@@ -558,7 +558,7 @@ GREEN 取证（2026-08-29）：`./gradlew check` → BUILD SUCCESSFUL（1148 tas
 
 已知前向依赖：`networkOwnerModules` 含 `tailscale-companion`，但该模块要到 Task 14 才创建。届时若 Tailscale 需要 `VpnService`，会与本门禁的"VpnService 全仓禁止"冲突——Task 14 需就此单独裁定（见账本）。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add apps/android/settings.gradle.kts apps/android/gradle apps/android/gateway-client apps/android/platform-kernel apps/android/plugin-package apps/android/plugin-runtime-wasm apps/android/plugin-ui apps/android/companion-bridge
@@ -695,7 +695,7 @@ git commit -m "新增: 实现多账号会话与可撤销自动登录"
 }
 ```
 
-- [ ] **Step 2: 运行并确认红灯**
+- [x] **Step 2: 运行并确认红灯**
 
 Run: `cd apps/android && ./gradlew :gateway-client:testDebugUnitTest`
 
@@ -744,7 +744,7 @@ GREEN 取证（2026-08-29，真机 SM-X710 / API 36，序列号 R52X909R9QT）�
 - 真机 TLS 测试全部离线，用设备信任库中已有的真实证书做正反验证，结果不依赖网络可达性。
 - `ConversationClient` 的 `threads()` 为初次读取 + `conversation.updated` 事件驱动刷新；账号/Gateway 归属由服务端判定，客户端不在 body 中提交 accountId。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add apps/android/gateway-client
