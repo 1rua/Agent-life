@@ -1,0 +1,14 @@
+[package]
+name = "agent-life-sms"
+version = "0.1.0"
+edition = "2021"
+description = "Agent-life 短信查询参考插件"
+publish = false
+
+[lib]
+name = "sms"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+agent-life-sdk = { path = "../sdk-rust" }
+

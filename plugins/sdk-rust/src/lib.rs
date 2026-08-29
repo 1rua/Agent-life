@@ -284,12 +284,10 @@ where
     F: FnOnce(&[u8]) -> Result<Vec<u8>, PluginError>,
 {
     let Some(request) = read_request(request_ptr, request_len) else {
-        return 0xFFFF_FFFF_FFFF_FF01;
         return RESULT_FAILED;
     };
     let out = dispatch_with_response(request, handler).0;
     if out == RESULT_FAILED {
-        return 0xFFFF_FFFF_FFFF_FF02;
         return RESULT_FAILED;
     }
     out

@@ -1,0 +1,25 @@
+{
+  "manifestVersion": "1.0",
+  "plugin": {
+    "id": "org.agentlife.sms",
+    "version": "1.0.0",
+    "name": "SMS Query",
+    "description": "Official reference plugin for querying SMS messages",
+    "author": {
+      "name": "Agent-life",
+      "publicKey": "35f3b7bf83777bc35fb080ee0e94abef8e945cbb6aa82414fa9cfcb7eaee699f"
+    }
+  },
+  "runtime": {
+    "type": "wasm",
+    "payload": "payload/sms.wasm",
+    "abiVersion": "1.0",
+    "entrypoint": "agent_life_plugin_main"
+  },
+  "capabilities": {
+    "provides": ["org.agentlife.sms.query@1.0.0"],
+    "requires": []
+  },
+  "kernelPrimitives": ["kernel.sms.read"]
+}
+

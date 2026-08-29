@@ -110,3 +110,4 @@ class CompanionFailureInstrumentedTest {
         assertTrue(info.versionCode >= 0)
     }
 }
+

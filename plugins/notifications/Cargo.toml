@@ -1,0 +1,14 @@
+[package]
+name = "agent-life-notifications"
+version = "0.1.0"
+edition = "2021"
+description = "Agent-life 通知查询参考插件"
+publish = false
+
+[lib]
+name = "notifications"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+agent-life-sdk = { path = "../sdk-rust" }
+

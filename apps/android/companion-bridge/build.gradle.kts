@@ -3,6 +3,7 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+android { namespace = "com.agentlife.companion.bridge" }
 android {
     namespace = "com.agentlife.companion.bridge"
     buildFeatures {

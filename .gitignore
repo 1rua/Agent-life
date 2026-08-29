@@ -73,4 +73,5 @@ apps/android/tailnet-core/libs/tsnet-android-1.98.10.sbom.json
 
 # Rust 插件工具链构建产物
 plugins/target/
+plugins/dist/
 

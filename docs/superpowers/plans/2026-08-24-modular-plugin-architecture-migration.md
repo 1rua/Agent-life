@@ -895,6 +895,7 @@ git commit -m "新增: 实现确定性插件包与事务安装"
 - Produces: `CapabilityProviderSelector.select(capability, pairingId): PluginIdentity`
 - Produces: `NativePluginLoader.load(package): NativePlugin`，只在 Developer Trust Mode 生效
 
+- [ ] **Step 1: 写 Android 真机“只允许 kernel ABI”的失败测试**
 - [x] **Step 1: 写 Android 真机“只允许 kernel ABI”的失败测试**
 
 ```kotlin
@@ -904,6 +905,7 @@ git commit -m "新增: 实现确定性插件包与事务安装"
 }
 ```
 
+- [ ] **Step 2: 加入固定依赖并运行红灯**
 - [x] **Step 2: 加入固定依赖并运行红灯**
 
 ```kotlin
@@ -917,6 +919,7 @@ Run: `cd apps/android && ./gradlew :plugin-runtime-wasm:connectedDebugAndroidTes
 
 Expected: FAIL，runtime adapter 和 fixture 尚不存在；依赖必须能在 API 34/35 设备加载，无 JNI/`.so`。
 
+- [ ] **Step 3: 实现窄 ABI、授权交集和资源预算**
 - [x] **Step 3: 实现窄 ABI、授权交集和资源预算**
 
 ```kotlin
@@ -930,12 +933,14 @@ if (!effective.contains(call.primitive)) throw CapabilityDenied(call.primitive)
 
 Chicory module 只链接 `agent_life_kernel_v1` 明确函数；调用由 deadline、memory pages、输出字节、并发 semaphore 和每日网络计数器限制。网络代理逐跳验证 HTTPS allowlist，私有存储按插件×账号×安装实例分区，provider 切换产生新授权 revision，Android 审计只记录主体/动作/结果/correlation ID。原生 loader 只有开发者信任模式可达，关闭模式立即停用全部原生插件。
 
+- [ ] **Step 4: 实现声明式 UI 白名单测试**
 - [x] **Step 4: 实现声明式 UI 白名单测试**
 
 Run: `cd apps/android && ./gradlew :platform-kernel:testDebugUnitTest :plugin-ui:testDebugUnitTest :plugin-runtime-wasm:connectedDebugAndroidTest`
 
 Expected: PASS；HTML、JavaScript、Intent、自定义类、未知 action、跨账号 storage handle、网络重定向越界和未授权 provider 均拒绝，echo fixture 在预算内运行；原生插件在普通模式不可加载，开发者信任模式关闭后立即停用。
 
+- [ ] **Step 5: 提交**
 - [x] **Step 5: 提交**
 
 ```bash
@@ -958,6 +963,7 @@ git commit -m "新增: 实现受保护 WASM 插件平台内核"
 - Produces: `issue(binding, operation, destination, ttl): SingleUseOperationToken`
 - Produces: `openEncryptedByteChannel(token, host, port): ParcelFileDescriptor`
 
+- [ ] **Step 1: 写证书替换、token 重放和 Companion 崩溃失败测试**
 - [x] **Step 1: 写证书替换、token 重放和 Companion 崩溃失败测试**
 
 ```kotlin
@@ -968,22 +974,26 @@ git commit -m "新增: 实现受保护 WASM 插件平台内核"
 }
 ```
 
+- [ ] **Step 2: 运行并确认红灯**
 - [x] **Step 2: 运行并确认红灯**
 
 Run: `cd apps/android && ./gradlew :companion-bridge:testDebugUnitTest`
 
 Expected: FAIL，binding verifier 与 token issuer 尚不存在。
 
+- [ ] **Step 3: 实现 PackageManager 真证书校验与 opaque channel**
 - [x] **Step 3: 实现 PackageManager 真证书校验与 opaque channel**
 
 Companion 只泵送尚未解密的 TLS 字节；`gateway-client` 在 `EncryptedByteChannel` 上运行 TLS、HTTP、签名和凭据，因此 Companion 不能读取 access token 或正文。token 绑定调用双方 UID、插件身份、账号、配对、目标 host/port、期限和 nonce。
 
+- [ ] **Step 4: 运行单元与崩溃/超时真机测试**
 - [x] **Step 4: 运行单元与崩溃/超时真机测试**
 
 Run: `cd apps/android && ./gradlew :companion-bridge:testDebugUnitTest :companion-bridge:connectedDebugAndroidTest`
 
 Expected: PASS；包名相同但证书不同、token 重放、目的地替换、服务崩溃、超时和权限撤销全部失败关闭。
 
+- [ ] **Step 5: 提交**
 - [x] **Step 5: 提交**
 
 ```bash
@@ -1014,7 +1024,7 @@ git commit -m "新增: 实现 Companion 身份与单用途通道"
 - Produces: `org.agentlife.sms.query@1.0.0`
 - Produces: `org.agentlife.call-log.query@1.0.0`
 
-- [ ] **Step 1: 写“未安装/未授权即无能力”和账号隔离失败测试**
+- [x] **Step 1: 写“未安装/未授权即无能力”和账号隔离失败测试**
 
 ```kotlin
 @Test fun referencePluginsHaveNoPrivilegeByAuthor() {
@@ -1025,13 +1035,13 @@ git commit -m "新增: 实现 Companion 身份与单用途通道"
 }
 ```
 
-- [ ] **Step 2: 运行并确认当前 App 内建路径红灯**
+- [x] **Step 2: 运行并确认当前 App 内建路径红灯**
 
 Run: `cd apps/android && ./gradlew :platform-kernel:connectedDebugAndroidTest`
 
 Expected: FAIL，参考插件与内核 primitive registry 尚未接通。
 
-- [ ] **Step 3: 收窄现有 collector 为原始 Android primitive**
+- [x] **Step 3: 收窄现有 collector 为原始 Android primitive**
 
 collector 只返回经本地字段策略过滤的数据，不拥有 Gateway、同步、队列、作者或配对概念。调度、游标、能力 Schema 和结果整形进入对应 WASM 插件。
 
@@ -1042,7 +1052,7 @@ interface KernelPrimitiveProvider {
 }
 ```
 
-- [ ] **Step 4: 构建签名 `.alp` 并运行隔离测试**
+- [x] **Step 4: 构建签名 `.alp` 并运行隔离测试**
 
 Run: `cargo test --manifest-path plugins/Cargo.toml`
 
@@ -1056,7 +1066,7 @@ Run: `cd apps/android && ./gradlew :platform-kernel:connectedDebugAndroidTest`
 
 Expected: PASS；三个插件默认停用、无作者特权、授权按账号/配对隔离。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add plugins apps/android/notification-collector apps/android/sms-collector apps/android/call-log-collector apps/android/platform-kernel
