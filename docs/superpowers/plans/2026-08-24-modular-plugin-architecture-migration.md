@@ -895,7 +895,7 @@ git commit -m "新增: 实现确定性插件包与事务安装"
 - Produces: `CapabilityProviderSelector.select(capability, pairingId): PluginIdentity`
 - Produces: `NativePluginLoader.load(package): NativePlugin`，只在 Developer Trust Mode 生效
 
-- [ ] **Step 1: 写 Android 真机“只允许 kernel ABI”的失败测试**
+- [x] **Step 1: 写 Android 真机“只允许 kernel ABI”的失败测试**
 
 ```kotlin
 @Test fun rejectsWasiAndUnknownImports() {
@@ -904,7 +904,7 @@ git commit -m "新增: 实现确定性插件包与事务安装"
 }
 ```
 
-- [ ] **Step 2: 加入固定依赖并运行红灯**
+- [x] **Step 2: 加入固定依赖并运行红灯**
 
 ```kotlin
 dependencies {
@@ -917,7 +917,7 @@ Run: `cd apps/android && ./gradlew :plugin-runtime-wasm:connectedDebugAndroidTes
 
 Expected: FAIL，runtime adapter 和 fixture 尚不存在；依赖必须能在 API 34/35 设备加载，无 JNI/`.so`。
 
-- [ ] **Step 3: 实现窄 ABI、授权交集和资源预算**
+- [x] **Step 3: 实现窄 ABI、授权交集和资源预算**
 
 ```kotlin
 val effective = hostEnvelope
@@ -930,13 +930,13 @@ if (!effective.contains(call.primitive)) throw CapabilityDenied(call.primitive)
 
 Chicory module 只链接 `agent_life_kernel_v1` 明确函数；调用由 deadline、memory pages、输出字节、并发 semaphore 和每日网络计数器限制。网络代理逐跳验证 HTTPS allowlist，私有存储按插件×账号×安装实例分区，provider 切换产生新授权 revision，Android 审计只记录主体/动作/结果/correlation ID。原生 loader 只有开发者信任模式可达，关闭模式立即停用全部原生插件。
 
-- [ ] **Step 4: 实现声明式 UI 白名单测试**
+- [x] **Step 4: 实现声明式 UI 白名单测试**
 
 Run: `cd apps/android && ./gradlew :platform-kernel:testDebugUnitTest :plugin-ui:testDebugUnitTest :plugin-runtime-wasm:connectedDebugAndroidTest`
 
 Expected: PASS；HTML、JavaScript、Intent、自定义类、未知 action、跨账号 storage handle、网络重定向越界和未授权 provider 均拒绝，echo fixture 在预算内运行；原生插件在普通模式不可加载，开发者信任模式关闭后立即停用。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add plugins apps/android/platform-kernel apps/android/plugin-runtime-wasm apps/android/plugin-ui

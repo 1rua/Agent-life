@@ -1,0 +1,23 @@
+# Agent-life 设备插件 Rust 工作区。
+#
+# 只使用 core / alloc，**不引入任何 crates.io 依赖**：受保护插件的 wasm 模块
+# 导入数必须为 0（见 docs/contracts/device-plugin-package-v1.md §5.1），
+# 依赖越少越容易审计，也避免构建期联网。
+#
+# 构建（在工作区根目录执行）：
+#   cargo build --target wasm32-unknown-unknown --release --manifest-path plugins/Cargo.toml
+#
+# 测试（需先完成上面的构建，wasm 产物检查依赖它）：
+#   cargo test --manifest-path plugins/Cargo.toml
+[workspace]
+resolver = "2"
+members = ["sdk-rust", "fixtures/echo"]
+
+# 受保护插件走 wasm：体积优先、panic 直接 trap（no_std 下没有 unwinding）。
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+overflow-checks = true

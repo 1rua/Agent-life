@@ -1,0 +1,12 @@
+[package]
+name = "agent-life-sdk"
+version = "0.1.0"
+edition = "2021"
+description = "Agent-life 受保护 WASM 插件的 Rust SDK（agent_life_kernel_v1 窄 ABI）"
+publish = false
+
+[lib]
+name = "agent_life_sdk"
+crate-type = ["rlib"]
+
+[dependencies]
