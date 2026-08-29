@@ -3,8 +3,16 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
-android { namespace = "com.agentlife.companion.bridge" }
+android {
+    namespace = "com.agentlife.companion.bridge"
+    buildFeatures {
+        aidl = true
+    }
+}
 
 dependencies {
     testImplementation("junit:junit:4.13.2")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("junit:junit:4.13.2")
 }

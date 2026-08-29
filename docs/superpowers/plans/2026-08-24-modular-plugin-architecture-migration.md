@@ -958,7 +958,7 @@ git commit -m "新增: 实现受保护 WASM 插件平台内核"
 - Produces: `issue(binding, operation, destination, ttl): SingleUseOperationToken`
 - Produces: `openEncryptedByteChannel(token, host, port): ParcelFileDescriptor`
 
-- [ ] **Step 1: 写证书替换、token 重放和 Companion 崩溃失败测试**
+- [x] **Step 1: 写证书替换、token 重放和 Companion 崩溃失败测试**
 
 ```kotlin
 @Test fun tokenIsSingleUseAndBoundToDestination() {
@@ -968,23 +968,23 @@ git commit -m "新增: 实现受保护 WASM 插件平台内核"
 }
 ```
 
-- [ ] **Step 2: 运行并确认红灯**
+- [x] **Step 2: 运行并确认红灯**
 
 Run: `cd apps/android && ./gradlew :companion-bridge:testDebugUnitTest`
 
 Expected: FAIL，binding verifier 与 token issuer 尚不存在。
 
-- [ ] **Step 3: 实现 PackageManager 真证书校验与 opaque channel**
+- [x] **Step 3: 实现 PackageManager 真证书校验与 opaque channel**
 
 Companion 只泵送尚未解密的 TLS 字节；`gateway-client` 在 `EncryptedByteChannel` 上运行 TLS、HTTP、签名和凭据，因此 Companion 不能读取 access token 或正文。token 绑定调用双方 UID、插件身份、账号、配对、目标 host/port、期限和 nonce。
 
-- [ ] **Step 4: 运行单元与崩溃/超时真机测试**
+- [x] **Step 4: 运行单元与崩溃/超时真机测试**
 
 Run: `cd apps/android && ./gradlew :companion-bridge:testDebugUnitTest :companion-bridge:connectedDebugAndroidTest`
 
 Expected: PASS；包名相同但证书不同、token 重放、目的地替换、服务崩溃、超时和权限撤销全部失败关闭。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add apps/android/companion-bridge

@@ -68,11 +68,7 @@ data class EffectiveCapabilitySet(
 object EffectiveCapabilities {
     fun compute(inputs: CapabilityInputs): EffectiveCapabilitySet {
         val grant = inputs.pairingGrant
-        if (false && (!inputs.pluginEnabled || grant == null)) {
         if (!inputs.pluginEnabled || grant == null) {
-            return EffectiveCapabilitySet(emptySet(), backgroundAllowed = false)
-        }
-        if (grant == null) {
             return EffectiveCapabilitySet(emptySet(), backgroundAllowed = false)
         }
 
