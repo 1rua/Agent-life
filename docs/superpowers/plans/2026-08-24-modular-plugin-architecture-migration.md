@@ -774,7 +774,7 @@ git commit -m "新增: 实现 Gateway v2 HTTPS SSE 与附件客户端"
 - Produces: `PluginSourceResolver.resolve(LocalFile | HttpsUrl | FixedRelease | OrganizationRepository | OptionalIndex): PackageStream`
 - Produces: `PluginUpdatePolicy.classify(current, candidate): AutoApply | RequireApproval | Reject`
 
-- [ ] **Step 1: 写跨 TypeScript/Kotlin 确定性与攻击包失败测试**
+- [x] **Step 1: 写跨 TypeScript/Kotlin 确定性与攻击包失败测试**
 
 ```ts
 expect(sha256(await buildPackage(fixture))).toBe(FIXTURE_ALP_SHA256);
@@ -787,7 +787,7 @@ expect(sha256(await buildPackage(fixture))).toBe(FIXTURE_ALP_SHA256);
 }
 ```
 
-- [ ] **Step 2: 运行并确认红灯**
+- [x] **Step 2: 运行并确认红灯**
 
 Run: `npm --prefix plugin-tooling test`
 
@@ -797,7 +797,12 @@ Run: `cd apps/android && ./gradlew :plugin-package:testDebugUnitTest`
 
 Expected: FAIL，验证器尚不存在。
 
-- [ ] **Step 3: 按插件包契约逐层实现**
+RED 取证（2026-08-30）：
+
+- `npx vitest run plugin-tooling` → `Error: Failed to load url ./build-package`（构建器尚不存在）
+- `./gradlew :plugin-package:testDebugUnitTest` → `compileDebugUnitTestKotlin FAILED`，`Unresolved reference` 覆盖 `AlpVerifier`、`CandidateSurface`、`InstalledSurface`、`PackageLimits`、`PluginUpdatePolicy`、`SecuritySurface`、`UpdateDecision` 全部待测组件。
+
+- [x] **Step 3: 按插件包契约逐层实现**
 
 ```kotlin
 data class VerifiedPluginPackage(
@@ -822,7 +827,33 @@ Run: `cd apps/android && ./gradlew :plugin-package:testDebugUnitTest :plugin-pac
 
 Expected: PASS，ZIP bomb、路径穿越、摘要篡改、作者替换、降级和中断均不可产生半安装状态；来源不成为信任根，安全边界扩大要求批准，同密钥无扩权更新可事务应用并回滚。
 
-- [ ] **Step 5: 提交**
+**Step 4 未勾选：真机部分受阻。** `adb devices` 在执行时返回空（设备 R52X909R9QT 已断开），`connectedDebugAndroidTest` 报 `No connected devices!`。真机测试文件已写好但**未经运行验证**，因此不勾选本步骤。设备重连后需补跑并勾选。
+
+已完成并通过的部分（2026-08-30）：
+
+- `npx vitest run plugin-tooling` → 5 tests, 0 failures（确定性哈希、载荷字节变化即变哈希、路径穿越拒绝、签名可验证、UTF-8 字节序）
+- `./gradlew :plugin-package:testDebugUnitTest` → 33 tests, 0 failures（`AlpVerifierTest` 8、`PluginInstallerTest` 8、`PluginSourceResolverTest` 8、`PluginUpdatePolicyTest` 9）
+- `./gradlew noVpnSurfaceCheck` → BUILD SUCCESSFUL（架构门禁未被破坏）
+
+变异验证（证明测试非空转，探针均已还原）：
+
+| 注入 | 反应 |
+|---|---|
+| `AlpVerifier` 放行 `..` 路径段 | `rejectsPathTraversalEntries` 失败 |
+| `PluginUpdatePolicy` 恒返回 `AutoApply` | 6 项失败（5 项策略 + 1 项安装器） |
+
+实现说明与偏离：
+
+- **验证器读 central directory 而非流式扫描**。`ZipInputStream` 只能看到 local header，对 STORED 条目 `entry.size` 恒为 `-1`，任何"解压前检查声明大小"的逻辑都会退化成"解压后才知道"。改用 `ZipFile` 后声明大小在读取任何载荷字节前即可获得——这是 ZIP bomb 能在微秒级被拒的唯一原因。
+- **输入先落临时文件**。`ZipFile` 需要可随机访问的文件，故 `verify` 把输入 spool 到临时文件，并在 `finally` 中删除；spool 过程本身受 `maxInputBytes` 约束。
+- **平台 ZIP 读取器自抛的异常被翻译**。`java.util.zip.ZipException: duplicate entry` 会被转成 `PackageRejected("DUPLICATE_ENTRY")`，保证所有拒绝都带契约自己的错误码。
+- **两个真实设计缺陷由测试暴露并已修复**：
+  1. `InstalledPlugin` 原先不保存安全边界，导致安装器把"同插件同声明的正常升级"误判为"资源提升"而要求批准。已让 `InstalledPlugin` 携带 `SecurityDeclaration`。
+  2. 保留的上一版本原先指向 live 目录，而提交会把该目录移走并删除——回滚目标随之消失。已改为固定放在 `.previous/<pluginId>`，与 live 路径完全独立。
+- **未实现 CLI `agent-life-plugin build`**。计划的 Interfaces 列出了该命令，但 Tasks 的文件清单里没有对应入口文件，且 Task 11 之前的宿主尚不消费构建产物。当前 `buildPackage` 以库函数形式提供，CLI 可在 Task 11 接线时补上，不影响确定性保证。
+- `PluginSourceResolver` 要求 HTTPS 来源必须带 SPKI pin 或固定 sha256，否则拒绝——避免把"来源"变成事实上的信任根。
+
+- [x] **Step 5: 提交**
 
 ```bash
 git add plugin-tooling apps/android/plugin-package
