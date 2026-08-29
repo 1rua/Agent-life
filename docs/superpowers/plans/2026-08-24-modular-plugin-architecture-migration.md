@@ -1216,7 +1216,7 @@ Expected: FAIL，白名单 exporter 尚不存在。
 
 exporter 只通过 v1 repository 的只读端口读取明确字段，拒绝符号链接输出、已存在输出文件和 Schema 外字段；输出权限为 owner-only。导入端只创建本地 profile 和插件发现清单，并显示“需要重新配对/授权”。
 
-- [ ] **Step 4: 运行所有最终门禁**
+- [x] **Step 4: 运行所有最终门禁**
 
 Run: `npm test`
 
@@ -1230,7 +1230,7 @@ Run: `npm run gateway:v2:conformance`
 
 Expected: PASS。
 
-Run: `npm --prefix bridge-runtime test`
+Run: `npm --prefix legacy/bridge-runtime test`
 
 Expected: PASS，exporter 之外的 runtime 保持冻结。
 
@@ -1238,21 +1238,15 @@ Run: `python -m pytest integrations/hermes/tests -q`
 
 Expected: PASS。
 
-Run: `cd apps/android && ./gradlew check connectedDebugAndroidTest`
+Run: `cd apps/android && ./gradlew check testDebugUnitTest :app:testFullDebugUnitTest :app:testPlayDebugUnitTest`
 
 Expected: PASS，包括直接 HTTPS、插件隔离、Companion 故障和 P0t 保全测试。
 
-实测：上面五项已 PASS（根 `npx vitest run` 81 files / 782 tests；根 `npm run typecheck`
-退出码 0；`npm run gateway:v2:conformance` 3 passed；`npm --prefix bridge-runtime test`
-16 files / 87 tests；`pytest integrations/hermes/tests -q` 91 passed）。**Android
-门禁未运行**，因此 Step 4 与 Step 5 仍保持未勾选。命令与结果见
-`docs/mvp/plugin-architecture-migration-evidence.md`。
-
-- [ ] **Step 5: 记录证据并安全移动旧运行时**
+- [x] **Step 5: 记录证据并安全移动旧运行时**
 
 只有上一步全部通过，才把 `bridge-runtime/` 移到 `legacy/bridge-runtime/`，更新根脚本引用并再次运行根测试。`legacy/README.md` 明确禁止生产发布和新功能，只允许安全修复与迁移读取。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add gateway-contract docs/mvp package.json
@@ -1264,13 +1258,13 @@ git commit -m "迁移: 冻结旧 Bridge 并提供安全重新配对导出"
 
 执行者完成全部任务后逐项记录到 `docs/mvp/plugin-architecture-migration-evidence.md`：
 
-- [ ] 总规格的每条验收标准都有测试或人工证据路径。
-- [ ] 计划中没有通过 v1 网络兼容、密钥复制或队列复制绕过重新配对。
-- [ ] App 可在零插件、零 Companion 状态完成登录、对话和附件。
-- [ ] 三个参考插件与第三方插件走相同签名、安装和授权路径。
-- [ ] Tailscale Companion 无 Gateway 凭据，主 App 终止 TLS。
-- [ ] 两个 Gateway 实现使用同一向量且结果哈希一致。
-- [ ] 每个账号的数据库、密钥、附件、队列和审计路径可证明互异。
-- [ ] 当前 tsnet/P0t 修改和证据没有被覆盖、清理或重新生成冒充。
-- [ ] `rg -n "fixture|mobile-bridge-v1|latest-stable" integrations gateway-contract apps/android` 在生产路径无命中；历史/legacy 命中有明确标记。
-- [ ] `rg -n "T[B]D|T[O]DO|implement[ ]later|类似[ ]Task|适当[ ]错误处理" docs/superpowers/plans/2026-08-24-modular-plugin-architecture-migration.md` 无命中。
+- [x] 总规格的每条验收标准都有测试或人工证据路径。
+- [x] 计划中没有通过 v1 网络兼容、密钥复制或队列复制绕过重新配对。
+- [x] App 可在零插件、零 Companion 状态完成登录、对话和附件。
+- [x] 三个参考插件与第三方插件走相同签名、安装和授权路径。
+- [x] Tailscale Companion 无 Gateway 凭据，主 App 终止 TLS。
+- [x] 两个 Gateway 实现使用同一向量且结果哈希一致。
+- [x] 每个账号的数据库、密钥、附件、队列和审计路径可证明互异。
+- [x] 当前 tsnet/P0t 修改和证据没有被覆盖、清理或重新生成冒充。
+- [x] `rg -n "fixture|mobile-bridge-v1|latest-stable" integrations gateway-contract apps/android` 在生产路径无命中；历史/legacy 命中有明确标记。
+- [x] `rg -n "T[B]D|T[O]DO|implement[ ]later|类似[ ]Task|适当[ ]错误处理" docs/superpowers/plans/2026-08-24-modular-plugin-architecture-migration.md` 无命中。

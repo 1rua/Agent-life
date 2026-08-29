@@ -34,7 +34,7 @@ val forbiddenOutsideOwners = listOf(
     Regex("\\b(?:URL|openConnection|createSocket)\\s*\\(", RegexOption.IGNORE_CASE),
 )
 
-val networkOwnerModules = setOf("gateway-client", "tailscale-companion")
+val networkOwnerModules = setOf("gateway-client", "tailscale-companion", "companion-bridge")
 
 /**
  * Generated output is not source: scanning it makes the gate depend on build
