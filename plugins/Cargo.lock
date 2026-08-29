@@ -3,21 +3,7 @@
 version = 4
 
 [[package]]
-name = "agent-life-call-log"
-version = "0.1.0"
-dependencies = [
- "agent-life-sdk",
-]
-
-[[package]]
 name = "agent-life-echo"
-version = "0.1.0"
-dependencies = [
- "agent-life-sdk",
-]
-
-[[package]]
-name = "agent-life-notifications"
 version = "0.1.0"
 dependencies = [
  "agent-life-sdk",
@@ -26,10 +12,3 @@ dependencies = [
 [[package]]
 name = "agent-life-sdk"
 version = "0.1.0"
-
-[[package]]
-name = "agent-life-sms"
-version = "0.1.0"
-dependencies = [
- "agent-life-sdk",
-]

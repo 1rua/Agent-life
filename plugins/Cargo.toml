@@ -12,13 +12,6 @@
 [workspace]
 resolver = "2"
 members = ["sdk-rust", "fixtures/echo"]
-members = [
-    "sdk-rust",
-    "fixtures/echo",
-    "notifications",
-    "sms",
-    "call-log",
-]
 
 # 受保护插件走 wasm：体积优先、panic 直接 trap（no_std 下没有 unwinding）。
 [profile.release]
