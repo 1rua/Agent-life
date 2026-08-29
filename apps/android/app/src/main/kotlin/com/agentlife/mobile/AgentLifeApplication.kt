@@ -49,30 +49,50 @@ import com.agentlife.sms.SmsWireCodec
 import com.agentlife.sync.CapabilityEventEgressGate
 import com.agentlife.sync.CapabilityPairedBridgeBindingSource
 import java.io.File
+import com.agentlife.kernel.AndroidAuditStore
+import com.agentlife.kernel.CapabilityProviderSelector
+import com.agentlife.kernel.DeveloperTrustMode
+import com.agentlife.kernel.HostEnvelope
+import com.agentlife.kernel.NativePluginLoader
+import com.agentlife.kernel.PhoneLimits
+import com.agentlife.kernel.PluginKernel
 
 /**
  * Verifier supplied by the authenticated pairing/control-wire subsystem. Its
  * implementation must bind an ACK to the current device, event and connection
  * generation; an opaque Boolean or unsigned event ID is not sufficient.
+ * 极简 Android 宿主组合根。
+ *
+ * 核心架构：
+ * 1. 彻底解耦内建 Collector 与旧 Bridge 依赖；
+ * 2. 零插件状态下仍具备完整的 Gateway v2 连接、多账号与对话附件支持；
+ * 3. 平台内核（PluginKernel）独立初始化并管理受保护插件与审计。
  */
 fun interface AuthenticatedBoundEventAckVerifier {
     fun verify(eventId: String, eventAckWire: ByteArray): Boolean
 }
+class AgentLifeApplication : Application() {
 
 data class PairedNotificationBridgeRuntime(
     val transport: ProductionPairedBridgeTransport,
     val binding: VerifiedPairingTransportBinding,
     val ackVerifier: AuthenticatedBoundEventAckVerifier,
 )
+    lateinit var kernel: PluginKernel
+        private set
 
 /** Pairing lifecycle installs only already verified material, never an endpoint. */
 object PairedNotificationBridgeRegistry {
     @Volatile
     private var runtime: PairedNotificationBridgeRuntime? = null
+    lateinit var trustMode: DeveloperTrustMode
+        private set
 
     fun install(value: PairedNotificationBridgeRuntime) {
         runtime = value
     }
+    lateinit var auditStore: AndroidAuditStore
+        private set
 
     fun clear() {
         runtime = null
@@ -123,6 +143,8 @@ class AgentLifeApplication : Application() {
             ),
         )
         notificationOutbox = createOutboxFailClosed()
+        trustMode = DeveloperTrustMode()
+        auditStore = AndroidAuditStore()
 
         smsAuthority = createSmsAuthorityFailClosed()
         smsScheduler = createSmsSchedulerFailClosed()
@@ -192,6 +214,14 @@ class AgentLifeApplication : Application() {
         NotificationOutboxStore(
             persistence = FileEncryptedOutboxPersistence(
                 File(noBackupFilesDir, "notification-outbox-v1.aesgcm"),
+        val providerSelector = CapabilityProviderSelector(phoneDefaults = emptyMap())
+        kernel = PluginKernel(
+            hostEnvelope = HostEnvelope(
+                primitives = setOf(
+                    "org.agentlife.notifications.query@1.0.0",
+                    "org.agentlife.sms.query@1.0.0",
+                    "org.agentlife.call-log.query@1.0.0",
+                ),
             ),
             encryptionKey = AndroidKeystoreOutboxKeyProvider().getOrCreate(),
             ackVerifier = EventAckVerifier { eventId, ackWire ->
@@ -199,6 +229,13 @@ class AgentLifeApplication : Application() {
                     ?.ackVerifier
                     ?.verify(eventId, ackWire) == true
             },
+            phoneLimits = PhoneLimits(primitives = emptySet()),
+            runtimes = emptyMap(),
+            audit = auditStore,
+            trustMode = trustMode,
+            nativeLoader = NativePluginLoader(trustMode),
+            providerSelector = providerSelector,
+            grants = { null },
         )
     } catch (failure: Throwable) {
         // Preserve corrupt ciphertext/key evidence. The listener still starts,

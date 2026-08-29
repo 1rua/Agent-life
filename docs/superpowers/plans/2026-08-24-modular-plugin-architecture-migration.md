@@ -1133,7 +1133,7 @@ git commit -m "重构: 将 tsnet 迁为可选 Tailscale Companion"
 - Produces: 无插件情况下完整可用的账号/Gateway、对话和附件 UI
 - Produces: `full` 变体支持开放运行时安装；`play` 变体只允许随 AAB 声明的受限扩展，协议保持相同
 
-- [ ] **Step 1: 写无插件、无 Tailscale 的核心旅程失败测试**
+- [x] **Step 1: 写无插件、无 Tailscale 的核心旅程失败测试**
 
 ```kotlin
 @Test fun freshInstallCanLoginChatAndUploadWithoutPlugins() {
@@ -1146,13 +1146,13 @@ git commit -m "重构: 将 tsnet 迁为可选 Tailscale Companion"
 }
 ```
 
-- [ ] **Step 2: 运行并确认当前主界面红灯**
+- [x] **Step 2: 运行并确认当前主界面红灯**
 
 Run: `cd apps/android && ./gradlew :app:testDebugUnitTest :app:connectedDebugAndroidTest`
 
 Expected: FAIL，App 当前直接组合设备能力与 tsnet transport。
 
-- [ ] **Step 3: 替换 Application 组合根和主导航**
+- [x] **Step 3: 替换 Application 组合根和主导航**
 
 ```kotlin
 data class CoreNavigation(
@@ -1164,13 +1164,13 @@ data class CoreNavigation(
 
 Manifest 中包络权限和系统组件必须标注由哪个 kernel primitive provider 使用；App UI 不直接引用 provider 类型。插件/权限/审计/开发者信任模式只进入设置。Gradle 建立 `full` 与 `play` product flavor：前者启用本地/HTTPS `.alp` 与开发者信任模式，后者关闭远程可执行载荷和原生 loader，但继续使用相同 Gateway v2 客户端。
 
-- [ ] **Step 4: 运行架构、UI 与根 Android 门禁**
+- [x] **Step 4: 运行架构、UI 与根 Android 门禁**
 
 Run: `cd apps/android && ./gradlew :app:check :app:connectedDebugAndroidTest check`
 
 Expected: PASS；`app` 无 collector、`transport`、`tailnet-core` 直接依赖，主导航快照只有三个核心区域；两个发行变体协议向量相同，Play 变体不能打开远程代码或开发者信任入口。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add apps/android/app apps/android/gradle

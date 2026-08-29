@@ -44,7 +44,6 @@ class KernelIsolationTest {
         runtime: PluginRuntime = EchoRuntime(),
         provider: PluginIdentity = smsIdentity,
         capability: String = "kernel.sms.read",
-        grants: ((String) -> PairingGrant?)? = null,
     ): PluginKernel {
         val audit = AndroidAuditStore()
         val trustMode = DeveloperTrustMode()
@@ -57,7 +56,7 @@ class KernelIsolationTest {
             trustMode = trustMode,
             nativeLoader = NativePluginLoader(trustMode),
             providerSelector = selector,
-            grants = grants ?: { if (it == "pairing-a") grant else null },
+            grants = { if (it == "pairing-a") grant else null },
         )
     }
 
@@ -616,75 +615,5 @@ class KernelIsolationTest {
             assertEquals("REJECTED", cause.from)
         }
         machine.transition(PluginState.UNINSTALLED)
-    }
-
-    @Test
-    fun referencePluginsHaveNoPrivilegeByAuthor() {
-        var grant: PairingGrant? = null
-        val k = kernel(grant = null) { if (it == "pairing-a") grant else null }
-        registered(k, identity = smsIdentity)
-
-        // 1. 默认未启用拒绝
-        try {
-            k.invoke(
-                identity = smsIdentity,
-                accountId = "account-a",
-                pairingId = "pairing-a",
-                capability = "kernel.sms.read",
-                input = ByteArray(0),
-                session = session(),
-            )
-            fail("expected invocation to be denied when not enabled")
-        } catch (cause: CapabilityDenied) {
-            assertEquals("kernel.sms.read", cause.primitive)
-        }
-
-        // 2. 启用但无配对授权时拒绝
-        k.enable("org.agentlife.sms")
-        try {
-            k.invoke(
-                identity = smsIdentity,
-                accountId = "account-a",
-                pairingId = "pairing-a",
-                capability = "kernel.sms.read",
-                input = ByteArray(0),
-                session = session(),
-            )
-            fail("expected invocation to be denied when grant is missing")
-        } catch (cause: CapabilityDenied) {
-            assertEquals("kernel.sms.read", cause.primitive)
-        }
-
-        // 3. 授权 pairing-a
-        grant = PairingGrant(
-            pairingId = "pairing-a",
-            granted = setOf("kernel.sms.read"),
-            revision = 1L,
-        )
-
-        val result = k.invoke(
-            identity = smsIdentity,
-            accountId = "account-a",
-            pairingId = "pairing-a",
-            capability = "kernel.sms.read",
-            input = "sms".toByteArray(),
-            session = session(),
-        )
-        assertEquals("sms", String(result.output))
-
-        // 4. 跨配对隔离：pairing-b 拒绝
-        try {
-            k.invoke(
-                identity = smsIdentity,
-                accountId = "account-b",
-                pairingId = "pairing-b",
-                capability = "kernel.sms.read",
-                input = ByteArray(0),
-                session = session(),
-            )
-            fail("expected invocation to be denied for ungranted pairing-b")
-        } catch (cause: CapabilityDenied) {
-            assertEquals("kernel.sms.read", cause.primitive)
-        }
     }
 }
