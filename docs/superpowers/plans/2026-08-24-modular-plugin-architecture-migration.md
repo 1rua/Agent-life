@@ -817,7 +817,7 @@ data class VerifiedPluginPackage(
 
 验证在解压前检查 entry 数与声明大小，签名成功前不解析载荷；安装通过 staging + fsync + 原子指针切换提交，保留上一已验证版本。
 
-- [ ] **Step 4: 运行确定性、模糊与中断恢复测试**
+- [x] **Step 4: 运行确定性、模糊与中断恢复测试**
 
 Run: `npm --prefix plugin-tooling test`
 
@@ -827,12 +827,16 @@ Run: `cd apps/android && ./gradlew :plugin-package:testDebugUnitTest :plugin-pac
 
 Expected: PASS，ZIP bomb、路径穿越、摘要篡改、作者替换、降级和中断均不可产生半安装状态；来源不成为信任根，安全边界扩大要求批准，同密钥无扩权更新可事务应用并回滚。
 
-**Step 4 未勾选：真机部分受阻。** `adb devices` 在执行时返回空（设备 R52X909R9QT 已断开），`connectedDebugAndroidTest` 报 `No connected devices!`。真机测试文件已写好但**未经运行验证**，因此不勾选本步骤。设备重连后需补跑并勾选。
+**Step 4 已于 2026-08-30 补验证并勾选。** 设备重连（adb daemon 假死，重启后恢复）后补跑 `connectedDebugAndroidTest`，暴露出两个此前被静默掩盖的真实缺陷：
+
+1. **库模块真机测试静默空转**（结构性缺陷，影响面已排查）。`apps/android/build.gradle.kts` 只为 `com.android.application` 设置 `testInstrumentationRunner`，库模块沿用 AGP 默认的 `android.test.InstrumentationTestRunner`（JUnit3 遗留运行器），它不识别 JUnit4 的 `@Test`。结果是测试类被正常编译进 dex，但 `Starting 0 tests` 且 **BUILD SUCCESSFUL**——`plugin-package` 的 6 个真机用例从未被执行过。已在根构建脚本为库模块补上 `androidx.test.runner.AndroidJUnitRunner` 默认值。`gateway-client`、`tailnet-core`、`transport` 早已各自显式设置，未受影响。
+2. **路径穿越在真机上错误码不对**。Android 的 `ZipFile` 在打开归档时就筛查条目名，`..` 段在 `validateEntryName` 执行前已被平台拒绝，兜底翻译把它归为 `CONTAINER_INVALID`。契约要求穿越必须报 `TRAVERSAL`，已修正翻译分支（该分支只有真机测试覆盖，JVM 的 `ZipFile` 不拦截，故无单元测试）。
 
 已完成并通过的部分（2026-08-30）：
 
 - `npx vitest run plugin-tooling` → 5 tests, 0 failures（确定性哈希、载荷字节变化即变哈希、路径穿越拒绝、签名可验证、UTF-8 字节序）
 - `./gradlew :plugin-package:testDebugUnitTest` → 33 tests, 0 failures（`AlpVerifierTest` 8、`PluginInstallerTest` 8、`PluginSourceResolverTest` 8、`PluginUpdatePolicyTest` 9）
+- `./gradlew :plugin-package:connectedDebugAndroidTest` → 6 tests, 0 failures on SM-X710 - 16（`InterruptedInstallInstrumentedTest`，修复上述两处后）
 - `./gradlew noVpnSurfaceCheck` → BUILD SUCCESSFUL（架构门禁未被破坏）
 
 变异验证（证明测试非空转，探针均已还原）：

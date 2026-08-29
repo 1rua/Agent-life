@@ -32,7 +32,14 @@ subprojects {
     plugins.withId("com.android.library") {
         extensions.configure<com.android.build.api.dsl.LibraryExtension> {
             compileSdk = 35
-            defaultConfig { minSdk = 34 }
+            defaultConfig {
+                minSdk = 34
+                // Without this a library test APK silently runs under the legacy
+                // `android.test.InstrumentationTestRunner`, which ignores JUnit4
+                // @Test methods: the build reports SUCCESSFUL while executing
+                // zero tests.
+                testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+            }
             compileOptions {
                 sourceCompatibility = JavaVersion.VERSION_17
                 targetCompatibility = JavaVersion.VERSION_17

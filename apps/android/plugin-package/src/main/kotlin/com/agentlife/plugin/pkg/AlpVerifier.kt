@@ -60,6 +60,14 @@ class AlpVerifier(
         if (message.contains("duplicate", ignoreCase = true)) {
             throw PackageRejected("DUPLICATE_ENTRY")
         }
+        // Android's ZIP reader screens entry names when the archive is opened,
+        // so on a device it rejects `..` segments before [validateEntryName]
+        // ever runs. The JVM reader does not, which is why this branch has a
+        // device test and no unit test. The contract still demands that a
+        // traversal surfaces as TRAVERSAL, not as a generic container error.
+        if (message.contains("invalid zip entry path", ignoreCase = true)) {
+            throw PackageRejected("TRAVERSAL:${cause.message}")
+        }
         throw PackageRejected("CONTAINER_INVALID:${cause.message}")
     }
 
