@@ -36,6 +36,50 @@
           }
         }
       }
+    },
+    "commandCatalog": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commands"],
+      "properties": {
+        "commands": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["command", "description"],
+            "properties": {
+              "command": {
+                "type": "string",
+                "pattern": "^/[a-z0-9_-]+$"
+              },
+              "description": { "type": "string", "minLength": 1 },
+              "argumentHint": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "generationCancel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["clientMessageId"],
+      "properties": {
+        "clientMessageId": {
+          "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
+        }
+      }
+    },
+    "mirrorSync": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["conversationId", "sinceSeq"],
+      "properties": {
+        "conversationId": {
+          "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
+        },
+        "sinceSeq": { "type": "integer", "minimum": 0 }
+      }
     }
   }
 }

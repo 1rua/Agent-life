@@ -64,6 +64,20 @@
               "type": "array",
               "uniqueItems": true,
               "items": { "enum": ["risk-queue-v1"] }
+            },
+            "conversationUi": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "agent-command-catalog-v1",
+                  "message-batches-v1",
+                  "newline-v1",
+                  "generation-cancel-v1",
+                  "conversation-mirror-v1",
+                  "attachment-status-v1"
+                ]
+              }
             }
           }
         },
@@ -100,7 +114,21 @@
             "messages": { "const": "chat-v1" },
             "attachments": { "const": "staged-sha256-v1" },
             "events": { "const": "sse-cursor-v1" },
-            "deviceRequests": { "const": "risk-queue-v1" }
+            "deviceRequests": { "const": "risk-queue-v1" },
+            "conversationUi": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "agent-command-catalog-v1",
+                  "message-batches-v1",
+                  "newline-v1",
+                  "generation-cancel-v1",
+                  "conversation-mirror-v1",
+                  "attachment-status-v1"
+                ]
+              }
+            }
           }
         },
         "limits": {
@@ -125,7 +153,9 @@
             },
             "attachmentTtlSeconds": { "type": "integer", "minimum": 1 },
             "eventRetentionSeconds": { "type": "integer", "minimum": 1 },
-            "maxClockSkewSeconds": { "type": "integer", "minimum": 0 }
+            "maxClockSkewSeconds": { "type": "integer", "minimum": 0 },
+            "maxBatchMembers": { "type": "integer", "minimum": 1 },
+            "maxBatchBytes": { "type": "integer", "minimum": 1 }
           }
         },
         "gatewayIdentity": {

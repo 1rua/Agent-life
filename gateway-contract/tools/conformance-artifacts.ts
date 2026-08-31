@@ -197,8 +197,11 @@ const pythonCommand = (): string => {
   return process.platform === "win32" ? "python" : "python3";
 };
 
-const tsxCliPath = (): string =>
-  join(dirname(contractRootDirectory), "node_modules", "tsx", "dist", "cli.mjs");
+const tsxCliPath = (): string => {
+  const localPath = join(dirname(contractRootDirectory), "node_modules", "tsx", "dist", "cli.mjs");
+  if (existsSync(localPath)) return localPath;
+  return join("/mnt/数据/项目/Agent-life", "node_modules", "tsx", "dist", "cli.mjs");
+};
 
 const runnerCommand = (
   implementation: ConformanceImplementation,

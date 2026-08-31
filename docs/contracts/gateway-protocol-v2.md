@@ -91,8 +91,8 @@ V2 是新协议，不兼容 Bridge Protocol v1。所有端点必须使用 HTTPS�
   },
   "features": {
     "auth": ["password", "account-invitation", "refresh", "device-key"],
-    "messages": ["chat-v1"],
-    "attachments": ["staged-sha256-v1"],
+    "messages": ["chat-v1", "message-batches-v1"],
+    "attachments": ["staged-sha256-v1", "screen-selection-v1"],
     "events": ["sse-cursor-v1"],
     "deviceRequests": ["risk-queue-v1"]
   },
@@ -109,8 +109,8 @@ V2 是新协议，不兼容 Bridge Protocol v1。所有端点必须使用 HTTPS�
   "protocol": { "major": 2, "minor": 0 },
   "features": {
     "auth": ["password", "account-invitation", "refresh", "device-key"],
-    "messages": "chat-v1",
-    "attachments": "staged-sha256-v1",
+    "messages": "message-batches-v1",
+    "attachments": "screen-selection-v1",
     "events": "sse-cursor-v1",
     "deviceRequests": "risk-queue-v1"
   },

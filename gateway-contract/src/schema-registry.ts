@@ -21,8 +21,12 @@ export type GatewaySchemaName =
   | "session.refresh"
   | "session.device"
   | "conversation.create"
+  | "conversation.commandCatalog"
+  | "conversation.generationCancel"
+  | "conversation.mirrorSync"
   | "message.create"
   | "attachment.create"
+  | "attachment.status"
   | "event"
   | "device.request"
   | "response.success"
@@ -59,8 +63,12 @@ const definitions: Record<GatewaySchemaName, readonly [SchemaDocument, string]> 
   "session.refresh": [sessionDocument as SchemaDocument, "refresh"],
   "session.device": [sessionDocument as SchemaDocument, "device"],
   "conversation.create": [conversationDocument as SchemaDocument, "create"],
+  "conversation.commandCatalog": [conversationDocument as SchemaDocument, "commandCatalog"],
+  "conversation.generationCancel": [conversationDocument as SchemaDocument, "generationCancel"],
+  "conversation.mirrorSync": [conversationDocument as SchemaDocument, "mirrorSync"],
   "message.create": [conversationDocument as SchemaDocument, "messageCreate"],
   "attachment.create": [attachmentDocument as SchemaDocument, "create"],
+  "attachment.status": [attachmentDocument as SchemaDocument, "status"],
   event: [eventDocument as SchemaDocument, "event"],
   "device.request": [deviceRequestDocument as SchemaDocument, "request"],
   "response.success": [envelopeDocument as SchemaDocument, "success"],

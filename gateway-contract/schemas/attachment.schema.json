@@ -17,6 +17,23 @@
           "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/bareSha256"
         }
       }
+    },
+    "status": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["attachmentId", "status", "sizeBytes", "sha256"],
+      "properties": {
+        "attachmentId": {
+          "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
+        },
+        "status": {
+          "enum": ["staged", "uploaded", "failed", "expired"]
+        },
+        "sizeBytes": { "type": "integer", "minimum": 0 },
+        "sha256": {
+          "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/bareSha256"
+        }
+      }
     }
   }
 }

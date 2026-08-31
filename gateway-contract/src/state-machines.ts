@@ -122,3 +122,65 @@ export const maximumDeviceRequestQueueSeconds = (
       throw new Error("SCHEMA_INVALID");
   }
 };
+
+export type GenerationState =
+  | "idle"
+  | "streaming"
+  | "completed"
+  | "cancel_requested"
+  | "cancelled"
+  | "failed"
+  | "outcome_unknown";
+
+export type GenerationEvent =
+  | "start"
+  | "chunk"
+  | "complete"
+  | "request_cancel"
+  | "cancelled"
+  | "fail"
+  | "timeout_outcome_unknown";
+
+const generationTransitions: Readonly<
+  Record<string, Readonly<Record<string, GenerationState>>>
+> = {
+  idle: { start: "streaming" },
+  streaming: {
+    chunk: "streaming",
+    complete: "completed",
+    request_cancel: "cancel_requested",
+    fail: "failed",
+    timeout_outcome_unknown: "outcome_unknown",
+  },
+  cancel_requested: {
+    cancelled: "cancelled",
+    complete: "completed",
+    fail: "failed",
+    timeout_outcome_unknown: "outcome_unknown",
+  },
+  completed: {},
+  cancelled: {},
+  failed: {},
+  outcome_unknown: {},
+};
+
+export const nextGenerationState = (
+  current: GenerationState,
+  event: GenerationEvent,
+): GenerationState => {
+  const transitions =
+    typeof current === "string" ? generationTransitions[current] : undefined;
+  const next = typeof event === "string" ? transitions?.[event] : undefined;
+  return next ?? invalidTransition();
+};
+
+export interface MessageBatchMember {
+  readonly clientMessageId: string;
+  readonly text: string;
+  readonly attachments?: ReadonlyArray<{ readonly attachmentId: string }>;
+}
+
+export const joinMessageBatch = (members: ReadonlyArray<MessageBatchMember>): string => {
+  if (members.length === 0) return "";
+  return members.map((m) => m.text.replace(/^\n+|\n+$/g, "")).join("\n");
+};
