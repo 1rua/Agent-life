@@ -31,6 +31,8 @@ include(
     ":core-model",
     ":control-ports",
     ":gateway-client",
+    ":conversation-domain",
+    ":conversation-ui",
     ":policy-engine",
     ":notification-collector",
     ":sms-collector",
