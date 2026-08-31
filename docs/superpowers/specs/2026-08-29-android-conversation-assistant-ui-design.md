@@ -1,6 +1,8 @@
 ---
-status: proposed
+status: accepted
 date: 2026-08-29
+accepted_date: 2026-09-01
+authorization: 2026-09-01 用户授权进入实施计划（docs/superpowers/plans/2026-09-01-android-conversation-assistant-ui-full-refactor.md）
 refines:
   - 2026-08-24-modular-plugin-architecture.md
 related_adrs:
