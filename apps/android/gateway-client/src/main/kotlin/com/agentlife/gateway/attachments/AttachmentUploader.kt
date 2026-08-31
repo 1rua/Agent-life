@@ -10,6 +10,7 @@ data class SelectedAttachment(
     val content: ByteArray,
     /** Optional client-declared digest, accepted in bare or `sha256:` form. */
     val declaredSha256: String? = null,
+    val visualContext: VisualAttachmentMetadata? = null,
 )
 
 data class AttachmentCreateRequest(
@@ -18,6 +19,26 @@ data class AttachmentCreateRequest(
     val mediaType: String,
     val sizeBytes: Long,
     val sha256: String,
+    val visualContext: VisualAttachmentMetadata? = null,
+)
+
+data class VisualAttachmentMetadata(
+    val bounds: NormalizedCropBounds,
+    val displayMetrics: DisplayDensityMetrics,
+    val uiHierarchySummary: String? = null,
+)
+
+data class NormalizedCropBounds(
+    val left: Double,
+    val top: Double,
+    val right: Double,
+    val bottom: Double,
+)
+
+data class DisplayDensityMetrics(
+    val widthPixels: Int,
+    val heightPixels: Int,
+    val densityDpi: Int,
 )
 
 /**
@@ -70,6 +91,7 @@ class AttachmentUploader(
                 mediaType = attachment.mediaType,
                 sizeBytes = sizeBytes,
                 sha256 = sha256,
+                visualContext = attachment.visualContext,
             ),
         )
 

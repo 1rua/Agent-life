@@ -11,6 +11,27 @@ import org.junit.Test
  */
 class AttachmentUploaderTest {
 
+    @Test
+    fun testUploadWithVisualContext() {
+        val transport = recorder()
+        val uploader = AttachmentUploader(transport)
+        val vc = VisualAttachmentMetadata(
+            bounds = NormalizedCropBounds(0.0, 0.0, 1.0, 1.0),
+            displayMetrics = DisplayDensityMetrics(1080, 1920, 420),
+            uiHierarchySummary = "RootView",
+        )
+        val id = uploader.upload(
+            SelectedAttachment(
+                filename = "screen.png",
+                mediaType = "image/png",
+                content = "PNGDATA".toByteArray(Charsets.UTF_8),
+                visualContext = vc,
+            ),
+        )
+        assertEquals("att-server-1", id)
+        assertEquals(vc, transport.created?.visualContext)
+    }
+
     private fun recorder() = RecordingGatewayClient()
 
     private fun uploader(client: RecordingGatewayClient = recorder(), maxBytes: Long = 1024) =

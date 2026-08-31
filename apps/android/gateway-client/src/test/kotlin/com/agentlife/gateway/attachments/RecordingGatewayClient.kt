@@ -15,7 +15,7 @@ class RecordingGatewayClient : GatewayAttachmentTransport {
     var commitShouldFail = false
 
     override fun create(request: AttachmentCreateRequest): String {
-        calls += "create"
+                calls += "create"
         created = request
         return "att-server-1"
     }
