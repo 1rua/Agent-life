@@ -169,7 +169,7 @@ def test_consumes_the_shared_schema_and_vector_registry(tmp_path):
     vector_root = Path(__file__).resolve().parents[3] / "gateway-contract" / "vectors"
     vector_files = {
         "request-signatures.json", "protocol-negotiation.json", "auth-sessions.json",
-        "attachments.json", "sse-events.json", "device-requests.json",
+        "attachments.json", "sse-events.json", "device-requests.json", "conversation-ui.json",
     }
     discovered = {
         path.name for path in vector_root.glob("*.json")
@@ -181,9 +181,9 @@ def test_consumes_the_shared_schema_and_vector_registry(tmp_path):
     ]
 
     assert discovered == vector_files
-    assert len(cases) == 24
-    assert len({case["id"] for case in cases}) == 24
-    assert len(results) == 24
+    assert len(cases) == 28
+    assert len({case["id"] for case in cases}) == 28
+    assert len(results) == 28
     assert {result["status"] for result in results} == {"pass"}
     assert {result["implementation"] for result in results} == {"hermes-python"}
 

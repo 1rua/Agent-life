@@ -425,6 +425,12 @@ class ContractRegistry:
         "device.request": ("device-request.schema.json", "request"),
         "response.success": ("envelope.schema.json", "success"),
         "response.failure": ("envelope.schema.json", "failure"),
+        "conversation.commandCatalog": ("conversation.schema.json", "commandCatalog"),
+        "conversation.cancel": ("conversation.schema.json", "generationCancel"),
+        "conversation.generationCancel": ("conversation.schema.json", "generationCancel"),
+        "conversation.mirror": ("conversation.schema.json", "mirrorSync"),
+        "conversation.mirrorSync": ("conversation.schema.json", "mirrorSync"),
+        "attachment.status": ("attachment.schema.json", "status"),
     }
 
     @property
@@ -2442,7 +2448,7 @@ class GatewayCore:
         registry = ContractRegistry(contract_root or self.contract_root)
         vector_files = (
             "request-signatures.json", "protocol-negotiation.json", "auth-sessions.json",
-            "attachments.json", "sse-events.json", "device-requests.json",
+            "attachments.json", "sse-events.json", "device-requests.json", "conversation-ui.json",
         )
         results: list[dict[str, Any]] = []
         for file_name in vector_files:
