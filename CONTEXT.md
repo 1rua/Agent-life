@@ -1,6 +1,6 @@
-# Agent-life 领域语境
+# open-android-intelligence 领域语境
 
-Agent-life 让 Android 设备连接到用户拥有的 Agent Gateway，同时确保手机端始终是本机数据与设备操作的最终授权者。产品由极简 Android 宿主、可安装设备插件和 Agent 宿主内的 Gateway 适配器组成。
+open-android-intelligence 让 Android 设备连接到用户拥有的 Agent Gateway，同时确保手机端始终是本机数据与设备操作的最终授权者。产品由极简 Android 宿主、可安装设备插件和 Agent 宿主内的 Gateway 适配器组成。
 
 ## Android 端
 
@@ -57,7 +57,7 @@ _Avoid_: 插件自定义能力、通配权限、可覆盖风险标签
 _Avoid_: 无限 Android API、插件权限清单、未来能力承诺
 
 **Companion 插件（Companion Plugin）**:
-以独立 Android package 安装、为宿主能力包络之外的权限、系统组件或隔离需求提供能力的设备插件；它通过平台内核控制的进程间接口参与 Agent-life，而不是直接向 Gateway 暴露权限。
+以独立 Android package 安装、为宿主能力包络之外的权限、系统组件或隔离需求提供能力的设备插件；它通过平台内核控制的进程间接口参与 open-android-intelligence，而不是直接向 Gateway 暴露权限。
 _Avoid_: 第二宿主、独立 Agent 客户端、权限旁路
 
 **Companion 作者绑定（Companion Author Binding）**:
@@ -121,13 +121,13 @@ _Avoid_: 授权插件、身份提供方、默认 Tailscale
 _Avoid_: 默认传输、App 内核网络、TLS 信任替代品
 
 **官方参考插件（First-party Reference Plugin）**:
-由 Agent-life 项目签名发布、用于证明开放插件契约可实现的普通设备插件；它不享有隐藏能力、默认启用或绕过授权的特权。
+由 open-android-intelligence 项目签名发布、用于证明开放插件契约可实现的普通设备插件；它不享有隐藏能力、默认启用或绕过授权的特权。
 _Avoid_: 内置功能、系统插件、强制安装
 
 ## Agent 端
 
 **Gateway**:
-属于单个 Gateway 账号的逻辑 Agent-life 通信入口；一台手机可以保存多个 Gateway，一个 Gateway 可以配对多台手机，而同一适配器部署可以承载多个彼此隔离的 Gateway。
+属于单个 Gateway 账号的逻辑 open-android-intelligence 通信入口；一台手机可以保存多个 Gateway，一个 Gateway 可以配对多台手机，而同一适配器部署可以承载多个彼此隔离的 Gateway。
 _Avoid_: 物理插件进程、共享租户、独立 Device Bridge
 
 **Gateway 部署（Gateway Deployment）**:
@@ -143,7 +143,7 @@ Hermes 与 OpenClaw 适配器共同遵守的 Gateway 行为、数据边界与一
 _Avoid_: 通用宿主插件、共享二进制、Docker Bridge
 
 **Gateway 适配器（Gateway Adapter）**:
-安装到特定 Agent 宿主并把 Agent-life 注册为消息入口的宿主插件；Hermes 与 OpenClaw 分别拥有自己的适配器，并共享 Gateway Core，一个适配器部署可以承载多个 Gateway 账号。
+安装到特定 Agent 宿主并把 open-android-intelligence 注册为消息入口的宿主插件；Hermes 与 OpenClaw 分别拥有自己的适配器，并共享 Gateway Core，一个适配器部署可以承载多个 Gateway 账号。
 _Avoid_: 单一跨宿主二进制、Bridge 客户端
 
 **旧 Bridge（Legacy Bridge）**:
@@ -203,7 +203,7 @@ Android 宿主为每个 Gateway 保存的、最近一次由用户明确打开、
 _Avoid_: 最近 Gateway 认证会话、最新后台事件、全局默认线程
 
 **Agent 对话会话（Agent Conversation Session）**:
-Hermes 或 OpenClaw 拥有并与一个 Agent-life 对话线程绑定的对话运行上下文；它不等于 Gateway 账号登录会话，也不作为 Android 的认证身份。
+Hermes 或 OpenClaw 拥有并与一个 open-android-intelligence 对话线程绑定的对话运行上下文；它不等于 Gateway 账号登录会话，也不作为 Android 的认证身份。
 _Avoid_: Gateway sessionId、账号登录会话、设备会话
 
 **Agent 命令目录（Agent Command Catalog）**:
@@ -303,7 +303,7 @@ Gateway 通过 HTTPS 持续发送流式回复和设备事件的有序通道；An
 _Avoid_: 永久在线、WebSocket 权威通道、无界重放
 
 **Gateway 附件限制（Gateway Attachment Limit）**:
-每个 Gateway 在配对配置中声明的有限单文件、单消息、媒体类型、超时和临时保留约束；Agent-life 不设统一业务大小上限，但 Android 始终可以因本机资源与用户策略拒绝上传。
+每个 Gateway 在配对配置中声明的有限单文件、单消息、媒体类型、超时和临时保留约束；open-android-intelligence 不设统一业务大小上限，但 Android 始终可以因本机资源与用户策略拒绝上传。
 _Avoid_: 无限上传、统一产品上限、远程资源命令
 
 **可迁移 Gateway 备份（Portable Gateway Backup）**:

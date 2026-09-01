@@ -1,4 +1,4 @@
-# Agent Life v1 canonical wire format
+# open-android-intelligence v1 canonical wire format
 
 This document freezes the byte-level `agent-life-json-es256/1.0` profile. The
 machine-readable authority is `protocol/profile/v1.json`, validated by

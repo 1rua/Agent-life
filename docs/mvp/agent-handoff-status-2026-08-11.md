@@ -1,4 +1,4 @@
-# Agent-Life 当前进度与交接说明
+# open-android-intelligence 当前进度与交接说明
 
 更新时间：2026-08-11
 用途：供后续 agent 接手实现、复审和生产化，不作为生产发布批准。

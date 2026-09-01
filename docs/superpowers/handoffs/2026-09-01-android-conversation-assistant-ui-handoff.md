@@ -1,7 +1,7 @@
 # Android 对话与数字助理界面重构交付记录 (2026-09-01)
 
 ## 交付概要
-完成了 Agent-life Android 宿主界面的完全重构，对齐 2026-08-29 对话与数字助理界面设计规范。
+完成了 open-android-intelligence Android 宿主界面的完全重构，对齐 2026-08-29 对话与数字助理界面设计规范。
 
 ## 关键提交与范围
 - **协议与契约扩展**: `gateway-contract` 引入 `message-batches-v1` 与 `screen-selection-v1`，补齐 Schema 与共享测试向量。

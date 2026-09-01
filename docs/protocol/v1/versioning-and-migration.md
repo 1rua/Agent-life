@@ -1,4 +1,4 @@
-# Agent Life v1 Versioning and Migration
+# open-android-intelligence v1 Versioning and Migration
 
 ## Canonical versions
 

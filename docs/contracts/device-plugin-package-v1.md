@@ -5,7 +5,7 @@ contract: agent-life-device-plugin-package
 version: 1.0.0
 ---
 
-# Agent-life 设备插件包契约 v1
+# open-android-intelligence 设备插件包契约 v1
 
 ## 1. 适用范围
 

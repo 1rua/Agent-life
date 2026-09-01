@@ -1,4 +1,4 @@
-# Agent-life 模块化插件架构迁移交接文档（Task 11 及后续）
+# open-android-intelligence 模块化插件架构迁移交接文档（Task 11 及后续）
 
 生成时间：2026-08-30
 当前基线：`main` at `8057d9a`（`迁移: 提供 v1 安全引导导出并冻结旧 Bridge`）
@@ -8,7 +8,7 @@
 
 ## 1. 项目定位与核心原则
 
-Agent-life 让 Android 设备能够连接用户自建/托管的 Agent Gateway。
+open-android-intelligence 让 Android 设备能够连接用户自建/托管的 Agent Gateway。
 - **宪法原则**：**手机端始终是本机数据与设备操作的最终授权者**，任何改动不得削弱手机端控制权。
 - **架构组成**：极简 Android 宿主 + 可安装设备插件（`.alp` 格式）+ Agent 宿主内的 Gateway 适配器（OpenClaw/TypeScript 与 Hermes/Python 两套）。
 
@@ -114,7 +114,7 @@ Agent-life 让 Android 设备能够连接用户自建/托管的 Agent Gateway。
 
 ## 6. 核心架构决策与操作禁令
 
-- **严禁使用 `rm`、`rm -rf` 等破坏性删除**：任何废弃文件必须移动至 `/tmp/Agent-life-trash/`。
+- **严禁使用 `rm`、`rm -rf` 等破坏性删除**：任何废弃文件必须移动至 `/tmp/open-android-intelligence-trash/`。
 - **所有提交信息必须使用中文**，格式如 `<类型>: <简要描述>`。
 - **代码中引用文件一律使用相对路径**，禁止硬编码绝对路径。
 - **不可打破的六项权限交集公式**：

@@ -1,4 +1,4 @@
-# Agent-life Task 6 完成交接
+# open-android-intelligence Task 6 完成交接
 
 ## 当前目标和状态
 

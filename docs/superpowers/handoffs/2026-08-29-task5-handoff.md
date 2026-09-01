@@ -1,8 +1,8 @@
-# Agent-life Task 5 完成交接
+# open-android-intelligence Task 5 完成交接
 
 ## 当前目标和状态
 
-已完整执行并验收 `Agent-life/docs/superpowers/plans/2026-08-24-modular-plugin-architecture-migration.md` 的 Task 1 至 Task 5；Task 5 的最终复审报告、逐轮 RED/GREEN 证据和未确认边界请直接参考仓库内：
+已完整执行并验收 `open-android-intelligence/docs/superpowers/plans/2026-08-24-modular-plugin-architecture-migration.md` 的 Task 1 至 Task 5；Task 5 的最终复审报告、逐轮 RED/GREEN 证据和未确认边界请直接参考仓库内：
 
 - `docs/superpowers/plans/2026-08-24-modular-plugin-architecture-migration.md`
 - `.superpowers/sdd/2026-08-24-modular-plugin-architecture-migration/progress.md`
@@ -32,7 +32,7 @@
 - merge 首父 diff：`git diff HEAD^..HEAD --check` 通过
 - `git merge-base --is-ancestor bec1500 main` 返回成功
 
-测试和构建生成物没有进入提交；按项目规则移到 `/tmp/Agent-life-trash/` 下的对应目录。项目禁止使用 `rm`、`rm -rf`、`unlink`，后续清理继续使用安全移动。
+测试和构建生成物没有进入提交；按项目规则移到 `/tmp/open-android-intelligence-trash/` 下的对应目录。项目禁止使用 `rm`、`rm -rf`、`unlink`，后续清理继续使用安全移动。
 
 ## 主分支用户本地改动
 

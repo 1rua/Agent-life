@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 为 Agent Life Android 应用交付一个默认关闭、只读、权限与策略双重约束的通话记录适配器，使四类通话元数据能够按需读取或经独立 AES-GCM outbox 低频同步，同时不引入拨号、监听、录音、voicemail、写入或任意网络接口。
+**Goal:** 为 open-android-intelligence Android 应用交付一个默认关闭、只读、权限与策略双重约束的通话记录适配器，使四类通话元数据能够按需读取或经独立 AES-GCM outbox 低频同步，同时不引入拨号、监听、录音、voicemail、写入或任意网络接口。
 
 **Architecture:** 在平台无关的 `:capability-ports` 中冻结通话方向、号码展示、字段释放、历史与本机周期授权合约；在独立 `:call-log-collector` 中封装 CallLog ContentProvider、策略 authority、加密 sync state、wire codec、reconciliation、调度和撤权状态机。只把 SMS 已经验证过的“恢复 durable event → 三重 egress fence → 已配对 transport → 认证 ACK”抽入 `:capability-sync-runtime`，Provider、游标、wire 和本机策略保持能力专有。
 

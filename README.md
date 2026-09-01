@@ -1,6 +1,6 @@
-# Agent Life
+# open-android-intelligence
 
-Agent Life 让你的 Android 手机安全连接到自托管 AI Agent，让 Agent 在授权范围内读取通知、对话交流、执行操作。通过 app 内嵌的 Tailscale userspace 节点建立加密连接，不占用系统 VPN 通道。
+open-android-intelligence 让你的 Android 手机安全连接到自托管 AI Agent，让 Agent 在授权范围内读取通知、对话交流、执行操作。通过 app 内嵌的 Tailscale userspace 节点建立加密连接，不占用系统 VPN 通道。
 
 ## 核心功能
 

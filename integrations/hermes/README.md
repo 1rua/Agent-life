@@ -1,4 +1,4 @@
-# Agent-life Hermes Gateway
+# open-android-intelligence Hermes Gateway
 
 Native Python Gateway Protocol v2 plugin for Hermes.
 

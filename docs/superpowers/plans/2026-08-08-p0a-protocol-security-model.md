@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 冻结并实现 Agent Life v1.0 的语言中立设备协议与安全参考模型，使 Android、Bridge 和 Agent adapter 能用同一组 schema、状态机与 golden vectors 做一致性验证。
+**Goal:** 冻结并实现 open-android-intelligence v1.0 的语言中立设备协议与安全参考模型，使 Android、Bridge 和 Agent adapter 能用同一组 schema、状态机与 golden vectors 做一致性验证。
 
 **Architecture:** JSON Schema Draft 2020-12 是 wire contract 的唯一结构化来源；RFC 8785 JCS、SHA-256 与 P-256/ES256 定义字节级签名语义。TypeScript 参考核心实现确定性授权、重放防护、状态机与 fake actors，独立 Kotlin/JVM runner 消费同一固定向量，避免只验证单语言 encode/decode 自洽。P0a 不实现生产数据库、Android Keystore、真实 WSS/HTTPS、Hermes/OpenClaw 接入或任何手机数据采集。
 

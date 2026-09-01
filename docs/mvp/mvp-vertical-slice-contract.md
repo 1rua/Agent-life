@@ -1,4 +1,4 @@
-# Agent Life MVP vertical-slice contract
+# open-android-intelligence MVP vertical-slice contract
 
 Version: `v1` · protocol family: `1.0` · status: implementation baseline
 

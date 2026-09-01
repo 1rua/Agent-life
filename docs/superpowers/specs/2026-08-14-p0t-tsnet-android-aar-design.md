@@ -67,7 +67,7 @@ P0t 不交付生产 Bridge listener、OAuth credential issuer、节点生命周�
 | upstream `go.toolchain.rev` | `63ae404c8203317fd3c82d972e5dc8f0fcb425cb` |
 
 `third_party/tailscale` 是控制器提供的本地 source input，不把完整上游源码
-vendoring 到 Agent Life Git history。构建不得切换或修改它的当前工作树：输入
+vendoring 到 open-android-intelligence Git history。构建不得切换或修改它的当前工作树：输入
 检查先验证 official origin、clean status 和 pinned commit object，再通过
 `git archive` 把固定 commit 展开到临时只读 staging。commit object 缺失时构建
 失败，并给出显式的 controller fetch 命令；构建脚本本身不联网。
@@ -178,7 +178,7 @@ Go 清零输入 byte slice、清空 `Server.AuthKey` 的可达引用，Kotlin �
 tsnet 内部 dialer 建立 pinned WSS session；任何 HTTP redirect、证书/SNI 错误、
 非 443 目标或 endpoint 改写都失败。
 
-每条 WSS binary message 恰好承载一条 canonical Agent Life wire envelope。
+每条 WSS binary message 恰好承载一条 canonical open-android-intelligence wire envelope。
 空帧、text frame、超过协议固定 `max_envelope_bytes = 262,144` bytes、fragment
 reassembly 超限或 close 后调用均拒绝。AAR 不解释应用 payload，也不重签、
 重试或重排控制 envelope。

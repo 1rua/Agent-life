@@ -1,4 +1,4 @@
-# Agent Life protocol reference model
+# open-android-intelligence protocol reference model
 
 This directory contains the language-neutral P0a protocol and security reference model.
 

@@ -6,7 +6,7 @@
 ## Goal
 
 Implement the first Android SMS capability vertical slice: after an explicit
-local grant, Agent Life can read received SMS text from the Android inbox on
+local grant, open-android-intelligence can read received SMS text from the Android inbox on
 demand or periodically auto-send newly observed messages to the paired Bridge.
 The feature must remain typed, policy-revision fenced, encrypted while queued,
 and unable to access MMS, attachments, sent messages, or generic network APIs.

@@ -5,7 +5,7 @@ contract: agent-life-gateway-protocol
 version: 2.0.0
 ---
 
-# Agent-life Gateway Protocol v2 契约
+# open-android-intelligence Gateway Protocol v2 契约
 
 ## 1. 适用范围
 

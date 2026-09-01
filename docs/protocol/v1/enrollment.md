@@ -1,4 +1,4 @@
-# Agent Life v1 Enrollment
+# open-android-intelligence v1 Enrollment
 
 This document freezes the P0a enrollment contract. It defines application-level device enrollment only. Tailscale node registration, auth-key issuance, trust-credential storage, node lifecycle, policy attestation, and orphan cleanup are not implemented or modeled by Task 4.
 
