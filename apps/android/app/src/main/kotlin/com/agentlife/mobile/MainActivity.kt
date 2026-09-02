@@ -1,194 +1,157 @@
 package com.agentlife.mobile
 
-import android.app.Activity
+import android.graphics.Bitmap
+import android.net.Uri
 import android.os.Bundle
-import android.view.View
-import android.widget.Button
-import android.widget.EditText
-import android.widget.LinearLayout
-import android.widget.ScrollView
-import android.widget.TextView
+import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import com.agentlife.conversation.ports.LocalAttachmentSelection
+import com.agentlife.conversation.theme.AgentLifeTheme
+import com.agentlife.conversation.workbench.WorkbenchScreen
+import com.agentlife.mobile.util.ContentResolverExtensions
+import java.io.ByteArrayOutputStream
 
 /**
- * 极简 Android 宿主主界面。
+ * 宿主主入口 Activity。
  *
- * 核心三屏导航：
- * 1. Gateway 状态与连接 (GatewayScreen)
- * 2. 对话交互 (ConversationScreen)
- * 3. 附件管理 (AttachmentPicker)
- * 4. 平台设置 (PlatformSettingsScreen)
+ * 遵循严格的平台架构准则：
+ * 1. 彻底清除任何假数据与死界面占位；
+ * 2. 状态全量交由 GatewayRuntime 与领域层驱动；
+ * 3. 严格遵循 Material Design 3 规范与系统动态取色（符合 Android 12+ Monet 标准，拒绝固定死颜色）；
+ * 4. 接入原生相机快照、系统图片选择器与 SAF 文档选择器，走真实三步附件上传链路。
  */
-data class CoreNavigation(
-    val gateway: GatewayDestination,
-    val conversations: ConversationDestination,
-    val attachments: AttachmentDestination,
-)
-
-class MainActivity : Activity() {
-
-    private lateinit var application: AgentLifeApplication
-    private val gatewayPresenter = GatewayPresenter()
-    private val conversationPresenter = ConversationPresenter()
-    private val attachmentPresenter = AttachmentPresenter()
-    private lateinit var settingsPresenter: PlatformSettingsPresenter
-
-    private var currentTab: String = "gateway"
+class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        application = getApplication() as AgentLifeApplication
-        val allowTrust = BuildConfig.ALLOW_DEVELOPER_TRUST_MODE
-        val allowPlugins = BuildConfig.ALLOW_RUNTIME_PLUGINS
-        settingsPresenter = PlatformSettingsPresenter(
-            DistributionPolicy(
-                allowRuntimePlugins = allowPlugins,
-                allowDeveloperTrustMode = allowTrust,
-            ),
-        )
-        renderCurrentTab()
-    }
+        enableEdgeToEdge()
 
-    fun navigateTo(tab: String) {
-        currentTab = tab
-        renderCurrentTab()
-    }
+        val app = application as AgentLifeApplication
+        val runtime = app.gatewayRuntime
 
-    fun currentNavigation(): CoreNavigation = CoreNavigation(
-        gateway = GatewayDestination(baseUrl = gatewayPresenter.currentState().endpointUrl),
-        conversations = ConversationDestination(),
-        attachments = AttachmentDestination(uploadedCount = attachmentPresenter.currentState().attachments.size),
-    )
+        setContent {
+            AgentLifeTheme {
+                val phase by runtime.phase.collectAsState()
+                val controller by runtime.controller.collectAsState()
+                var showSettingsSheet by remember { mutableStateOf(false) }
 
-    private fun renderCurrentTab() {
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(32, 32, 32, 32)
-        }
-
-        // 导航栏
-        val navBar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        navBar.addView(Button(this).apply {
-            text = "Gateway"
-            setOnClickListener { navigateTo("gateway") }
-        })
-        navBar.addView(Button(this).apply {
-            text = "Chat"
-            setOnClickListener { navigateTo("chat") }
-        })
-        navBar.addView(Button(this).apply {
-            text = "Files"
-            setOnClickListener { navigateTo("files") }
-        })
-        navBar.addView(Button(this).apply {
-            text = "Settings"
-            setOnClickListener { navigateTo("settings") }
-        })
-        root.addView(navBar)
-
-        val content = when (currentTab) {
-            "gateway" -> renderGatewayTab()
-            "chat" -> renderChatTab()
-            "files" -> renderFilesTab()
-            "settings" -> renderSettingsTab()
-            else -> renderGatewayTab()
-        }
-        root.addView(content)
-
-        setContentView(ScrollView(this).apply { addView(root) })
-    }
-
-    private fun renderGatewayTab(): View {
-        val layout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        val state = gatewayPresenter.currentState()
-        layout.addView(TextView(this).apply {
-            text = "Gateway Connection"
-            textSize = 20f
-        })
-        val urlInput = EditText(this).apply {
-            setText(state.endpointUrl)
-        }
-        layout.addView(urlInput)
-        val statusText = TextView(this).apply {
-            text = if (state.isOnline) "Connected to Gateway" else "Disconnected"
-        }
-        layout.addView(statusText)
-        layout.addView(Button(this).apply {
-            text = if (state.isOnline) "Disconnect" else "Connect"
-            setOnClickListener {
-                if (state.isOnline) {
-                    gatewayPresenter.disconnect()
-                } else {
-                    gatewayPresenter.connect(urlInput.text.toString())
+                // 启动时自动尝试恢复已存储凭据
+                LaunchedEffect(Unit) {
+                    runtime.restoreSessionIfAvailable()
                 }
-                renderCurrentTab()
-            }
-        })
-        return layout
-    }
 
-    private fun renderChatTab(): View {
-        val layout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        layout.addView(TextView(this).apply {
-            text = "Conversation"
-            textSize = 20f
-        })
-        val state = conversationPresenter.currentState()
-        for (msg in state.messages) {
-            layout.addView(TextView(this).apply {
-                text = "${msg.sender}: ${msg.text}"
-            })
-        }
-        val input = EditText(this).apply { hint = "Type a message..." }
-        layout.addView(input)
-        layout.addView(Button(this).apply {
-            text = "Send"
-            setOnClickListener {
-                val txt = input.text.toString()
-                if (txt.isNotBlank()) {
-                    conversationPresenter.sendMessage(txt)
-                    input.setText("")
-                    renderCurrentTab()
+                // 真实系统能力契约：相机拍照
+                val takePictureLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.TakePicturePreview()
+                ) { bitmap: Bitmap? ->
+                    if (bitmap != null) {
+                        try {
+                            val stream = ByteArrayOutputStream()
+                            bitmap.compress(Bitmap.CompressFormat.JPEG, 92, stream)
+                            val bytes = stream.toByteArray()
+                            val selection = LocalAttachmentSelection(
+                                filename = "camera_${System.currentTimeMillis()}.jpg",
+                                mediaType = "image/jpeg",
+                                bytes = bytes,
+                            )
+                            controller?.addAttachment(selection)
+                        } catch (e: Exception) {
+                            Toast.makeText(this@MainActivity, "相机照片处理失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+
+                // 真实系统能力契约：图库选图
+                val pickMediaLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.PickVisualMedia()
+                ) { uri: Uri? ->
+                    uri?.let {
+                        try {
+                            val selection = ContentResolverExtensions.resolveAttachment(contentResolver, it)
+                            controller?.addAttachment(selection)
+                        } catch (e: Exception) {
+                            Toast.makeText(this@MainActivity, "选择图片失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+
+                // 真实系统能力契约：SAF 文档选择
+                val openDocumentLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.OpenDocument()
+                ) { uri: Uri? ->
+                    uri?.let {
+                        try {
+                            val selection = ContentResolverExtensions.resolveAttachment(contentResolver, it)
+                            controller?.addAttachment(selection)
+                        } catch (e: Exception) {
+                            Toast.makeText(this@MainActivity, "选择文档失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background,
+                ) {
+                    when (val currentPhase = phase) {
+                        is ConnectionPhase.Connected -> {
+                            val activeController = controller
+                            if (activeController != null) {
+                                WorkbenchScreen(
+                                    controller = activeController,
+                                    gatewayLabel = currentPhase.gatewayUrl,
+                                    onOpenSettings = { showSettingsSheet = true },
+                                    onPickCamera = { takePictureLauncher.launch(null) },
+                                    onPickGallery = {
+                                        pickMediaLauncher.launch(
+                                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                        )
+                                    },
+                                    onPickDocument = {
+                                        openDocumentLauncher.launch(arrayOf("*/*"))
+                                    },
+                                )
+                            } else {
+                                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                    CircularProgressIndicator(strokeWidth = 2.dp)
+                                }
+                            }
+                        }
+                        else -> {
+                            GatewayLoginScreen(
+                                phase = currentPhase,
+                                onLogin = { url, username, password ->
+                                    runtime.login(url, username, password)
+                                },
+                                onOpenSettings = { showSettingsSheet = true },
+                                onRetry = { runtime.resetFailure() },
+                            )
+                        }
+                    }
+
+                    if (showSettingsSheet) {
+                        PlatformSettingsBottomSheet(
+                            environment = app.platformSettingsEnvironment(),
+                            runtime = runtime,
+                            onDismissRequest = { showSettingsSheet = false },
+                        )
+                    }
                 }
             }
-        })
-        return layout
-    }
-
-    private fun renderFilesTab(): View {
-        val layout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        layout.addView(TextView(this).apply {
-            text = "Attachments"
-            textSize = 20f
-        })
-        val state = attachmentPresenter.currentState()
-        layout.addView(TextView(this).apply {
-            text = "Uploaded count: ${state.attachments.size}"
-        })
-        for (att in state.attachments) {
-            layout.addView(TextView(this).apply {
-                text = "${att.name} (${att.sizeBytes} bytes)"
-            })
         }
-        return layout
-    }
-
-    private fun renderSettingsTab(): View {
-        val layout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        layout.addView(TextView(this).apply {
-            text = "Platform Settings"
-            textSize = 20f
-        })
-        val state = settingsPresenter.currentState()
-        layout.addView(TextView(this).apply {
-            text = "Developer Trust Mode: ${state.developerTrustModeEnabled}"
-        })
-        layout.addView(Button(this).apply {
-            text = "Toggle Trust Mode"
-            setOnClickListener {
-                settingsPresenter.toggleDeveloperTrustMode(!state.developerTrustModeEnabled)
-                renderCurrentTab()
-            }
-        })
-        return layout
     }
 }

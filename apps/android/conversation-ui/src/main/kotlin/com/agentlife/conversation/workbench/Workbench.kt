@@ -9,7 +9,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.agentlife.conversation.components.MessageBubble
 import com.agentlife.conversation.model.*
-import com.agentlife.conversation.theme.MossFlintColors
+import com.agentlife.conversation.theme.AppColors
 
 @Composable
 fun WorkbenchView(
@@ -44,7 +44,7 @@ fun WorkbenchView(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 8.dp),
-                color = MossFlintColors.LightMoss,
+                color = AppColors.LightPrimary,
             )
         }
 
@@ -69,7 +69,7 @@ fun WorkbenchView(
                     }
                 },
                 enabled = textInput.isNotBlank() && state.generation != GenerationState.RUNNING,
-                colors = ButtonDefaults.buttonColors(containerColor = MossFlintColors.LightMoss),
+                colors = ButtonDefaults.buttonColors(containerColor = AppColors.LightPrimary),
             ) {
                 Text("发送")
             }

@@ -7,7 +7,9 @@ import addFormatsImport from "ajv-formats";
 import canonicalize from "canonicalize";
 
 import attachmentDocument from "../schemas/attachment.schema.json" with { type: "json" };
+import commandCatalogDocument from "../schemas/command-catalog.schema.json" with { type: "json" };
 import conversationDocument from "../schemas/conversation.schema.json" with { type: "json" };
+import conversationSnapshotDocument from "../schemas/conversation-snapshot.schema.json" with { type: "json" };
 import deviceRequestDocument from "../schemas/device-request.schema.json" with { type: "json" };
 import envelopeDocument from "../schemas/envelope.schema.json" with { type: "json" };
 import eventDocument from "../schemas/event.schema.json" with { type: "json" };
@@ -47,6 +49,8 @@ const documentEntries = [
   ["negotiate", negotiateDocument],
   ["session", sessionDocument],
   ["conversation", conversationDocument],
+  ["commandCatalog", commandCatalogDocument],
+  ["conversationSnapshot", conversationSnapshotDocument],
   ["attachment", attachmentDocument],
   ["event", eventDocument],
   ["deviceRequest", deviceRequestDocument],
@@ -63,9 +67,9 @@ const definitions: Record<GatewaySchemaName, readonly [SchemaDocument, string]> 
   "session.refresh": [sessionDocument as SchemaDocument, "refresh"],
   "session.device": [sessionDocument as SchemaDocument, "device"],
   "conversation.create": [conversationDocument as SchemaDocument, "create"],
-  "conversation.commandCatalog": [conversationDocument as SchemaDocument, "commandCatalog"],
+  "conversation.commandCatalog": [commandCatalogDocument as SchemaDocument, "catalog"],
   "conversation.generationCancel": [conversationDocument as SchemaDocument, "generationCancel"],
-  "conversation.mirrorSync": [conversationDocument as SchemaDocument, "mirrorSync"],
+  "conversation.mirrorSync": [conversationSnapshotDocument as SchemaDocument, "mirrorSync"],
   "message.create": [conversationDocument as SchemaDocument, "messageCreate"],
   "attachment.create": [attachmentDocument as SchemaDocument, "create"],
   "attachment.status": [attachmentDocument as SchemaDocument, "status"],

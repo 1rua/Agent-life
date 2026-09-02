@@ -180,7 +180,12 @@ export interface MessageBatchMember {
   readonly attachments?: ReadonlyArray<{ readonly attachmentId: string }>;
 }
 
-export const joinMessageBatch = (members: ReadonlyArray<MessageBatchMember>): string => {
-  if (members.length === 0) return "";
-  return members.map((m) => m.text.replace(/^\n+|\n+$/g, "")).join("\n");
-};
+export function joinMessageBatch(
+  members: readonly Readonly<{ clientMessageId: string; text: string }>[],
+): Uint8Array {
+  if (members.length === 0 || members.length > 20) throw new Error("SCHEMA_INVALID");
+  if (new Set(members.map((member) => member.clientMessageId)).size !== members.length) {
+    throw new Error("SCHEMA_INVALID");
+  }
+  return new TextEncoder().encode(members.map((member) => member.text).join("\n"));
+}

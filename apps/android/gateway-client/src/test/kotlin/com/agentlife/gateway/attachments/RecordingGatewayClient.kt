@@ -14,19 +14,23 @@ class RecordingGatewayClient : GatewayAttachmentTransport {
 
     var commitShouldFail = false
 
-    override fun create(request: AttachmentCreateRequest): String {
-                calls += "create"
+    override suspend fun create(request: AttachmentCreateRequest): String {
+        calls += "create"
         created = request
         return "att-server-1"
     }
 
-    override fun uploadContent(attachmentId: String, content: ByteArray, headers: Map<String, String>) {
+    override suspend fun uploadContent(
+        attachmentId: String,
+        content: ByteArray,
+        headers: Map<String, String>,
+    ) {
         calls += "content"
         contentUploaded = content
         contentHeaders = headers
     }
 
-    override fun commit(attachmentId: String) {
+    override suspend fun commit(attachmentId: String) {
         calls += "commit"
         if (commitShouldFail) throw IllegalStateException("server rejected the commit")
     }

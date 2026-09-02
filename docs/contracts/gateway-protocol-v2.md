@@ -384,10 +384,19 @@ Gateway 随后校验账号、设备、配对 generation、时间窗、nonce、�
 端点：
 
 ```text
+GET  /commands?languageCode=<bcp47>
+POST /conversations/{conversationId}/message-batches
+POST /conversations/{conversationId}/generations/{generationId}/cancel
+GET  /attachments/{attachmentId}
+DELETE /attachments/{attachmentId}
+GET  /conversations/{conversationId}/messages?clientMessageId=<id>
 GET  /conversations
 POST /conversations
 GET  /conversations/{conversationId}
 POST /conversations/{conversationId}/messages
+GET  /conversations/{conversationId}/attachments/{attachmentId}/metadata
+POST /conversations/{conversationId}/attachments/{attachmentId}/cache-grant
+GET  /conversations/{conversationId}/attachments/{attachmentId}/content
 ```
 
 创建对话请求包含客户端生成的 `clientConversationId` 和可选显示标题。发送消息请求：

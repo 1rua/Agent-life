@@ -25,7 +25,7 @@
 - 平台内核继续拥有身份、权限、插件生命周期、隔离、审计和紧急停用；UI、Gateway、Agent 和插件都不能扩大本机授权。
 - Android 最低/目标/编译版本保持 `minSdk 34`、`targetSdk 35`、`compileSdk 35`；本计划不夹带 AGP 9、Gradle 9 或 compileSdk 37 迁移。
 - Compose 保持仓库现有稳定工具链。新增依赖只允许：`androidx.navigation:navigation-compose:2.8.5`、`androidx.compose.material3:material3-window-size-class`、`org.commonmark:commonmark:0.30.0`、`io.noties:prism4j:2.0.0`、Compose 测试依赖和 Macrobenchmark 1.4.1；任何额外依赖必须先修改本计划。
-- V1 不使用系统动态取色。浅/深主题严格使用“松烟·硅石”语义令牌；Signal Stitch 是唯一主要视觉签名。
+- V1 不使用系统动态取色。浅/深主题严格使用“设计系统”语义令牌；Signal Stitch 是唯一主要视觉签名。
 - 不允许空函数、未使用输入、立即复位的假异步、伪造 Gateway、伪造消息、伪造附件、随机标题、默认成功状态或“在线同步中”硬编码。
 - 所有 wire ID 使用不透明领域类型；Android 不接收、生成或保存 `agentSessionId`，账号身份与设备证明始终分离。
 - 主 App 与助理会话只有一个草稿、附件列表、命令目录、批次、时间线和 generation 状态源；不能再出现平行 `StateFlow`。
@@ -143,7 +143,7 @@ git commit -m "文档: 接受 Android 对话与助理界面设计"
 - **字体：** 系统无衬线/Noto Sans SC 回退用于 UI 与正文；Roboto Mono 只用于时间、状态、大小和代码元数据。
 - **布局：** compact 为抽屉+单对话；medium 为线程+对话；expanded 为 Gateway+线程+对话，正文列不超过 680dp。
 - **唯一签名：** Signal Stitch 只在助手正文、助理容器、停靠球和屏幕选区表达同一物体关系；不增加 AI 星光、渐变光晕、机器人头像或第二套装饰语言。
-- **自我批评结果：** “松烟·硅石”不依赖常见紫蓝 AI 渐变、酸性色或报纸式网格；真正的审美风险只花在 Signal Stitch 的跨表面连续身份，其余界面保持克制。
+- **自我批评结果：** “设计系统”不依赖常见紫蓝 AI 渐变、酸性色或报纸式网格；真正的审美风险只花在 Signal Stitch 的跨表面连续身份，其余界面保持克制。
 
 ## 统一动效词汇
 
@@ -1292,7 +1292,7 @@ git add apps/android/app
 git commit -m "重构: 建立进程感知应用组合根"
 ```
 
-### Task 10: 建立 conversation-ui、松烟硅石令牌与全局 MotionPolicy
+### Task 10: 建立 conversation-ui、设计系统令牌与全局 MotionPolicy
 
 **Files:**
 - Modify: `apps/android/settings.gradle.kts`
@@ -1383,7 +1383,7 @@ UI test 切换浅/深、fontScale 1.0/1.3/2.0、reduceMotion true/false；无设
 
 ```bash
 git add apps/android/settings.gradle.kts apps/android/conversation-ui
-git commit -m "新增: 建立松烟硅石设计与动效系统"
+git commit -m "新增: 建立设计系统设计与动效系统"
 ```
 
 ### Task 11: 原子替换旧 Presenter UI，建立官方导航与自适应 Shell

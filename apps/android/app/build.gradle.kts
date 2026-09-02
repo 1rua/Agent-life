@@ -41,6 +41,7 @@ dependencies {
     implementation(project(":companion-bridge"))
     implementation(project(":encrypted-store"))
     implementation(project(":conversation-domain"))
+    implementation(project(":conversation-data"))
     implementation(project(":conversation-ui"))
 
     implementation(platform("androidx.compose:compose-bom:2024.12.01"))

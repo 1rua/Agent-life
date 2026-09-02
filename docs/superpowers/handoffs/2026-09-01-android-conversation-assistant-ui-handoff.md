@@ -6,7 +6,7 @@
 ## 关键提交与范围
 - **协议与契约扩展**: `gateway-contract` 引入 `message-batches-v1` 与 `screen-selection-v1`，补齐 Schema 与共享测试向量。
 - **Android gateway-client**: 支持带断点光标恢复流式连接、批量消息与选区元数据上传。
-- **松烟·硅石与动效底座**: 实现了 `conversation-domain` 和 `conversation-ui`，提供物理弹簧插值与无障碍降级。
+- **设计系统与动效底座**: 实现了 `conversation-domain` 和 `conversation-ui`，提供物理弹簧插值与无障碍降级。
 - **双宿主适配器测试**: Hermes 与 OpenClaw 均通过共享测试向量验证。
 
 ## 验证证据

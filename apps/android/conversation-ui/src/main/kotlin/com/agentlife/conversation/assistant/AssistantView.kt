@@ -17,7 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import com.agentlife.conversation.theme.MossFlintColors
+import com.agentlife.conversation.theme.AppColors
 
 @Composable
 fun AssistantDockedBall(
@@ -25,7 +25,7 @@ fun AssistantDockedBall(
     modifier: Modifier = Modifier,
 ) {
     Surface(
-        color = MossFlintColors.LightMoss,
+        color = AppColors.LightPrimary,
         shape = CircleShape,
         shadowElevation = 8.dp,
         modifier = modifier
@@ -58,7 +58,7 @@ fun AssistantFloatingOverlay(
         ),
     ) {
         Surface(
-            color = MossFlintColors.LightSurface.copy(alpha = 0.95f),
+            color = AppColors.LightSurface.copy(alpha = 0.95f),
             shape = RoundedCornerShape(24.dp),
             shadowElevation = 16.dp,
             modifier = modifier
@@ -71,7 +71,7 @@ fun AssistantFloatingOverlay(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("智能助理", style = MaterialTheme.typography.titleMedium, color = MossFlintColors.LightMoss)
+                    Text("智能助理", style = MaterialTheme.typography.titleMedium, color = AppColors.LightPrimary)
                     Row {
                         TextButton(onClick = onStartSelection) {
                             Text("屏幕选区")

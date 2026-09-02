@@ -46,11 +46,11 @@ data class DisplayDensityMetrics(
  * without a network stack.
  */
 interface GatewayAttachmentTransport {
-    fun create(request: AttachmentCreateRequest): String
+    suspend fun create(request: AttachmentCreateRequest): String
 
-    fun uploadContent(attachmentId: String, content: ByteArray, headers: Map<String, String>)
+    suspend fun uploadContent(attachmentId: String, content: ByteArray, headers: Map<String, String>)
 
-    fun commit(attachmentId: String)
+    suspend fun commit(attachmentId: String)
 }
 
 /**
@@ -65,7 +65,7 @@ class AttachmentUploader(
     private val limits: AttachmentLimits = AttachmentLimits(maxBytes = DEFAULT_MAX_BYTES),
 ) {
 
-    fun upload(attachment: SelectedAttachment): String {
+    suspend fun upload(attachment: SelectedAttachment): String {
         if (attachment.content.size.toLong() > limits.maxBytes) {
             throw IllegalArgumentException("ATTACHMENT_TOO_LARGE:${attachment.content.size}")
         }

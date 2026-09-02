@@ -13,7 +13,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
-import com.agentlife.conversation.theme.MossFlintColors
+import com.agentlife.conversation.theme.AppColors
 
 @Composable
 fun ScreenSelectionOverlay(
@@ -63,7 +63,7 @@ fun ScreenSelectionOverlay(
                 val w = kotlin.math.abs(c.x - s.x)
                 val h = kotlin.math.abs(c.y - s.y)
                 drawRect(
-                    color = MossFlintColors.LightMoss,
+                    color = AppColors.LightPrimary,
                     topLeft = Offset(l, t),
                     size = Size(w, h),
                     style = Stroke(width = 3.dp.toPx()),

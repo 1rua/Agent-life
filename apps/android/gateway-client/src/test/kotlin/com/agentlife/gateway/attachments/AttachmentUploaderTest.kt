@@ -1,5 +1,6 @@
 package com.agentlife.gateway.attachments
 
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -12,7 +13,7 @@ import org.junit.Test
 class AttachmentUploaderTest {
 
     @Test
-    fun testUploadWithVisualContext() {
+    fun testUploadWithVisualContext() = runBlocking {
         val transport = recorder()
         val uploader = AttachmentUploader(transport)
         val vc = VisualAttachmentMetadata(
@@ -38,7 +39,7 @@ class AttachmentUploaderTest {
         AttachmentUploader(client, AttachmentLimits(maxBytes = maxBytes))
 
     @Test
-    fun declaresSizeAndDigestFromTheStreamedBytes() {
+    fun declaresSizeAndDigestFromTheStreamedBytes() = runBlocking {
         val client = recorder()
         val uploader = uploader(client)
         val content = "hello gateway".toByteArray()
@@ -50,7 +51,7 @@ class AttachmentUploaderTest {
     }
 
     @Test
-    fun digestMismatchFailsBeforeContentIsSent() {
+    fun digestMismatchFailsBeforeContentIsSent() = runBlocking {
         val client = recorder()
         val uploader = uploader(client)
 
@@ -71,7 +72,7 @@ class AttachmentUploaderTest {
     }
 
     @Test
-    fun oversizedAttachmentIsRejectedBeforeUpload() {
+    fun oversizedAttachmentIsRejectedBeforeUpload() = runBlocking {
         val client = recorder()
         val uploader = uploader(client, maxBytes = 8)
 
@@ -85,7 +86,7 @@ class AttachmentUploaderTest {
     }
 
     @Test
-    fun contentRequestCarriesContentLengthAndDigest() {
+    fun contentRequestCarriesContentLengthAndDigest() = runBlocking {
         val client = recorder()
         val uploader = uploader(client)
         val content = "payload".toByteArray()
@@ -97,7 +98,7 @@ class AttachmentUploaderTest {
     }
 
     @Test
-    fun threeStepsRunInOrderCreateThenContentThenCommit() {
+    fun threeStepsRunInOrderCreateThenContentThenCommit() = runBlocking {
         val client = recorder()
         val uploader = uploader(client)
 
@@ -107,7 +108,7 @@ class AttachmentUploaderTest {
     }
 
     @Test
-    fun commitFailurePropagatesAndDoesNotReportSuccess() {
+    fun commitFailurePropagatesAndDoesNotReportSuccess() = runBlocking {
         val client = recorder().apply { commitShouldFail = true }
         val uploader = uploader(client)
 

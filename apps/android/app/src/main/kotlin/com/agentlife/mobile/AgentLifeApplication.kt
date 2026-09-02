@@ -5,9 +5,13 @@ import com.agentlife.kernel.AndroidAuditStore
 import com.agentlife.kernel.CapabilityProviderSelector
 import com.agentlife.kernel.DeveloperTrustMode
 import com.agentlife.kernel.HostEnvelope
+import com.agentlife.kernel.InMemoryAuditSink
 import com.agentlife.kernel.NativePluginLoader
 import com.agentlife.kernel.PhoneLimits
 import com.agentlife.kernel.PluginKernel
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 
 /**
  * 极简 Android 宿主组合根。
@@ -28,10 +32,25 @@ class AgentLifeApplication : Application() {
     lateinit var auditStore: AndroidAuditStore
         private set
 
+    private lateinit var auditSink: InMemoryAuditSink
+
+    /** 进程级连接运行时：登录、协商、会话建立与工作台装配。 */
+    val gatewayRuntime: GatewayRuntime by lazy {
+        GatewayRuntime(this, CoroutineScope(SupervisorJob() + Dispatchers.Default))
+    }
+
+    fun platformSettingsEnvironment(): PlatformSettingsEnvironment = PlatformSettingsEnvironment(
+        trustMode = trustMode,
+        audit = auditStore,
+        auditSink = auditSink,
+        allowDeveloperTrustMode = BuildConfig.ALLOW_DEVELOPER_TRUST_MODE,
+    )
+
     override fun onCreate() {
         super.onCreate()
         trustMode = DeveloperTrustMode()
-        auditStore = AndroidAuditStore()
+        auditSink = InMemoryAuditSink()
+        auditStore = AndroidAuditStore(sink = auditSink)
 
         val providerSelector = CapabilityProviderSelector(phoneDefaults = emptyMap())
         kernel = PluginKernel(

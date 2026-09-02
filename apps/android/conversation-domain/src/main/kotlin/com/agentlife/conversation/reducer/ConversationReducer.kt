@@ -89,21 +89,33 @@ object ConversationReducer {
                 }
             }
             is ConversationEvent.GenerationCancelled -> {
+                if (state.generation == GenerationState.COMPLETED || state.generation == GenerationState.FAILED || state.generation == GenerationState.OUTCOME_UNKNOWN) {
+                    throw InvalidConversationTransition("Cannot transition to CANCELLED from terminal state ${state.generation}")
+                }
                 state.copy(generation = GenerationState.CANCELLED)
             }
             is ConversationEvent.GenerationCompleted -> {
-                if (state.generation == GenerationState.OUTCOME_UNKNOWN) {
-                    throw InvalidConversationTransition("Cannot complete generation directly from OUTCOME_UNKNOWN")
+                if (state.generation == GenerationState.CANCELLED || state.generation == GenerationState.FAILED || state.generation == GenerationState.OUTCOME_UNKNOWN) {
+                    throw InvalidConversationTransition("Cannot transition to COMPLETED from terminal state ${state.generation}")
                 }
                 state.copy(generation = GenerationState.COMPLETED)
             }
             is ConversationEvent.GenerationFailed -> {
+                if (state.generation == GenerationState.COMPLETED || state.generation == GenerationState.CANCELLED || state.generation == GenerationState.OUTCOME_UNKNOWN) {
+                    throw InvalidConversationTransition("Cannot transition to FAILED from terminal state ${state.generation}")
+                }
                 state.copy(generation = GenerationState.FAILED, lastError = event.reason)
             }
             is ConversationEvent.GenerationUnsupported -> {
+                if (state.generation == GenerationState.COMPLETED || state.generation == GenerationState.CANCELLED) {
+                    throw InvalidConversationTransition("Cannot transition to UNSUPPORTED from terminal state ${state.generation}")
+                }
                 state.copy(generation = GenerationState.UNSUPPORTED)
             }
             is ConversationEvent.GenerationOutcomeUnknown -> {
+                if (state.generation == GenerationState.COMPLETED || state.generation == GenerationState.CANCELLED) {
+                    throw InvalidConversationTransition("Cannot transition to OUTCOME_UNKNOWN from terminal state ${state.generation}")
+                }
                 state.copy(generation = GenerationState.OUTCOME_UNKNOWN)
             }
 

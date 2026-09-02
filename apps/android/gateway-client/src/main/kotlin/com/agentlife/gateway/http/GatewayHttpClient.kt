@@ -16,6 +16,8 @@ data class GatewayProfile(
     val gatewayBaseUrl: String,
     /** SPKI SHA-256 pins, in base64. Empty means system trust only. */
     val pinnedSpkiSha256: Set<String> = emptySet(),
+    /** Bearer token issued by the login or refresh endpoint. */
+    val accessToken: String = "",
 )
 
 data class SignedGatewayRequest(
@@ -38,6 +40,11 @@ data class GatewayResponse(
  * bytes, and response headers are validated from the raw list before use, so a
  * duplicated or folded singleton cannot resolve to whichever value the parser
  * happened to keep.
+ *
+ * The authenticated header set follows contract §6.1: one bearer Authorization,
+ * the protocol, account, device and session headers, and the request-id,
+ * timestamp, nonce and signature headers — nine singleton headers plus the
+ * Idempotency-Key on every mutating request, bound to the same request id.
  */
 class GatewayHttpClient(
     private val profile: GatewayProfile,
@@ -63,13 +70,10 @@ class GatewayHttpClient(
             body = request.body,
         )
         val signature = signer(RequestSigner.preimage(input))
+        val signatureBase64Url = java.util.Base64.getUrlEncoder().withoutPadding()
+            .encodeToString(signature)
 
-        val headers = validatedHeaders + listOf(
-            RawHeader("Authorization", "Agent-Life-Ed25519 ${java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(signature)}"),
-            RawHeader("X-Agent-Life-Request-Id", input.requestId),
-            RawHeader("X-Agent-Life-Timestamp", input.timestamp),
-            RawHeader("X-Agent-Life-Nonce", input.nonce),
-        )
+        val headers = validatedHeaders + authenticationHeaders(input, signatureBase64Url, request.method)
 
         return withContext(Dispatchers.IO) {
             val response = transport.execute(
@@ -98,10 +102,38 @@ class GatewayHttpClient(
             event.id?.let { cursorStore.save(profile.accountId, it) }
         }
 
-        transport.eventStream(WireRequest("GET", target)).collect { chunk ->
+        transport.eventStream(
+            WireRequest(
+                method = "GET",
+                target = target,
+                headers = listOf(
+                    RawHeader("Accept", "text/event-stream"),
+                    RawHeader("Cache-Control", "no-store"),
+                ),
+            ),
+        ).collect { chunk ->
             for (event in parser.feedBytes(chunk)) emit(event)
         }
     }.flowOn(Dispatchers.IO)
+
+    private fun authenticationHeaders(
+        input: SignedRequestInput,
+        signatureBase64Url: String,
+        method: String,
+    ): List<RawHeader> = buildList {
+        add(RawHeader("Authorization", "Bearer ${profile.accessToken}"))
+        add(RawHeader("X-Agent-Life-Protocol", PROTOCOL_HEADER))
+        add(RawHeader("X-Agent-Life-Account", profile.accountId))
+        add(RawHeader("X-Agent-Life-Device", profile.deviceId))
+        add(RawHeader("X-Agent-Life-Session", profile.sessionId))
+        add(RawHeader("X-Agent-Life-Request-Id", input.requestId))
+        add(RawHeader("X-Agent-Life-Timestamp", input.timestamp))
+        add(RawHeader("X-Agent-Life-Nonce", input.nonce))
+        add(RawHeader("X-Agent-Life-Signature", signatureBase64Url))
+        if (method in MUTATING_METHODS) {
+            add(RawHeader("Idempotency-Key", input.requestId))
+        }
+    }
 
     private fun newRequestId(): String =
         "req" + java.util.UUID.randomUUID().toString().replace("-", "").take(20)
@@ -110,5 +142,10 @@ class GatewayHttpClient(
         val bytes = ByteArray(16)
         java.security.SecureRandom().nextBytes(bytes)
         return java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
+    }
+
+    private companion object {
+        const val PROTOCOL_HEADER = "2.0"
+        val MUTATING_METHODS = setOf("POST", "PUT", "DELETE")
     }
 }

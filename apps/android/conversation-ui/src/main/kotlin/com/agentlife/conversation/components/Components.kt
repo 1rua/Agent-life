@@ -7,7 +7,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.agentlife.conversation.model.*
-import com.agentlife.conversation.theme.MossFlintColors
+import com.agentlife.conversation.theme.AppColors
 
 @Composable
 fun MessageBubble(
@@ -15,8 +15,8 @@ fun MessageBubble(
     isUser: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val bg = if (isUser) MossFlintColors.LightMossContainer else MossFlintColors.LightSurfaceVariant
-    val fg = if (isUser) MossFlintColors.LightMoss else MossFlintColors.LightFlint
+    val bg = if (isUser) AppColors.LightSurfaceHigh else AppColors.LightSurfaceVariant
+    val fg = if (isUser) AppColors.LightPrimary else AppColors.LightMuted
     val text = when (message) {
         is MessagePart.Text -> message.value
         is MessagePart.Command -> message.rawText
@@ -41,13 +41,13 @@ fun ToolCallCard(
     modifier: Modifier = Modifier,
 ) {
     Surface(
-        color = MossFlintColors.LightFlintContainer,
+        color = AppColors.LightSurface,
         shape = RoundedCornerShape(12.dp),
         modifier = modifier.padding(vertical = 4.dp),
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
-            Text(text = "工具调用: " + toolName, style = MaterialTheme.typography.labelMedium, color = MossFlintColors.LightFlint)
-            Text(text = "状态: " + status, style = MaterialTheme.typography.bodySmall, color = MossFlintColors.LightFlint)
+            Text(text = "工具调用: " + toolName, style = MaterialTheme.typography.labelMedium, color = AppColors.LightMuted)
+            Text(text = "状态: " + status, style = MaterialTheme.typography.bodySmall, color = AppColors.LightMuted)
             if (payloadSummary.isNotEmpty()) {
                 Text(text = payloadSummary, style = MaterialTheme.typography.bodySmall)
             }

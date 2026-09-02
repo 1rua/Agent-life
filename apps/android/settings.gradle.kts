@@ -32,6 +32,7 @@ include(
     ":control-ports",
     ":gateway-client",
     ":conversation-domain",
+    ":conversation-data",
     ":conversation-ui",
     ":policy-engine",
     ":notification-collector",

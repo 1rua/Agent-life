@@ -8,6 +8,7 @@ AGENTS.md
 /.codex/
 /.codebuddy/
 /.trae/
+.claude/
 /third_party/tailscale
 /node_modules/
 **/node_modules/
@@ -74,4 +75,7 @@ apps/android/tailnet-core/libs/tsnet-android-1.98.10.sbom.json
 # Rust 插件工具链构建产物
 plugins/target/
 plugins/dist/
+
+# 本地测试账号与凭据
+.agent-life-hermes/
 

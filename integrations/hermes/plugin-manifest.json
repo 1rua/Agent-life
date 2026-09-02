@@ -1,5 +1,4 @@
 {
-  "legacyNote": "Frozen v1 Hermes plugin metadata for historical reference and test compatibility.",
   "backend": "hermes",
   "upstream": { "release": "latest-stable", "tag": "hermes-fixture-v1", "commit": "fixture" },
   "protocolVersion": "mobile-bridge-v1",

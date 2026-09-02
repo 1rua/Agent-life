@@ -53,9 +53,9 @@ class CanonicalTargetTest {
     }
 
     @Test
-    fun nonHttpsUrlIsRejectedByTheFactory() {
+    fun nonSupportedSchemeIsRejectedByTheFactory() {
         val factory = HttpsConnectionFactory()
-        val failure = runCatching { factory.open(java.net.URL("http://gateway.example.com/agent-life/v2")) }
+        val failure = runCatching { factory.open(java.net.URL("ftp://gateway.example.com/agent-life/v2")) }
             .exceptionOrNull()
         assertTrue(failure != null)
     }

@@ -65,17 +65,6 @@ beforeAll(async () => {
     if (response.statusCode !== 200) throw new Error(`runtime not ready: ${response.statusCode}`);
     response.resume();
   }, { interval: 50, timeout: 5_000 });
-  let stderr = "";
-  child.stderr?.on("data", (chunk) => { stderr += chunk.toString(); });
-  try {
-    await vi.waitFor(async () => {
-      const response = await request({ method: "GET", path: "/health/ready" });
-      if (response.statusCode !== 200) throw new Error(`runtime not ready: ${response.statusCode}`);
-      response.resume();
-    }, { interval: 50, timeout: 5_000 });
-  } catch (err) {
-    throw new Error(`Child process failed to become ready: ${err}\nChild stderr: ${stderr}`);
-  }
 }, 8_000);
 
 afterAll(async () => {

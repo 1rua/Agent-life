@@ -166,15 +166,156 @@ def compose_gateway_services(ctx: Any) -> GatewayServices:
     return GatewayServices(core, admin, exposure)
 
 
-def register(ctx: HermesPluginContext) -> None:
+def register(ctx: Any) -> None:
     services = compose_gateway_services(ctx)
     bind_admin_service(services.admin)
-    ctx.register_platform(GatewayPlatform(services.core, services.exposure, services.admin))
-    ctx.register_admin(AdminSurface(services.admin))
+    gateway_platform = GatewayPlatform(services.core, services.exposure, services.admin)
+    admin_surface = AdminSurface(services.admin)
+
+    register_plat = _attr(ctx, "register_platform", "registerPlatform", default=None)
+    if callable(register_plat):
+        try:
+            import inspect
+            sig = inspect.signature(register_plat)
+            params = [p for p in sig.parameters.values() if p.name != "self"]
+            if len(params) == 1:
+                register_plat(gateway_platform)
+            else:
+                def _build_adapter(config: Any) -> Any:
+                    return gateway_platform
+
+                def _check_deps() -> bool:
+                    return True
+
+                def _is_connected(config: Any) -> bool:
+                    return True
+
+                def _setup_fn() -> None:
+                    print("\n  ─── 📱 Agent-life Gateway 配置向导 ───")
+                    print("  Agent-life Gateway Protocol v2 平台已在 Hermes 中就绪。")
+                    print("  可通过 Hermes 本地 CLI 创建与管理手机端连接账号：")
+                    print("    1. 创建新账号:  hermes agent-life account create --username <用户名> --password <密码>")
+                    print("    2. 查看运行状态: hermes agent-life status")
+                    print("  随后在 Android 手机端的 Agent-life App 中输入 Gateway 地址与账号凭据即可完成配对。\n")
+
+                register_plat(
+                    name="agent_life",
+                    label="Agent-life Gateway",
+                    adapter_factory=_build_adapter,
+                    check_fn=_check_deps,
+                    is_connected=_is_connected,
+                    validate_config=_is_connected,
+                    setup_fn=_setup_fn,
+                    install_hint="",
+                    emoji="📱",
+                )
+        except Exception:
+            try:
+                register_plat(gateway_platform)
+            except Exception:
+                pass
+
+    register_admin_fn = _attr(ctx, "register_admin", "registerAdmin", default=None)
+    if callable(register_admin_fn):
+        register_admin_fn(admin_surface)
     register_route = _attr(ctx, "register_http_route", "registerHttpRoute", "register_route", default=None)
     if callable(register_route):
         for route in services.exposure.routes:
             register_route({"path": route.path, "auth": route.auth, "match": route.match, "handler": route.handler})
+    register_cli_cmd = _attr(ctx, "register_cli_command", "registerCliCommand", default=None)
+    if callable(register_cli_cmd):
+        def _setup_cli_parser(parser: Any) -> None:
+            subs = parser.add_subparsers(dest="agent_life_subcommand", required=False)
+
+            p_account = subs.add_parser("account", help="Manage Agent-life Gateway accounts")
+            acct_subs = p_account.add_subparsers(dest="account_action", required=False)
+
+            p_create = acct_subs.add_parser("create", help="Create a new Gateway account")
+            p_create.add_argument("--username", "-u", default=None, help="Username or Account ID")
+            p_create.add_argument("account_id", nargs="?", default=None, help="Account ID")
+            p_create.add_argument("--password", "-p", default=None, help="Account password")
+            p_create.add_argument("--confirm-local", action="store_true", default=True, help="Confirm write on local host")
+
+            acct_subs.add_parser("status", help="Show Gateway status")
+            acct_subs.add_parser("list", help="List Gateway accounts")
+
+            p_del = acct_subs.add_parser("delete", help="Delete a Gateway account")
+            p_del.add_argument("account_id", help="Account ID to delete")
+            p_del.add_argument("--confirm-local", action="store_true", default=True, help="Confirm write on local host")
+
+            subs.add_parser("status", help="Show Gateway status")
+
+        def _dispatch_cli(args: Any) -> None:
+            sub = getattr(args, "agent_life_subcommand", None)
+            acct_act = getattr(args, "account_action", None)
+
+            storage_root = services.core.storage_root
+            if storage_root is None:
+                try:
+                    from hermes_constants import get_hermes_home
+                    storage_root = get_hermes_home() / "agent-life-gateway" / "accounts"
+                except Exception:
+                    storage_root = Path.home() / ".hermes" / "agent-life-gateway" / "accounts"
+
+            if sub == "account" and acct_act == "create":
+                account_id = getattr(args, "username", None) or getattr(args, "account_id", None)
+                if not account_id:
+                    print("❌ 错误：请提供账号名称或 ID，例如：hermes agent-life account create --username <用户名>")
+                    return
+                try:
+                    acct = services.core.open_gateway_account(account_id)
+                    acct.close()
+                    print(f"✅ 成功创建 Agent-life Gateway 账号：{account_id}")
+                    print(f"  • 账号标识 (Account ID): {account_id}")
+                    print(f"  • 数据存储目录: {storage_root}/{account_id}")
+                    print("\n📱 手机端连接指南：")
+                    print("  1. 打开 Android 手机端 Agent-life App。")
+                    print(f"  2. 连接到此 Gateway 并使用账号 '{account_id}' 登录。")
+                except Exception as exc:
+                    print(f"❌ 创建账号失败: {exc}")
+                return
+
+            if sub == "account" and acct_act == "list":
+                if storage_root and Path(storage_root).is_dir():
+                    accounts = [d.name for d in Path(storage_root).iterdir() if d.is_dir()]
+                    print(f"📱 当前已配置的 Gateway 账号 ({len(accounts)}):")
+                    for acct in accounts:
+                        print(f"  • {acct}")
+                else:
+                    print("📱 当前尚未配置任何 Gateway 账号。")
+                return
+
+            if sub == "account" and acct_act == "delete":
+                account_id = getattr(args, "account_id", None)
+                if not account_id:
+                    print("❌ 错误：请指定要删除的账号 ID")
+                    return
+                target = Path(storage_root) / account_id if storage_root else None
+                if target and target.is_dir():
+                    import shutil
+                    shutil.rmtree(target)
+                    print(f"✅ 账号 '{account_id}' 及其本地数据已删除。")
+                else:
+                    print(f"❌ 账号 '{account_id}' 不存在。")
+                return
+
+            status_res = services.admin.status()
+            print("📱 Agent-life Gateway 运行状态:")
+            print("  • 协议版本: Gateway Protocol v2 (2.0)")
+            print(f"  • 数据存储根目录: {storage_root}")
+            if storage_root and Path(storage_root).is_dir():
+                accounts = [d.name for d in Path(storage_root).iterdir() if d.is_dir()]
+                print(f"  • 已配置账号 ({len(accounts)}): {', '.join(accounts) if accounts else '无'}")
+            else:
+                print("  • 已配置账号: 无")
+
+        register_cli_cmd(
+            name="agent-life",
+            help="Manage Agent-life Gateway accounts and platform status",
+            setup_fn=_setup_cli_parser,
+            handler_fn=_dispatch_cli,
+        )
+
     register_cli = _attr(ctx, "register_cli", "registerCli", default=None)
     if callable(register_cli):
         register_cli(create_admin_cli_registrar(services.admin), {
