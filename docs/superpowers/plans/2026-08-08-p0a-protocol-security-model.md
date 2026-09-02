@@ -80,7 +80,7 @@ Create `package.json` with `"packageManager": "npm@11.16.0"` plus these exact di
 
 ```json
 {
-  "name": "agent-life-protocol",
+  "name": "open-android-intelligence-protocol",
   "private": true,
   "type": "module",
   "packageManager": "npm@11.16.0",
@@ -372,7 +372,7 @@ it("domain-separates and verifies a low-S ES256 signature", () => {
 
 it("derives every runtime constant from the machine-readable profile", () => {
   expect(loadProtocolProfile()).toMatchObject({
-    profile_id: "agent-life-json-es256/1.0",
+    profile_id: "open-android-intelligence-json-es256/1.0",
     max_envelope_bytes: "262144",
     replay_window_size: "1024",
     key_rotation_grace_seconds: "900",
@@ -425,7 +425,7 @@ export type SignatureDomain =
   | "channel-pop/adapter";
 
 export function signingPreimage(domain: SignatureDomain, value: unknown): Uint8Array {
-  const prefix = new TextEncoder().encode(`agent-life/v1/${domain}\0`);
+  const prefix = new TextEncoder().encode(`open-android-intelligence/v1/${domain}\0`);
   const canonical = canonicalBytes(value);
   const length = new Uint8Array(4);
   new DataView(length.buffer).setUint32(0, canonical.byteLength, false);
@@ -523,25 +523,25 @@ Expected: FAIL because enrollment and negotiation implementations are absent.
 `schema-catalog.ts` is pure data: it imports only JSON schema documents and exports immutable `PROTOCOL_SCHEMA_DOCUMENTS` plus `REQUIRED_PROTOCOL_SCHEMA_IDS`. It imports no validator, profile, registry or runtime module and exposes no registration function. `schema-validator.ts` alone owns Ajv: it registers mandatory formats, adds every catalog document, resolves every required ID, and only then exports `validateSchema`. The dependency is intentionally acyclic: `profile.ts → schema-validator.ts → schema-catalog.ts → JSON schemas`; the catalog never imports back upward. The catalog includes the existing profile plus these exact IDs:
 
 ```text
-urn:agent-life:protocol:v1:common
-urn:agent-life:protocol:v1:enrollment
-urn:agent-life:protocol:v1:connect
-urn:agent-life:protocol:v1:messages-registry
-urn:agent-life:protocol:v1:versions-registry
-urn:agent-life:protocol:v1:message:enrollment_challenge
-urn:agent-life:protocol:v1:message:enrollment_response
-urn:agent-life:protocol:v1:message:enrollment_complete
-urn:agent-life:protocol:v1:message:enrollment_error
-urn:agent-life:protocol:v1:message:connect_hello
-urn:agent-life:protocol:v1:message:connect_welcome
-urn:agent-life:protocol:v1:header:enrollment_app_to_bridge
-urn:agent-life:protocol:v1:header:enrollment_bridge_to_app
-urn:agent-life:protocol:v1:header:connect_hello
-urn:agent-life:protocol:v1:header:connect_welcome
-urn:agent-life:protocol:v1:envelope:enrollment_app_to_bridge
-urn:agent-life:protocol:v1:envelope:enrollment_bridge_to_app
-urn:agent-life:protocol:v1:envelope:connect_hello
-urn:agent-life:protocol:v1:envelope:connect_welcome
+urn:open-android-intelligence:protocol:v1:common
+urn:open-android-intelligence:protocol:v1:enrollment
+urn:open-android-intelligence:protocol:v1:connect
+urn:open-android-intelligence:protocol:v1:messages-registry
+urn:open-android-intelligence:protocol:v1:versions-registry
+urn:open-android-intelligence:protocol:v1:message:enrollment_challenge
+urn:open-android-intelligence:protocol:v1:message:enrollment_response
+urn:open-android-intelligence:protocol:v1:message:enrollment_complete
+urn:open-android-intelligence:protocol:v1:message:enrollment_error
+urn:open-android-intelligence:protocol:v1:message:connect_hello
+urn:open-android-intelligence:protocol:v1:message:connect_welcome
+urn:open-android-intelligence:protocol:v1:header:enrollment_app_to_bridge
+urn:open-android-intelligence:protocol:v1:header:enrollment_bridge_to_app
+urn:open-android-intelligence:protocol:v1:header:connect_hello
+urn:open-android-intelligence:protocol:v1:header:connect_welcome
+urn:open-android-intelligence:protocol:v1:envelope:enrollment_app_to_bridge
+urn:open-android-intelligence:protocol:v1:envelope:enrollment_bridge_to_app
+urn:open-android-intelligence:protocol:v1:envelope:connect_hello
+urn:open-android-intelligence:protocol:v1:envelope:connect_welcome
 ```
 
 `schema-validator.ts` retains the Task 3 public contract: unknown ID throws exactly `UNKNOWN_SCHEMA_ID`, invalid value throws with prefix `SCHEMA_INVALID: `, valid value returns `void`. Ajv and Kotlin must register `decimal-u64`, `lowercase-uuid-v4` and `rfc3339-utc-milliseconds` as mandatory formats. Lowercase UUIDv4 is exactly `^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`; the timestamp format accepts only a real UTC instant rendered `YYYY-MM-DDTHH:mm:ss.SSSZ`. `protocol/test/schema-validator.test.ts` proves the catalog is data-only, startup resolves every required ID, unknown IDs fail, and every custom-format boundary is enforced.
@@ -735,7 +735,7 @@ export function verifyEnrollmentBridgeMessage(
 ): Promise<VerifiedEnrollmentChallenge | VerifiedEnrollmentComplete | VerifiedEnrollmentError>;
 ```
 
-The challenge phase resolves trust only after the closed schema and locked registry tuple: it computes the payload `bridge_command_public_jwk` thumbprint, constant-time compares the QR pin, requires header `key_id` to equal that JWK's key ID, then uses Task 3 ES256 verification. The pinned phase applies only to `enrollment_complete`/`enrollment_error`, fixes signer role to `bridge-command`, resolves only `expectedKeyId` through `Verifier` and ignores any wire attempt to substitute a key. After expiry validation, every Bridge enrollment branch must match `header.enrollment_ticket_digest` to `expectedTicketDigest`; challenge must also match `expectedChallenge`, while complete must match the pending transcript's `client_nonce`, `bridge_nonce`, `bridge_fingerprint`, `device_jwk_thumbprint` and `selected_protocol`. Reusing a valid same-Bridge-key message across tickets therefore fails `AUTH_BINDING_MISMATCH`. After both enrollment signatures verify, each side independently canonicalizes `{ ticket_digest, bridge_fingerprint, challenge, client_nonce, bridge_nonce, device_jwk_thumbprint, selected_protocol }`, where `ticket_digest` is exactly the `enrollment_ticket_digest` above and both thumbprints are `b64u(SHA-256(JCS_UTF8({crv,kty,x,y})))`. It hashes the `agent-life/v1/pairing-short-code` length-prefixed domain preimage with SHA-256, takes the first 50 bits and renders ten uppercase Crockford Base32 characters as `XXXXX-XXXXX`. No ambiguous `I/L/O/U` characters are used. Enrollment completes only after the user confirms the two displayed codes match; every transcript field mutation has a fixed negative vector.
+The challenge phase resolves trust only after the closed schema and locked registry tuple: it computes the payload `bridge_command_public_jwk` thumbprint, constant-time compares the QR pin, requires header `key_id` to equal that JWK's key ID, then uses Task 3 ES256 verification. The pinned phase applies only to `enrollment_complete`/`enrollment_error`, fixes signer role to `bridge-command`, resolves only `expectedKeyId` through `Verifier` and ignores any wire attempt to substitute a key. After expiry validation, every Bridge enrollment branch must match `header.enrollment_ticket_digest` to `expectedTicketDigest`; challenge must also match `expectedChallenge`, while complete must match the pending transcript's `client_nonce`, `bridge_nonce`, `bridge_fingerprint`, `device_jwk_thumbprint` and `selected_protocol`. Reusing a valid same-Bridge-key message across tickets therefore fails `AUTH_BINDING_MISMATCH`. After both enrollment signatures verify, each side independently canonicalizes `{ ticket_digest, bridge_fingerprint, challenge, client_nonce, bridge_nonce, device_jwk_thumbprint, selected_protocol }`, where `ticket_digest` is exactly the `enrollment_ticket_digest` above and both thumbprints are `b64u(SHA-256(JCS_UTF8({crv,kty,x,y})))`. It hashes the `open-android-intelligence/v1/pairing-short-code` length-prefixed domain preimage with SHA-256, takes the first 50 bits and renders ten uppercase Crockford Base32 characters as `XXXXX-XXXXX`. No ambiguous `I/L/O/U` characters are used. Enrollment completes only after the user confirms the two displayed codes match; every transcript field mutation has a fixed negative vector.
 
 `message-registry.ts` admits connect messages before negotiation and returns opaque `VerifiedConnectHello`/`VerifiedConnectWelcome` brands that have no public constructor:
 
@@ -768,12 +768,12 @@ The hello overload requires signer role `device`; welcome requires `bridge-comma
 
 | message_type | direction | signature_domain | schema_id |
 |---|---|---|---|
-| `enrollment_challenge` | `bridge-to-app` | `enrollment/bridge-to-app` | `urn:agent-life:protocol:v1:message:enrollment_challenge` |
-| `enrollment_response` | `app-to-bridge` | `enrollment/app-to-bridge` | `urn:agent-life:protocol:v1:message:enrollment_response` |
-| `enrollment_complete` | `bridge-to-app` | `enrollment/bridge-to-app` | `urn:agent-life:protocol:v1:message:enrollment_complete` |
-| `enrollment_error` | `bridge-to-app` | `enrollment/bridge-to-app` | `urn:agent-life:protocol:v1:message:enrollment_error` |
-| `connect_hello` | `app-to-bridge` | `control/app-to-bridge` | `urn:agent-life:protocol:v1:message:connect_hello` |
-| `connect_welcome` | `bridge-to-app` | `control/bridge-to-app` | `urn:agent-life:protocol:v1:message:connect_welcome` |
+| `enrollment_challenge` | `bridge-to-app` | `enrollment/bridge-to-app` | `urn:open-android-intelligence:protocol:v1:message:enrollment_challenge` |
+| `enrollment_response` | `app-to-bridge` | `enrollment/app-to-bridge` | `urn:open-android-intelligence:protocol:v1:message:enrollment_response` |
+| `enrollment_complete` | `bridge-to-app` | `enrollment/bridge-to-app` | `urn:open-android-intelligence:protocol:v1:message:enrollment_complete` |
+| `enrollment_error` | `bridge-to-app` | `enrollment/bridge-to-app` | `urn:open-android-intelligence:protocol:v1:message:enrollment_error` |
+| `connect_hello` | `app-to-bridge` | `control/app-to-bridge` | `urn:open-android-intelligence:protocol:v1:message:connect_hello` |
+| `connect_welcome` | `bridge-to-app` | `control/bridge-to-app` | `urn:open-android-intelligence:protocol:v1:message:connect_welcome` |
 
 `protocol/test/messages-registry.test.ts` owns a cumulative `expectedByTask` constant. At every Task 4–10 checkpoint it validates the registry schema, exact cumulative entry set, global message-type uniqueness, direction/domain signer-role matrix, profile-domain existence, and one-to-one resolution between every production payload-branch `$id` and registry entry. Each payload branch accepts its fixture and rejects every removed/retagged required field, wrong scalar/null type and unknown field; changing the outer header to any other registered `message_type`, `message_schema` or direction fails registry resolution before signature acceptance even when payload shapes match. It also rejects container/reducer/store/channel-frame names; requires proposal/ACK rotation pairs; checks `device_event` Agent/session-field injection; and, after Task 7, proves the current-generation `receipt_replay` outer signature preserves the inner receipt bytes/signature. Later tasks modify this same test before their RED run. The registry is frozen as immutable v1 only by Task 13's spec lock; until then any unregistered type remains rejected.
 
@@ -781,8 +781,8 @@ The hello overload requires signer role `device`; welcome requires `bridge-comma
 
 ```json
 {
-  "$schema": "urn:agent-life:protocol:v1:versions-registry",
-  "registry_id": "urn:agent-life:protocol:v1:registry:versions",
+  "$schema": "urn:open-android-intelligence:protocol:v1:versions-registry",
+  "registry_id": "urn:open-android-intelligence:protocol:v1:registry:versions",
   "protocol_version": "1.0",
   "versions": [
     { "version": "1.0", "negotiable": true },
@@ -799,8 +799,8 @@ export interface VersionRegistryEntry {
 }
 declare const lockedVersionRegistry: unique symbol;
 export type LockedVersionRegistry = Readonly<{
-  readonly $schema: "urn:agent-life:protocol:v1:versions-registry";
-  readonly registry_id: "urn:agent-life:protocol:v1:registry:versions";
+  readonly $schema: "urn:open-android-intelligence:protocol:v1:versions-registry";
+  readonly registry_id: "urn:open-android-intelligence:protocol:v1:registry:versions";
   readonly protocol_version: "1.0";
   readonly versions: readonly VersionRegistryEntry[];
   readonly [lockedVersionRegistry]: true;
@@ -1632,36 +1632,36 @@ export function fenceConnection(
 ): { ok: true } | { ok: false; error: "CONNECTION_FENCED" };
 ```
 
-The signed control envelope is exactly `{ header, payload, signature }`. Add both schema documents to the data-only `PROTOCOL_SCHEMA_DOCUMENTS`, add both document roots plus all 27 leaf IDs below to `REQUIRED_PROTOCOL_SCHEMA_IDS`, and extend `fixtureFor`; the catalog import-count assertion becomes exactly 8. No runtime module may register a schema dynamically. The roots are `urn:agent-life:protocol:v1:control-envelope` and `urn:agent-life:protocol:v1:key-rotation`. The exact leaf IDs are:
+The signed control envelope is exactly `{ header, payload, signature }`. Add both schema documents to the data-only `PROTOCOL_SCHEMA_DOCUMENTS`, add both document roots plus all 27 leaf IDs below to `REQUIRED_PROTOCOL_SCHEMA_IDS`, and extend `fixtureFor`; the catalog import-count assertion becomes exactly 8. No runtime module may register a schema dynamically. The roots are `urn:open-android-intelligence:protocol:v1:control-envelope` and `urn:open-android-intelligence:protocol:v1:key-rotation`. The exact leaf IDs are:
 
 ```text
-urn:agent-life:protocol:v1:message:device_ping
-urn:agent-life:protocol:v1:message:bridge_ping
-urn:agent-life:protocol:v1:message:device_presence
-urn:agent-life:protocol:v1:message:device_key_rotation
-urn:agent-life:protocol:v1:message:device_key_rotation_ack
-urn:agent-life:protocol:v1:message:bridge_key_rotation
-urn:agent-life:protocol:v1:message:bridge_key_rotation_ack
-urn:agent-life:protocol:v1:message:adapter_key_rotation
-urn:agent-life:protocol:v1:message:adapter_key_rotation_ack
-urn:agent-life:protocol:v1:header:device_ping
-urn:agent-life:protocol:v1:header:bridge_ping
-urn:agent-life:protocol:v1:header:device_presence
-urn:agent-life:protocol:v1:header:device_key_rotation
-urn:agent-life:protocol:v1:header:device_key_rotation_ack
-urn:agent-life:protocol:v1:header:bridge_key_rotation
-urn:agent-life:protocol:v1:header:bridge_key_rotation_ack
-urn:agent-life:protocol:v1:header:adapter_key_rotation
-urn:agent-life:protocol:v1:header:adapter_key_rotation_ack
-urn:agent-life:protocol:v1:envelope:device_ping
-urn:agent-life:protocol:v1:envelope:bridge_ping
-urn:agent-life:protocol:v1:envelope:device_presence
-urn:agent-life:protocol:v1:envelope:device_key_rotation
-urn:agent-life:protocol:v1:envelope:device_key_rotation_ack
-urn:agent-life:protocol:v1:envelope:bridge_key_rotation
-urn:agent-life:protocol:v1:envelope:bridge_key_rotation_ack
-urn:agent-life:protocol:v1:envelope:adapter_key_rotation
-urn:agent-life:protocol:v1:envelope:adapter_key_rotation_ack
+urn:open-android-intelligence:protocol:v1:message:device_ping
+urn:open-android-intelligence:protocol:v1:message:bridge_ping
+urn:open-android-intelligence:protocol:v1:message:device_presence
+urn:open-android-intelligence:protocol:v1:message:device_key_rotation
+urn:open-android-intelligence:protocol:v1:message:device_key_rotation_ack
+urn:open-android-intelligence:protocol:v1:message:bridge_key_rotation
+urn:open-android-intelligence:protocol:v1:message:bridge_key_rotation_ack
+urn:open-android-intelligence:protocol:v1:message:adapter_key_rotation
+urn:open-android-intelligence:protocol:v1:message:adapter_key_rotation_ack
+urn:open-android-intelligence:protocol:v1:header:device_ping
+urn:open-android-intelligence:protocol:v1:header:bridge_ping
+urn:open-android-intelligence:protocol:v1:header:device_presence
+urn:open-android-intelligence:protocol:v1:header:device_key_rotation
+urn:open-android-intelligence:protocol:v1:header:device_key_rotation_ack
+urn:open-android-intelligence:protocol:v1:header:bridge_key_rotation
+urn:open-android-intelligence:protocol:v1:header:bridge_key_rotation_ack
+urn:open-android-intelligence:protocol:v1:header:adapter_key_rotation
+urn:open-android-intelligence:protocol:v1:header:adapter_key_rotation_ack
+urn:open-android-intelligence:protocol:v1:envelope:device_ping
+urn:open-android-intelligence:protocol:v1:envelope:bridge_ping
+urn:open-android-intelligence:protocol:v1:envelope:device_presence
+urn:open-android-intelligence:protocol:v1:envelope:device_key_rotation
+urn:open-android-intelligence:protocol:v1:envelope:device_key_rotation_ack
+urn:open-android-intelligence:protocol:v1:envelope:bridge_key_rotation
+urn:open-android-intelligence:protocol:v1:envelope:bridge_key_rotation_ack
+urn:open-android-intelligence:protocol:v1:envelope:adapter_key_rotation
+urn:open-android-intelligence:protocol:v1:envelope:adapter_key_rotation_ack
 ```
 
 `control-envelope.schema.json` owns the three non-rotation message/header/envelope leaf triples. `key-rotation.schema.json` owns the six rotation triples. Reusable paired-device and adapter family header/envelope shells exist only as internal `$defs` without public `$id`; they are neither catalog entries nor accepted roots. Every named header leaf composes Task 4's `signed_header_base`, fixes that row's literal `message_type`, `message_schema` and direction, and closes with `unevaluatedProperties:false`: paired-device leaves add exactly `device_id`, `pairing_generation`, `connection_generation`; adapter leaves add exactly `adapter_credential_id`, `adapter_credential_generation`. For every message type `T`, the named `envelope:T` leaf is exactly `{header,payload,signature}`, references both `header:T` and `message:T`, closes the outer object and validates canonical P1363 signature syntax. Stage 2 strict-parses only against the trusted-ingress internal family shell selected outside the wire; this shell establishes the closed family shape and signature encoding but has no `$id` and does not assert a type-specific payload tuple. Stage 3 resolves exactly one locked registry row by the parsed `message_type`; stage 4 checks that row's exact schema/direction/domain/role tuple; stage 5 validates the complete value against `envelope:T`, thereby revalidating the exact header and exact message payload together. There is no accepted base header, public family-envelope ID, unregistered control-message fallback, caller-supplied schema ID or fallback branch.
@@ -1717,15 +1717,15 @@ Append exactly this Task 5 delta; `control_envelope` is a container and `receipt
 
 | message_type | direction | signature_domain | schema_id |
 |---|---|---|---|
-| `device_ping` | `app-to-bridge` | `control/app-to-bridge` | `urn:agent-life:protocol:v1:message:device_ping` |
-| `bridge_ping` | `bridge-to-app` | `control/bridge-to-app` | `urn:agent-life:protocol:v1:message:bridge_ping` |
-| `device_presence` | `app-to-bridge` | `control/app-to-bridge` | `urn:agent-life:protocol:v1:message:device_presence` |
-| `device_key_rotation` | `app-to-bridge` | `key-rotation/app-to-bridge` | `urn:agent-life:protocol:v1:message:device_key_rotation` |
-| `device_key_rotation_ack` | `bridge-to-app` | `key-rotation/bridge-to-app` | `urn:agent-life:protocol:v1:message:device_key_rotation_ack` |
-| `bridge_key_rotation` | `bridge-to-app` | `key-rotation/bridge-to-app` | `urn:agent-life:protocol:v1:message:bridge_key_rotation` |
-| `bridge_key_rotation_ack` | `app-to-bridge` | `key-rotation/app-to-bridge` | `urn:agent-life:protocol:v1:message:bridge_key_rotation_ack` |
-| `adapter_key_rotation` | `adapter-to-bridge` | `key-rotation/adapter-to-bridge` | `urn:agent-life:protocol:v1:message:adapter_key_rotation` |
-| `adapter_key_rotation_ack` | `bridge-to-adapter` | `key-rotation/bridge-to-adapter` | `urn:agent-life:protocol:v1:message:adapter_key_rotation_ack` |
+| `device_ping` | `app-to-bridge` | `control/app-to-bridge` | `urn:open-android-intelligence:protocol:v1:message:device_ping` |
+| `bridge_ping` | `bridge-to-app` | `control/bridge-to-app` | `urn:open-android-intelligence:protocol:v1:message:bridge_ping` |
+| `device_presence` | `app-to-bridge` | `control/app-to-bridge` | `urn:open-android-intelligence:protocol:v1:message:device_presence` |
+| `device_key_rotation` | `app-to-bridge` | `key-rotation/app-to-bridge` | `urn:open-android-intelligence:protocol:v1:message:device_key_rotation` |
+| `device_key_rotation_ack` | `bridge-to-app` | `key-rotation/bridge-to-app` | `urn:open-android-intelligence:protocol:v1:message:device_key_rotation_ack` |
+| `bridge_key_rotation` | `bridge-to-app` | `key-rotation/bridge-to-app` | `urn:open-android-intelligence:protocol:v1:message:bridge_key_rotation` |
+| `bridge_key_rotation_ack` | `app-to-bridge` | `key-rotation/app-to-bridge` | `urn:open-android-intelligence:protocol:v1:message:bridge_key_rotation_ack` |
+| `adapter_key_rotation` | `adapter-to-bridge` | `key-rotation/adapter-to-bridge` | `urn:open-android-intelligence:protocol:v1:message:adapter_key_rotation` |
+| `adapter_key_rotation_ack` | `bridge-to-adapter` | `key-rotation/bridge-to-adapter` | `urn:open-android-intelligence:protocol:v1:message:adapter_key_rotation_ack` |
 
 There is no generic ACK. Update the cumulative registry test before the RED run; its exact cumulative array must include the nine rows above, every message payload `$id` must occur exactly once in the two catalog documents, and every production payload `$id` must still have exactly one registry row.
 
@@ -2049,11 +2049,11 @@ Append exactly this Task 6 delta; evaluator/reducer calls and zero-retention evi
 
 | message_type | direction | signature_domain | schema_id |
 |---|---|---|---|
-| `authorization_revision_update` | `app-to-bridge` | `control/app-to-bridge` | `urn:agent-life:protocol:v1:message:authorization_revision_update` |
-| `authorization_revision_ack` | `bridge-to-app` | `control/bridge-to-app` | `urn:agent-life:protocol:v1:message:authorization_revision_ack` |
-| `data_query_grant_update` | `app-to-bridge` | `control/app-to-bridge` | `urn:agent-life:protocol:v1:message:data_query_grant_update` |
-| `data_query_grant_ack` | `bridge-to-app` | `control/bridge-to-app` | `urn:agent-life:protocol:v1:message:data_query_grant_ack` |
-| `capability_manifest` | `app-to-bridge` | `control/app-to-bridge` | `urn:agent-life:protocol:v1:message:capability_manifest` |
+| `authorization_revision_update` | `app-to-bridge` | `control/app-to-bridge` | `urn:open-android-intelligence:protocol:v1:message:authorization_revision_update` |
+| `authorization_revision_ack` | `bridge-to-app` | `control/bridge-to-app` | `urn:open-android-intelligence:protocol:v1:message:authorization_revision_ack` |
+| `data_query_grant_update` | `app-to-bridge` | `control/app-to-bridge` | `urn:open-android-intelligence:protocol:v1:message:data_query_grant_update` |
+| `data_query_grant_ack` | `bridge-to-app` | `control/bridge-to-app` | `urn:open-android-intelligence:protocol:v1:message:data_query_grant_ack` |
+| `capability_manifest` | `app-to-bridge` | `control/app-to-bridge` | `urn:open-android-intelligence:protocol:v1:message:capability_manifest` |
 
 Update the cumulative registry test before the RED run; each `$id` must be a closed branch in the schema file named by this task.
 
@@ -2339,19 +2339,19 @@ Append exactly this Task 7 delta:
 
 | message_type | direction | signature_domain | schema_id |
 |---|---|---|---|
-| `operation_submit` | `adapter-to-bridge` | `adapter/adapter-to-bridge` | `urn:agent-life:protocol:v1:message:operation_submit` |
-| `operation_get` | `adapter-to-bridge` | `adapter/adapter-to-bridge` | `urn:agent-life:protocol:v1:message:operation_get` |
-| `operation_wait` | `adapter-to-bridge` | `adapter/adapter-to-bridge` | `urn:agent-life:protocol:v1:message:operation_wait` |
-| `operation_cancel` | `adapter-to-bridge` | `adapter/adapter-to-bridge` | `urn:agent-life:protocol:v1:message:operation_cancel` |
-| `operation_reconcile` | `adapter-to-bridge` | `adapter/adapter-to-bridge` | `urn:agent-life:protocol:v1:message:operation_reconcile` |
-| `operation_command` | `bridge-to-app` | `control/bridge-to-app` | `urn:agent-life:protocol:v1:message:operation_command` |
-| `operation_receipt` | `app-to-bridge` | `receipt/device` | `urn:agent-life:protocol:v1:message:operation_receipt` |
-| `operation_receipt_ack` | `bridge-to-app` | `control/bridge-to-app` | `urn:agent-life:protocol:v1:message:operation_receipt_ack` |
-| `receipt_replay` | `app-to-bridge` | `control/app-to-bridge` | `urn:agent-life:protocol:v1:message:receipt_replay` |
-| `operation_snapshot` | `bridge-to-adapter` | `adapter/bridge-to-adapter` | `urn:agent-life:protocol:v1:message:operation_snapshot` |
-| `device_protocol_error` | `app-to-bridge` | `control/app-to-bridge` | `urn:agent-life:protocol:v1:message:device_protocol_error` |
-| `bridge_protocol_error` | `bridge-to-app` | `control/bridge-to-app` | `urn:agent-life:protocol:v1:message:bridge_protocol_error` |
-| `adapter_protocol_error` | `bridge-to-adapter` | `adapter/bridge-to-adapter` | `urn:agent-life:protocol:v1:message:adapter_protocol_error` |
+| `operation_submit` | `adapter-to-bridge` | `adapter/adapter-to-bridge` | `urn:open-android-intelligence:protocol:v1:message:operation_submit` |
+| `operation_get` | `adapter-to-bridge` | `adapter/adapter-to-bridge` | `urn:open-android-intelligence:protocol:v1:message:operation_get` |
+| `operation_wait` | `adapter-to-bridge` | `adapter/adapter-to-bridge` | `urn:open-android-intelligence:protocol:v1:message:operation_wait` |
+| `operation_cancel` | `adapter-to-bridge` | `adapter/adapter-to-bridge` | `urn:open-android-intelligence:protocol:v1:message:operation_cancel` |
+| `operation_reconcile` | `adapter-to-bridge` | `adapter/adapter-to-bridge` | `urn:open-android-intelligence:protocol:v1:message:operation_reconcile` |
+| `operation_command` | `bridge-to-app` | `control/bridge-to-app` | `urn:open-android-intelligence:protocol:v1:message:operation_command` |
+| `operation_receipt` | `app-to-bridge` | `receipt/device` | `urn:open-android-intelligence:protocol:v1:message:operation_receipt` |
+| `operation_receipt_ack` | `bridge-to-app` | `control/bridge-to-app` | `urn:open-android-intelligence:protocol:v1:message:operation_receipt_ack` |
+| `receipt_replay` | `app-to-bridge` | `control/app-to-bridge` | `urn:open-android-intelligence:protocol:v1:message:receipt_replay` |
+| `operation_snapshot` | `bridge-to-adapter` | `adapter/bridge-to-adapter` | `urn:open-android-intelligence:protocol:v1:message:operation_snapshot` |
+| `device_protocol_error` | `app-to-bridge` | `control/app-to-bridge` | `urn:open-android-intelligence:protocol:v1:message:device_protocol_error` |
+| `bridge_protocol_error` | `bridge-to-app` | `control/bridge-to-app` | `urn:open-android-intelligence:protocol:v1:message:bridge_protocol_error` |
+| `adapter_protocol_error` | `bridge-to-adapter` | `adapter/bridge-to-adapter` | `urn:open-android-intelligence:protocol:v1:message:adapter_protocol_error` |
 
 `operation_receipt` is the closed union for `accepted_device`, later pending receipts and terminal results; `operation_snapshot` is the content-free Bridge-signed response used by adapter create/get/wait/cancel/reconcile and never carries a command body. The five named adapter request branches above are the only network entry points for those APIs; Bridge reducer internals, execution claims and reconciliation evidence are not separate wire messages. Update the cumulative registry test before the RED run and assert all five request/one response branches, authenticated invocation binding, the replay outer/inner signature rule and error retry-field constraints.
 
@@ -2427,7 +2427,7 @@ Append exactly one Task 8 entry; issuing/claiming/consuming credentials and limi
 
 | message_type | direction | signature_domain | schema_id |
 |---|---|---|---|
-| `approval_decision` | `app-to-bridge` | `approval/device` | `urn:agent-life:protocol:v1:message:approval_decision` |
+| `approval_decision` | `app-to-bridge` | `approval/device` | `urn:open-android-intelligence:protocol:v1:message:approval_decision` |
 
 The closed decision union represents approve-with-one-shot-credential, deny and expiry. Update the cumulative registry test before the RED run.
 
@@ -2494,8 +2494,8 @@ Append exactly this Task 9 delta:
 
 | message_type | direction | signature_domain | schema_id |
 |---|---|---|---|
-| `device_event` | `app-to-bridge` | `control/app-to-bridge` | `urn:agent-life:protocol:v1:message:device_event` |
-| `event_ack` | `bridge-to-app` | `control/bridge-to-app` | `urn:agent-life:protocol:v1:message:event_ack` |
+| `device_event` | `app-to-bridge` | `control/app-to-bridge` | `urn:open-android-intelligence:protocol:v1:message:device_event` |
+| `event_ack` | `bridge-to-app` | `control/bridge-to-app` | `urn:open-android-intelligence:protocol:v1:message:event_ack` |
 
 Update the cumulative registry test before the RED run. It must reject all Agent principal/instance/workspace/session/job fields in `device_event`, and reject a wrong direction or substituted Bridge key/domain for `event_ack`.
 
@@ -2579,10 +2579,10 @@ Append exactly this Task 10 delta:
 
 | message_type | direction | signature_domain | schema_id |
 |---|---|---|---|
-| `device_channel_ticket` | `bridge-to-app` | `ticket/bridge` | `urn:agent-life:protocol:v1:message:device_channel_ticket` |
-| `adapter_channel_ticket` | `bridge-to-adapter` | `ticket/bridge` | `urn:agent-life:protocol:v1:message:adapter_channel_ticket` |
-| `device_channel_pop` | `app-to-bridge` | `channel-pop/device` | `urn:agent-life:protocol:v1:message:device_channel_pop` |
-| `adapter_channel_pop` | `adapter-to-bridge` | `channel-pop/adapter` | `urn:agent-life:protocol:v1:message:adapter_channel_pop` |
+| `device_channel_ticket` | `bridge-to-app` | `ticket/bridge` | `urn:open-android-intelligence:protocol:v1:message:device_channel_ticket` |
+| `adapter_channel_ticket` | `bridge-to-adapter` | `ticket/bridge` | `urn:open-android-intelligence:protocol:v1:message:adapter_channel_ticket` |
+| `device_channel_pop` | `app-to-bridge` | `channel-pop/device` | `urn:open-android-intelligence:protocol:v1:message:device_channel_pop` |
+| `adapter_channel_pop` | `adapter-to-bridge` | `channel-pop/adapter` | `urn:open-android-intelligence:protocol:v1:message:adapter_channel_pop` |
 
 Ticket branches use a closed artifact/live-stream union. Atomic valid PoP consumption is redemption; no `ticket_redeem` message exists. Artifact/stream lifecycle states and binary channel chunk/credit/commit/close frames are not independent ES256 messages and therefore are absent from `messages.json`. Update the cumulative registry test before the RED run.
 
@@ -2871,7 +2871,7 @@ Use Gradle wrapper 9.6.1, Kotlin JVM/serialization plugins 2.4.10, Eclipse Temur
 
 `CanonicalJson` uses the Java RFC 8785 implementation and compares complete raw canonical bytes. `Es256` parses P-256 JWK coordinates, converts strict DER/P1363 in both directions, normalizes every test-produced JCA signature to low-S, and rejects high-S on verification. `SchemaValidation` loads the committed Draft 2020-12 schemas and mandatory `decimal-u64` format. `ReferenceReducers` independently implements every action required by all 32 families, including the exact persisted replay-intent metadata projection and length: enrollment, version/replay/fence/rotation, adapter admission, both authorization domains and revisions, capability-manifest non-authority, risk/egress, atomic approval claim, operation/crash/reconciliation, event identity, artifact, stream, isolation, error precedence, migration, forbidden surfaces and audit sanitization. `SutMain` implements the same NDJSON ABI as `protocol/tools/conformance-cli.ts` without importing TypeScript reference code or expected vector output. A successful complete Kotlin run emits the stable evidence ID `conformance.kotlin.all-vectors` with `manifest_digest = b64u(SHA-256(JCS_UTF8(parsed manifest.json)))` and counts only.
 
-The Kotlin application plugin sets a fixed main class and distribution name `agent-life-kotlin-sut`; `installDist` creates its launcher, while committed executable `conformance/kotlin/run-sut` resolves and `exec`s that launcher without shell evaluation of request data. `protocol/tools/run-conformance.ts` starts each SUT once, validates every request/response against the ABI schemas, sends every committed vector through `run_trace`, and compares the normalized response with the driver's held expected result. This path is mandatory even if language-local unit tests pass. Runners report vector ID plus expected/actual enums only; they never log vector payload bodies.
+The Kotlin application plugin sets a fixed main class and distribution name `open-android-intelligence-kotlin-sut`; `installDist` creates its launcher, while committed executable `conformance/kotlin/run-sut` resolves and `exec`s that launcher without shell evaluation of request data. `protocol/tools/run-conformance.ts` starts each SUT once, validates every request/response against the ABI schemas, sends every committed vector through `run_trace`, and compares the normalized response with the driver's held expected result. This path is mandatory even if language-local unit tests pass. Runners report vector ID plus expected/actual enums only; they never log vector payload bodies.
 
 - [ ] **Step 4: Run cross-language conformance**
 

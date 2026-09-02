@@ -16,18 +16,18 @@
                 "NODE_VERSION=24.18.0",
                 "YARN_VERSION=1.22.22",
                 "NODE_ENV=production",
-                "AGENT_LIFE_DATABASE=/var/lib/agent-life-bridge/bridge.sqlite",
-                "AGENT_LIFE_PAIRING_PUBLIC_KEY=/var/lib/agent-life-bridge/secrets/pairing-ticket-public.pem",
-                "AGENT_LIFE_RUNTIME_SOCKET=/run/agent-life/runtime.sock"
+                "OPEN_ANDROID_INTELLIGENCE_DATABASE=/var/lib/open-android-intelligence-bridge/bridge.sqlite",
+                "OPEN_ANDROID_INTELLIGENCE_PAIRING_PUBLIC_KEY=/var/lib/open-android-intelligence-bridge/secrets/pairing-ticket-public.pem",
+                "OPEN_ANDROID_INTELLIGENCE_RUNTIME_SOCKET=/run/open-android-intelligence/runtime.sock"
             ],
             "Entrypoint": [
                 "node",
                 "dist/bridge-runtime/src/main.js"
             ],
             "Volumes": {
-                "/var/lib/agent-life-bridge": {}
+                "/var/lib/open-android-intelligence-bridge": {}
             },
-            "WorkingDir": "/opt/agent-life-bridge",
+            "WorkingDir": "/opt/open-android-intelligence-bridge",
             "Labels": {
                 "com.docker.compose.project": "deploy",
                 "com.docker.compose.service": "bridge",
@@ -38,7 +38,7 @@
                     "CMD",
                     "node",
                     "-e",
-                    "const http=require('node:http');const r=http.request({socketPath:process.env.AGENT_LIFE_RUNTIME_SOCKET,path:'/health/ready'},x=>process.exit(x.statusCode===200?0:1));r.on('error',()=>process.exit(1));r.end()"
+                    "const http=require('node:http');const r=http.request({socketPath:process.env.OPEN_ANDROID_INTELLIGENCE_RUNTIME_SOCKET,path:'/health/ready'},x=>process.exit(x.statusCode===200?0:1));r.on('error',()=>process.exit(1));r.end()"
                 ],
                 "Interval": 30000000000,
                 "Timeout": 5000000000,
@@ -97,10 +97,10 @@
                 "YARN_VERSION=1.22.22"
             ],
             "Entrypoint": [
-                "/usr/local/bin/agent-life-tsnet"
+                "/usr/local/bin/open-android-intelligence-tsnet"
             ],
             "Volumes": {
-                "/var/lib/agent-life-ingress": {}
+                "/var/lib/open-android-intelligence-ingress": {}
             },
             "Labels": {
                 "com.docker.compose.project": "deploy",

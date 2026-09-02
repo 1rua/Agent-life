@@ -1,5 +1,5 @@
 {
-  "name": "@agent-life/integrations",
+  "name": "@open-android-intelligence/integrations",
   "private": true,
   "type": "module",
   "scripts": {

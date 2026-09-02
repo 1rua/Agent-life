@@ -1,6 +1,6 @@
 import { BridgeServiceError } from "../../bridge-contract/src/service-types.js";
-export const BRIDGE_LEASE_COORDINATOR_PORT = "agent-life.bridge-lease-coordinator.v1";
-export const PAIRING_TICKET_VERIFIER_PORT = "agent-life.pairing-ticket-verifier.v1";
+export const BRIDGE_LEASE_COORDINATOR_PORT = "open-android-intelligence.bridge-lease-coordinator.v1";
+export const PAIRING_TICKET_VERIFIER_PORT = "open-android-intelligence.pairing-ticket-verifier.v1";
 const callable = (value) => typeof value === "function";
 export const assertConnectedBridgeLeaseCoordinator = (value) => {
     if (typeof value !== "object" || value === null || Array.isArray(value))

@@ -26,14 +26,14 @@ interface PluginSpec {
 
 const REFERENCE_PLUGINS: PluginSpec[] = [
   {
-    id: "org.agentlife.notifications",
+    id: "org.openandroidintelligence.notifications",
     name: "Notifications Query",
     version: "1.0.0",
     description: "Official reference plugin for querying notifications",
     wasmName: "notifications.wasm",
     provides: [
       {
-        id: "org.agentlife.notifications.query",
+        id: "org.openandroidintelligence.notifications.query",
         version: "1.0.0",
         schema: "schemas/notifications.json",
       },
@@ -47,14 +47,14 @@ const REFERENCE_PLUGINS: PluginSpec[] = [
     ],
   },
   {
-    id: "org.agentlife.sms",
+    id: "org.openandroidintelligence.sms",
     name: "SMS Query",
     version: "1.0.0",
     description: "Official reference plugin for querying SMS messages",
     wasmName: "sms.wasm",
     provides: [
       {
-        id: "org.agentlife.sms.query",
+        id: "org.openandroidintelligence.sms.query",
         version: "1.0.0",
         schema: "schemas/sms.json",
       },
@@ -68,14 +68,14 @@ const REFERENCE_PLUGINS: PluginSpec[] = [
     ],
   },
   {
-    id: "org.agentlife.call-log",
+    id: "org.openandroidintelligence.call-log",
     name: "Call Log Query",
     version: "1.0.0",
     description: "Official reference plugin for querying call logs",
     wasmName: "call_log.wasm",
     provides: [
       {
-        id: "org.agentlife.call-log.query",
+        id: "org.openandroidintelligence.call-log.query",
         version: "1.0.0",
         schema: "schemas/call-log.json",
       },
@@ -137,7 +137,7 @@ async function main() {
       runtime: {
         type: "protected-wasm",
         abiVersion: "1.0",
-        entrypoint: "agent_life_plugin_main",
+        entrypoint: "open_android_intelligence_plugin_main",
         payload: `payload/${spec.wasmName}`,
       },
       compatibility: {

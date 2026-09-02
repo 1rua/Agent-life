@@ -81,17 +81,17 @@ approved manifest permission allowlist forbids `RECEIVE_BOOT_COMPLETED`.
 - `mvp-contract/test/sms-contract.test.ts`
 - `integrations/shared/adapter.ts`
 - `integrations/shared/sms-contract.test.ts`
-- `apps/android/app/src/main/kotlin/com/agentlife/mobile/MainActivity.kt`
-- `apps/android/app/src/test/kotlin/com/agentlife/mobile/SmsSettingsPresenterTest.kt`
-- `apps/android/capability-ports/src/main/kotlin/com/agentlife/capability/SmsCapabilityContracts.kt`
-- `apps/android/capability-ports/src/test/kotlin/com/agentlife/capability/CapabilityProviderContractsTest.kt`
-- `apps/android/sms-collector/src/main/kotlin/com/agentlife/sms/AndroidSmsInboxReader.kt`
-- `apps/android/sms-collector/src/main/kotlin/com/agentlife/sms/SmsAutoSyncCoordinator.kt`
-- `apps/android/sms-collector/src/main/kotlin/com/agentlife/sms/SmsWireCodec.kt`
-- `apps/android/sms-collector/src/test/kotlin/com/agentlife/sms/AndroidSmsInboxReaderTest.kt`
-- `apps/android/sms-collector/src/test/kotlin/com/agentlife/sms/SmsAutoSyncCoordinatorTest.kt`
-- `apps/android/sms-collector/src/test/kotlin/com/agentlife/sms/SmsTestFixtures.kt`
-- `apps/android/sms-collector/src/test/kotlin/com/agentlife/sms/SmsWireCodecTest.kt`
+- `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/MainActivity.kt`
+- `apps/android/app/src/test/kotlin/com/openandroidintelligence/mobile/SmsSettingsPresenterTest.kt`
+- `apps/android/capability-ports/src/main/kotlin/com/openandroidintelligence/capability/SmsCapabilityContracts.kt`
+- `apps/android/capability-ports/src/test/kotlin/com/openandroidintelligence/capability/CapabilityProviderContractsTest.kt`
+- `apps/android/sms-collector/src/main/kotlin/com/openandroidintelligence/sms/AndroidSmsInboxReader.kt`
+- `apps/android/sms-collector/src/main/kotlin/com/openandroidintelligence/sms/SmsAutoSyncCoordinator.kt`
+- `apps/android/sms-collector/src/main/kotlin/com/openandroidintelligence/sms/SmsWireCodec.kt`
+- `apps/android/sms-collector/src/test/kotlin/com/openandroidintelligence/sms/AndroidSmsInboxReaderTest.kt`
+- `apps/android/sms-collector/src/test/kotlin/com/openandroidintelligence/sms/SmsAutoSyncCoordinatorTest.kt`
+- `apps/android/sms-collector/src/test/kotlin/com/openandroidintelligence/sms/SmsTestFixtures.kt`
+- `apps/android/sms-collector/src/test/kotlin/com/openandroidintelligence/sms/SmsWireCodecTest.kt`
 
 The small `SmsWireCodec` local-value change fixes a Kotlin cross-module smart
 cast compilation error exposed once the SDK was supplied. `SmsTestFixtures`
@@ -150,7 +150,7 @@ python3 -m unittest discover -s apps/android/tools -p 'test_*.py'
 Passed: `Ran 60 tests ... OK`.
 
 From `apps/android`, with
-`ANDROID_HOME=/home/djbd/项目/Agent-life/.toolchains/android-sdk`:
+`ANDROID_HOME=/home/djbd/项目/open-android-intelligence/.toolchains/android-sdk`:
 
 ```sh
 ./gradlew --no-daemon :capability-ports:testDebugUnitTest :sms-collector:testDebugUnitTest :app:testDebugUnitTest
@@ -237,12 +237,12 @@ signed-Long path.
 Focused GREEN commands:
 
 ```sh
-ANDROID_HOME=/home/djbd/项目/Agent-life/.toolchains/android-sdk \
+ANDROID_HOME=/home/djbd/项目/open-android-intelligence/.toolchains/android-sdk \
   ./gradlew --no-daemon :capability-ports:testDebugUnitTest \
   :sms-collector:testDebugUnitTest \
-  --tests 'com.agentlife.capability.SmsCapabilityContractsTest' \
-  --tests 'com.agentlife.sms.SmsCursorTest' \
-  --tests 'com.agentlife.sms.SmsWireCodecTest'
+  --tests 'com.openandroidintelligence.capability.SmsCapabilityContractsTest' \
+  --tests 'com.openandroidintelligence.sms.SmsCursorTest' \
+  --tests 'com.openandroidintelligence.sms.SmsWireCodecTest'
 npm test -- mvp-contract/test/sms-contract.test.ts
 (cd bridge-contract && npm test -- sms-service.test.ts)
 (cd integrations && npm test -- shared/sms-contract.test.ts)
@@ -254,7 +254,7 @@ tasks, not an SDK-free substitute.
 Full relevant verification:
 
 ```sh
-ANDROID_HOME=/home/djbd/项目/Agent-life/.toolchains/android-sdk \
+ANDROID_HOME=/home/djbd/项目/open-android-intelligence/.toolchains/android-sdk \
   ./gradlew --no-daemon :capability-ports:testDebugUnitTest :sms-collector:testDebugUnitTest
 npm test && npm run typecheck
 (cd bridge-contract && npm test && npm run typecheck)

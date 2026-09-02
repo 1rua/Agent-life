@@ -5,7 +5,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { BRIDGE_STORE_NAMESPACES } from "../../../bridge-contract/src/durable-store.js";
 import { cleanupRealBridgeBackupRestoreDrill, runRealBridgeBackupRestoreDrill } from "../src/real-backup-restore-drill.js";
 
-const root = await mkdtemp(join(tmpdir(), "agent-life-real-drill-"));
+const root = await mkdtemp(join(tmpdir(), "open-android-intelligence-real-drill-"));
 
 afterAll(async () => {
   await rm(root, { recursive: true, force: true });

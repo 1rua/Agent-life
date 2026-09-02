@@ -81,7 +81,7 @@
 
 ### 4.2 `:call-log-collector`
 
-包名使用 `com.agentlife.calls`，负责：
+包名使用 `com.openandroidintelligence.calls`，负责：
 
 - `AndroidCallLogReader`：唯一的 `ContentResolver.query` 薄适配层。
 - `CallLogRow` 与 `CallLogQuery`：经过构造约束的内部 Provider 行和查询请求。
@@ -437,7 +437,7 @@ data class CallHistoryPolicy(
 
 ```text
 mvp-contract/schemas/v1/call-record.schema.json
-urn:agent-life:mvp:call-record:v1
+urn:open-android-intelligence:mvp:call-record:v1
 ```
 
 首版 record wire 示例：
@@ -499,10 +499,10 @@ urn:agent-life:mvp:call-record:v1
 
 ```text
 noBackupFilesDir/call-log-outbox-v1.aesgcm
-Keystore alias: agent_life_call_log_outbox_v1
+Keystore alias: open_android_intelligence_call_log_outbox_v1
 
 noBackupFilesDir/call-log-sync-state-v1.aesgcm
-Keystore alias: agent_life_call_log_state_v1
+Keystore alias: open_android_intelligence_call_log_state_v1
 ```
 
 AES-GCM envelope 使用：
@@ -856,7 +856,7 @@ Call Log row、payload、sync state 和结果对象不能使用会泄露字段�
 聚焦 Android 单元测试：
 
 ```bash
-cd /home/djbd/项目/Agent-life/apps/android
+cd /home/djbd/项目/open-android-intelligence/apps/android
 
 ./gradlew --no-daemon --console=plain \
   :capability-ports:testDebugUnitTest \
@@ -870,7 +870,7 @@ cd /home/djbd/项目/Agent-life/apps/android
 SDK-free 门禁：
 
 ```bash
-cd /home/djbd/项目/Agent-life
+cd /home/djbd/项目/open-android-intelligence
 
 python3 -m unittest \
   apps/android/tools/test_call_log_collector_static.py \
@@ -881,7 +881,7 @@ python3 -m unittest \
 schema 与 validator：
 
 ```bash
-cd /home/djbd/项目/Agent-life
+cd /home/djbd/项目/open-android-intelligence
 
 npx vitest --root . run mvp-contract/test/call-contract.test.ts
 npx tsc --noEmit -p mvp-contract/tsconfig.json
@@ -890,7 +890,7 @@ npx tsc --noEmit -p mvp-contract/tsconfig.json
 完整回归：
 
 ```bash
-cd /home/djbd/项目/Agent-life
+cd /home/djbd/项目/open-android-intelligence
 
 e2e/mvp/run-smoke.sh --sdk-free
 e2e/mvp/run-readiness.sh --sdk-free

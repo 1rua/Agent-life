@@ -86,7 +86,7 @@ def main() -> int:
         "metadata": {
             "timestamp": provenance.get("build", {}).get("timestamp", "1970-01-01T00:00:00Z"),
             "tools": [
-                {"vendor": "Agent Life", "name": "build-tsnet-aar.sh", "version": "1"},
+                {"vendor": "Open Android Intelligence", "name": "build-tsnet-aar.sh", "version": "1"},
                 {"vendor": "golang.org/x/mobile", "name": "gomobile", "version": provenance.get("toolchain", {}).get("gomobile", {}).get("versionLine", "unknown")},
             ],
             "component": {

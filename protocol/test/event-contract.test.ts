@@ -42,7 +42,7 @@ const REVISION = {
 };
 
 const record = {
-  schema_id: "urn:agent-life:mvp:v1:notification-record",
+  schema_id: "urn:open-android-intelligence:mvp:v1:notification-record",
   source_epoch: EPOCH,
   cursor: "9",
   record_revision: "2",
@@ -148,7 +148,7 @@ const task9Wire = (
   const privateJwk = options.privateJwk ?? (bridge ? BRIDGE_PRIVATE : DEVICE_PRIVATE);
   const header = {
     protocol_version: "1.0",
-    message_schema: `urn:agent-life:protocol:v1:message:${messageType}`,
+    message_schema: `urn:open-android-intelligence:protocol:v1:message:${messageType}`,
     message_type: messageType,
     message_id: bridge ? "018f4f9a-4444-4444-8444-444444444448"
       : messageType === "device_ping" ? "018f4f9a-4444-4444-8444-444444444449"
@@ -171,20 +171,20 @@ const task9Wire = (
 
 describe("Task 9 closed event payloads", () => {
   it("accepts all three event branches and rejects cross-branch fields", () => {
-    expect(() => validateSchema("urn:agent-life:protocol:v1:message:device_event", validEvent)).not.toThrow();
-    expect(() => validateSchema("urn:agent-life:protocol:v1:message:device_event", validDelete)).not.toThrow();
-    expect(() => validateSchema("urn:agent-life:protocol:v1:message:device_event", validLoss)).not.toThrow();
-    expect(() => validateSchema("urn:agent-life:protocol:v1:message:device_event", { ...validDelete, record_key: null })).toThrowError("SCHEMA_INVALID");
-    expect(() => validateSchema("urn:agent-life:protocol:v1:message:device_event", { ...validLoss, loss: { ...validLoss.loss, lost_from_cursor: "9" } })).toThrowError("SCHEMA_INVALID");
-    expect(() => validateSchema("urn:agent-life:protocol:v1:message:device_event", { ...validEvent, agent_principal_id: "agent-b" })).toThrowError("SCHEMA_INVALID");
-    expect(() => validateSchema("urn:agent-life:protocol:v1:message:device_event", { ...validEvent, unknown_field: true })).toThrowError("SCHEMA_INVALID");
+    expect(() => validateSchema("urn:open-android-intelligence:protocol:v1:message:device_event", validEvent)).not.toThrow();
+    expect(() => validateSchema("urn:open-android-intelligence:protocol:v1:message:device_event", validDelete)).not.toThrow();
+    expect(() => validateSchema("urn:open-android-intelligence:protocol:v1:message:device_event", validLoss)).not.toThrow();
+    expect(() => validateSchema("urn:open-android-intelligence:protocol:v1:message:device_event", { ...validDelete, record_key: null })).toThrowError("SCHEMA_INVALID");
+    expect(() => validateSchema("urn:open-android-intelligence:protocol:v1:message:device_event", { ...validLoss, loss: { ...validLoss.loss, lost_from_cursor: "9" } })).toThrowError("SCHEMA_INVALID");
+    expect(() => validateSchema("urn:open-android-intelligence:protocol:v1:message:device_event", { ...validEvent, agent_principal_id: "agent-b" })).toThrowError("SCHEMA_INVALID");
+    expect(() => validateSchema("urn:open-android-intelligence:protocol:v1:message:device_event", { ...validEvent, unknown_field: true })).toThrowError("SCHEMA_INVALID");
   });
 
   it("accepts only the exact ACK shape", () => {
     const ack = { source_epoch: EPOCH, source_capability: "notifications.metadata", highest_contiguous_cursor: "9" };
-    expect(() => validateSchema("urn:agent-life:protocol:v1:message:event_ack", ack)).not.toThrow();
-    expect(() => validateSchema("urn:agent-life:protocol:v1:message:event_ack", { ...ack, agent_principal_id: "agent-b" })).toThrowError("SCHEMA_INVALID");
-    expect(() => validateSchema("urn:agent-life:protocol:v1:message:event_ack", { ...ack, highest_contiguous_cursor: "09" })).toThrowError("SCHEMA_INVALID");
+    expect(() => validateSchema("urn:open-android-intelligence:protocol:v1:message:event_ack", ack)).not.toThrow();
+    expect(() => validateSchema("urn:open-android-intelligence:protocol:v1:message:event_ack", { ...ack, agent_principal_id: "agent-b" })).toThrowError("SCHEMA_INVALID");
+    expect(() => validateSchema("urn:open-android-intelligence:protocol:v1:message:event_ack", { ...ack, highest_contiguous_cursor: "09" })).toThrowError("SCHEMA_INVALID");
   });
 });
 
@@ -263,7 +263,7 @@ describe("Task 9 ACK validation and durable-before-delete boundary", () => {
       expect(Buffer.from(bytes).toString("base64")).toBe(vector.jcs_base64);
       expect(sha256B64Url(bytes)).toBe(vector.sha256_base64url);
       expect(String(bytes.byteLength)).toBe(vector.utf8_bytes);
-      expect(() => validateSchema(`urn:agent-life:protocol:v1:message:${vector.message_type}`, vector.payload)).not.toThrow();
+      expect(() => validateSchema(`urn:open-android-intelligence:protocol:v1:message:${vector.message_type}`, vector.payload)).not.toThrow();
     }
   });
 });

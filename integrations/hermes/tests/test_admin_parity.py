@@ -3,7 +3,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from agent_life_gateway.admin import (
+from open_android_intelligence_gateway.admin import (
     HERMES_HOST_API,
     HostApiCompatibility,
     create_admin_cli_registrar,
@@ -57,10 +57,10 @@ def test_admin_panel_and_local_cli_share_confirmed_write_semantics(tmp_path):
     program = Command("hermes")
     create_admin_cli_registrar(service)(program)
 
-    create = find_command(program, ["agent-life", "account", "create"])
-    status = find_command(program, ["agent-life", "account", "status"])
-    delete = find_command(program, ["agent-life", "account", "delete"])
-    assert program.children[0].description_text == "Manage Agent-life Gateway accounts"
+    create = find_command(program, ["open-android-intelligence", "account", "create"])
+    status = find_command(program, ["open-android-intelligence", "account", "status"])
+    delete = find_command(program, ["open-android-intelligence", "account", "delete"])
+    assert program.children[0].description_text == "Manage Open Android Intelligence Gateway accounts"
     assert "--confirm-local" in create.options
     assert "--confirm-local" in delete.options
 

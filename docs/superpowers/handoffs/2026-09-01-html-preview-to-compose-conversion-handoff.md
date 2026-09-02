@@ -43,7 +43,7 @@
 - `MainActivity.kt`（重写，592 行死数据 UI 全部移除）：登录页 ↔ 工作台按真实 phase 切换；保留助理交接门 `AssistantHandoffGate` / `DefaultAssistantHandoffGate` / `evaluateAssistantHandoff`（`tools/test_assistant_handoff_static.py` 门禁通过）。
 - `GatewayLoginScreen.kt`（新增）：真实登录表单，阶段横幅只反映运行时已证明的事实（协商中/认证中/失败含 Gateway 错误码/已连接含协商到的附件上限）。
 - `PlatformSettingsScreen.kt`（重写）：开发者信任模式开关驱动内核 `DeveloperTrustMode`（含强制确认文案）；插件卡片如实呈现"当前运行时尚未安装任何设备插件"；审计列表渲染 `AndroidAuditStore` 真实记录（无记录给空态说明）。
-- `AgentLifeApplication.kt`：审计 sink 持久持有；`gatewayRuntime` 进程级懒加载。
+- `OpenAndroidIntelligenceApplication.kt`：审计 sink 持久持有；`gatewayRuntime` 进程级懒加载。
 - `Navigation.kt`（新增）：`CoreNavigation` 三主目的地契约（`ArchitectureBoundaryTest` 依赖）。
 - **死数据清除**：`GatewayScreen.kt`、`ConversationScreen.kt`、`AttachmentPicker.kt`（含 `GatewayPresenter.connect()` 假在线、`ConversationPresenter.receiveReply()` 假回复）已移入 `/tmp/open-android-intelligence-trash/` 待人工复核后删除。
 

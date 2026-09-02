@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://agent-life.dev/schemas/gateway/v2/v1-bootstrap-export.schema.json",
-  "title": "Agent-life v1 to v2 bootstrap export",
+  "$id": "https://open-android-intelligence.dev/schemas/gateway/v2/v1-bootstrap-export.schema.json",
+  "title": "Open Android Intelligence v1 to v2 bootstrap export",
   "description": "v1 部署到 v2 的安全引导导出。只包含重新发现 Gateway 与插件所需的非秘密字段；任何凭据、队列、未确认操作、正文、附件、数据库文件或主密钥都不得出现。导入端必须重新配对并重新授权。",
   "type": "object",
   "additionalProperties": false,

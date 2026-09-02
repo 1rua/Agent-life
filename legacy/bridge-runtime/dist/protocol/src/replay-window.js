@@ -229,8 +229,8 @@ const validRegistryIdentity = (registry) => {
         : row.direction === "adapter-to-bridge" ? "adapter" : "bridge-command";
     return registry.direction === row.direction
         && registry.message_schema_id === row.schema_id
-        && registry.header_schema_id === `urn:agent-life:protocol:v1:header:${row.message_type}`
-        && registry.envelope_schema_id === `urn:agent-life:protocol:v1:envelope:${row.message_type}`
+        && registry.header_schema_id === `urn:open-android-intelligence:protocol:v1:header:${row.message_type}`
+        && registry.envelope_schema_id === `urn:open-android-intelligence:protocol:v1:envelope:${row.message_type}`
         && registry.signature_domain === row.signature_domain
         && registry.signer_role === signerRole;
 };

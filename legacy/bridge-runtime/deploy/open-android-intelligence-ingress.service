@@ -1,0 +1,35 @@
+[Unit]
+Description=Open Android Intelligence authenticated tsnet ingress
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+EnvironmentFile=-/etc/open-android-intelligence/ingress/ingress.env
+Type=simple
+User=open-android-intelligence-ingress
+Group=open-android-intelligence
+SupplementaryGroups=open-android-intelligence
+WorkingDirectory=/var/lib/open-android-intelligence-ingress
+StateDirectory=open-android-intelligence-ingress
+StateDirectoryMode=0750
+RuntimeDirectory=open-android-intelligence-ingress
+RuntimeDirectoryMode=0750
+Environment=OPEN_ANDROID_INTELLIGENCE_RUNTIME_SOCKET=/run/open-android-intelligence/runtime.sock
+Environment=OPEN_ANDROID_INTELLIGENCE_TSNET_STATE_DIR=/var/lib/open-android-intelligence-ingress
+Environment=OPEN_ANDROID_INTELLIGENCE_TSNET_HOSTNAME=open-android-intelligence-bridge
+Environment=OPEN_ANDROID_INTELLIGENCE_TSNET_CONTROL_URL=https://controlplane.tailscale.com
+Environment=OPEN_ANDROID_INTELLIGENCE_TSNET_PORT=443
+ExecStart=/opt/open-android-intelligence/ingress/open-android-intelligence-tsnet
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/open-android-intelligence-ingress
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+# The embedded tsnet listener is private. This unit deliberately declares no
+# socket activation, host port, Funnel listener, or public wildcard binding.
+
+[Install]
+WantedBy=multi-user.target

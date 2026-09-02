@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://agent-life.dev/schemas/gateway/v2/command-catalog.schema.json",
+  "$id": "https://open-android-intelligence.dev/schemas/gateway/v2/command-catalog.schema.json",
   "$defs": {
     "catalog": {
       "type": "object",
@@ -8,7 +8,7 @@
       "required": ["version", "commands"],
       "properties": {
         "version": {
-          "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
+          "$ref": "https://open-android-intelligence.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
         },
         "commands": {
           "type": "array",

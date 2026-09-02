@@ -5,7 +5,7 @@ import type { PairingTicket } from "../../../bridge-contract/src/pairing-service
 import { BridgeServiceError } from "../../../bridge-contract/src/service-types.js";
 import { PAIRING_TICKET_VERIFIER_PORT, type PairingTicketVerifierPort } from "./production-ports.js";
 
-export const PAIRING_TICKET_ENVELOPE = "agent-life.pairing-ticket/v1" as const;
+export const PAIRING_TICKET_ENVELOPE = "open-android-intelligence.pairing-ticket/v1" as const;
 
 export type LocalPairingTicketVerifierOptions = Readonly<{
   publicPath: string;

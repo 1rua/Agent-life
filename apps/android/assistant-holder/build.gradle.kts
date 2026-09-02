@@ -4,8 +4,8 @@ plugins {
 }
 
 android {
-    namespace = "com.agentlife.assistant"
-    defaultConfig { applicationId = "com.agentlife.assistant" }
+    namespace = "com.openandroidintelligence.assistant"
+    defaultConfig { applicationId = "com.openandroidintelligence.assistant" }
 }
 
 dependencies { implementation(project(":core-model")) }

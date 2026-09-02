@@ -2521,7 +2521,7 @@ body {
           <div class="sidebar-header">
             <div class="sidebar-brand">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--md-sys-color-primary)" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg>
-              <span>Agent Life 智能工作台</span>
+              <span>Open Android Intelligence 智能工作台</span>
             </div>
             <button class="icon-btn-round" style="width:32px; height:32px;" onclick="closeSidebar()">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -2594,7 +2594,7 @@ body {
                 <div class="settings-row">
                   <div class="settings-row-left">
                     <span class="settings-row-title">账号主体</span>
-                    <span class="settings-row-sub" id="settingsAccountName">dev-admin@agent-life.internal</span>
+                    <span class="settings-row-sub" id="settingsAccountName">dev-admin@open-android-intelligence.internal</span>
                   </div>
                   <button class="settings-action-btn btn-tonal-filled" onclick="showToast('已核验账号刷新凭据 (ARC-Active)')">刷新凭据</button>
                 </div>
@@ -2752,7 +2752,7 @@ body {
                       <span style="font-size:12.5px; font-weight:700; color:#fff;">Tailscale Companion 传输插件</span>
                       <span class="settings-chip-badge badge-warning" style="font-size:9.5px; padding:1px 6px;">Companion APK</span>
                     </div>
-                    <span style="font-size:10.5px; color:#888;">独立包名: com.agentlife.companion.tsnet</span>
+                    <span style="font-size:10.5px; color:#888;">独立包名: com.openandroidintelligence.companion.tsnet</span>
                   </div>
                   <label class="md3-switch">
                     <input type="checkbox" checked onchange="togglePluginState('tailscale', this.checked)">
@@ -3194,7 +3194,7 @@ let sessionsData = {
       </div>
       <div class="message-bubble-group">
         <div class="message-bubble-agent">
-          <div class="agent-meta-header"><span>Agent Life · DeepSeek R1</span></div>
+          <div class="agent-meta-header"><span>Open Android Intelligence · DeepSeek R1</span></div>
           <div class="agent-content-card">
             <h3>🔍 多模态与架构规范审查已完成</h3>
             <p>已对照 <strong>Material Design 3</strong> 规范核验系统级数字助理组件与 <code>VoiceInteractionSession</code>：</p>
@@ -3217,9 +3217,9 @@ AssistantFloatingBar(
       </div>
       <div class="message-bubble-group">
         <div class="message-bubble-agent">
-          <div class="agent-meta-header"><span>Agent Life · GPT-4o</span></div>
+          <div class="agent-meta-header"><span>Open Android Intelligence · GPT-4o</span></div>
           <div class="agent-content-card">
-            <h3>📊 Agent Life 系统遥测健康报告</h3>
+            <h3>📊 Open Android Intelligence 系统遥测健康报告</h3>
             <table>
               <tr><th>指标项</th><th>状态</th><th>详情</th></tr>
               <tr><td>网关链路</td><td>✅ 在线</td><td><code>tsnet-node</code> (12ms)</td></tr>
@@ -3830,7 +3830,7 @@ const STREAM_SAMPLE_RESPONSES = {
     inlineKeyboard: true
   },
   '/status': {
-    markdown: `### 📊 Agent Life 系统遥测健康报告\n\n| 指标项 | 状态 | 详情 |\n| :--- | :--- | :--- |\n| **网关链路** | ✅ 在线 | \`tsnet-node\` (12ms) |\n| **设计系统** | 🟢 就绪 | \`Material Design 3\` 动态取色 |\n| **数字助理** | ⚡ 就绪 | \`VoiceInteractionSession\` |\n| **当前模型** | 🧠 活跃 | \`Claude 3.7 Sonnet\` |\n\n> 系统处于全模态就绪状态，未发现协议异常。`,
+    markdown: `### 📊 Open Android Intelligence 系统遥测健康报告\n\n| 指标项 | 状态 | 详情 |\n| :--- | :--- | :--- |\n| **网关链路** | ✅ 在线 | \`tsnet-node\` (12ms) |\n| **设计系统** | 🟢 就绪 | \`Material Design 3\` 动态取色 |\n| **数字助理** | ⚡ 就绪 | \`VoiceInteractionSession\` |\n| **当前模型** | 🧠 活跃 | \`Claude 3.7 Sonnet\` |\n\n> 系统处于全模态就绪状态，未发现协议异常。`,
     inlineKeyboard: false
   },
   '/review': {
@@ -3838,11 +3838,11 @@ const STREAM_SAMPLE_RESPONSES = {
     inlineKeyboard: false
   },
   '/help': {
-    markdown: `### 📖 Agent Life 快捷指令速查手册\n\n- \`/models\` — 呼出 Telegram Bot 风格模型选择面板\n- \`/status\` — 查阅当前系统健康度与网络探针\n- \`/review\` — 触发多模态代码与架构规范审查\n- \`/gateway\` — 验证网关端到端向量协议\n- \`/clear\` — 清空当前对话上下文\n\n可以直接输入命令或在输入框键入 \`/\` 获取实时自动补全。`,
+    markdown: `### 📖 Open Android Intelligence 快捷指令速查手册\n\n- \`/models\` — 呼出 Telegram Bot 风格模型选择面板\n- \`/status\` — 查阅当前系统健康度与网络探针\n- \`/review\` — 触发多模态代码与架构规范审查\n- \`/gateway\` — 验证网关端到端向量协议\n- \`/clear\` — 清空当前对话上下文\n\n可以直接输入命令或在输入框键入 \`/\` 获取实时自动补全。`,
     inlineKeyboard: false
   },
   'default': {
-    markdown: `✨ **Agent Life 智能工作台已响应**\n\n已捕获上下文并接入 **Agent Gateway**：\n\n- **多模态解析**：已成功分析附加图像信息\n- **动态取色**：跟随系统壁纸实时自适应\n- **双工管道**：Token 级流式增量推送`,
+    markdown: `✨ **Open Android Intelligence 智能工作台已响应**\n\n已捕获上下文并接入 **Agent Gateway**：\n\n- **多模态解析**：已成功分析附加图像信息\n- **动态取色**：跟随系统壁纸实时自适应\n- **双工管道**：Token 级流式增量推送`,
     inlineKeyboard: false
   }
 };
@@ -4044,7 +4044,7 @@ async function triggerStreamResponse(userText) {
     <div class="message-bubble-agent">
       <div class="agent-meta-header">
         <div class="agent-avatar-badge">🤖</div>
-        <span>Agent Life · ${activeModelId}</span>
+        <span>Open Android Intelligence · ${activeModelId}</span>
       </div>
       <div class="agent-content-card">
         <div class="agent-markdown-body"></div>

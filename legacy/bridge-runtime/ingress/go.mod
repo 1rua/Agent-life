@@ -1,4 +1,4 @@
-module agent.life/bridge/ingress
+module open-android-intelligence.dev/bridge/ingress
 
 go 1.26.5
 

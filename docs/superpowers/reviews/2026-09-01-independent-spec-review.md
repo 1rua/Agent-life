@@ -76,13 +76,13 @@ export const joinMessageBatch = (members: ReadonlyArray<MessageBatchMember>): st
 
 ### S-6 assistant-holder 仍是独立 application（Task 14 Step 3）
 
-计划要求改为 `com.android.library`、删除独立 `applicationId`、与 `app` 同为 `com.agentlife.mobile`。实际 `apps/android/assistant-holder/build.gradle.kts`：
+计划要求改为 `com.android.library`、删除独立 `applicationId`、与 `app` 同为 `com.openandroidintelligence.mobile`。实际 `apps/android/assistant-holder/build.gradle.kts`：
 
 ```kotlin
 plugins { id("com.android.application"); ... }
 android {
-    namespace = "com.agentlife.assistant"
-    defaultConfig { applicationId = "com.agentlife.assistant" }
+    namespace = "com.openandroidintelligence.assistant"
+    defaultConfig { applicationId = "com.openandroidintelligence.assistant" }
 }
 ```
 
@@ -94,7 +94,7 @@ android {
 
 ### S-8 conversation-ui 包结构与模块内容不匹配（Task 10）
 
-计划要求包 `com.agentlife.ui.design.*` 且含 `ColorTokens/TypeTokens/ShapeTokens/SpacingTokens/MotionPolicy/MotionTokens/PressFeedback/SignalStitch/AgentLifeTheme`。实际包名为 `com.agentlife.conversation.*`，`src/main` 下只有 6 个文件：`assistant/AssistantView.kt`、`components/Components.kt`、`motion/MotionSpecs.kt`、`selection/ScreenSelectionOverlay.kt`、`theme/AppColors.kt`、`theme/Theme.kt`、`workbench/Workbench.kt`。**计划要求的 9 个设计系统文件一个都不存在，SpacingTokens/48dp 触控令牌无集中定义。**
+计划要求包 `com.openandroidintelligence.ui.design.*` 且含 `ColorTokens/TypeTokens/ShapeTokens/SpacingTokens/MotionPolicy/MotionTokens/PressFeedback/SignalStitch/OpenAndroidIntelligenceTheme`。实际包名为 `com.openandroidintelligence.conversation.*`，`src/main` 下只有 6 个文件：`assistant/AssistantView.kt`、`components/Components.kt`、`motion/MotionSpecs.kt`、`selection/ScreenSelectionOverlay.kt`、`theme/AppColors.kt`、`theme/Theme.kt`、`workbench/Workbench.kt`。**计划要求的 9 个设计系统文件一个都不存在，SpacingTokens/48dp 触控令牌无集中定义。**
 
 ### S-9 设计令牌与 accepted 规范不符（Task 10 Step 1）
 
@@ -112,7 +112,7 @@ android {
 
 ## (b) 范围蔓延
 
-- **`conversation-ui` 自带 `workbench/Workbench.kt` 与 `assistant/AssistantView.kt`**：按计划，Workbench/Shell 属于 Task 11 的 `app` 模块（`ui/shell/AgentLifeApp.kt`、`AdaptiveConversationShell.kt`），助理 UI 属于 Task 14–16 的 `assistant-holder`。这两个文件提前把主 App Shell 与助理视图放进了共用设计模块，会导致 `app` 与 `assistant-holder` 反向依赖 `conversation-ui` 的业务结构，与计划「`conversation-ui` 只提供 stateless 设计系统，App 与 assistant-holder 都依赖它，不互相依赖」的边界冲突。
+- **`conversation-ui` 自带 `workbench/Workbench.kt` 与 `assistant/AssistantView.kt`**：按计划，Workbench/Shell 属于 Task 11 的 `app` 模块（`ui/shell/OpenAndroidIntelligenceApp.kt`、`AdaptiveConversationShell.kt`），助理 UI 属于 Task 14–16 的 `assistant-holder`。这两个文件提前把主 App Shell 与助理视图放进了共用设计模块，会导致 `app` 与 `assistant-holder` 反向依赖 `conversation-ui` 的业务结构，与计划「`conversation-ui` 只提供 stateless 设计系统，App 与 assistant-holder 都依赖它，不互相依赖」的边界冲突。
 - **`conversation-ui` 自带 `selection/ScreenSelectionOverlay.kt`**：按计划 Task 16 该组件属于 `assistant-holder`。
 
 ## (c) 实现看起来有但明显错误

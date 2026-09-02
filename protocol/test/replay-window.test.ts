@@ -259,9 +259,9 @@ describe("closed persisted replay intent metadata", () => {
     },
     registry_identity: {
       direction: "app-to-bridge",
-      envelope_schema_id: "urn:agent-life:protocol:v1:envelope:device_ping",
-      header_schema_id: "urn:agent-life:protocol:v1:header:device_ping",
-      message_schema_id: "urn:agent-life:protocol:v1:message:device_ping",
+      envelope_schema_id: "urn:open-android-intelligence:protocol:v1:envelope:device_ping",
+      header_schema_id: "urn:open-android-intelligence:protocol:v1:header:device_ping",
+      message_schema_id: "urn:open-android-intelligence:protocol:v1:message:device_ping",
       message_type: "device_ping",
       signature_domain: parseSignatureDomain("control/app-to-bridge"),
       signer_role: "device",
@@ -279,7 +279,7 @@ describe("closed persisted replay intent metadata", () => {
   };
 
   it("emits the exact RFC 8785 bytes and rejects unknown projection members", () => {
-    const expected = "{\"admitted_at\":\"2026-08-08T00:00:01.000Z\",\"binding_snapshot\":{\"adapter_credential_generation\":null,\"agent_instance_id\":null,\"agent_principal_id\":null,\"connection_generation\":\"7\",\"credential_id\":\"credential-1\",\"device_id\":\"device-1\",\"direction\":\"app-to-bridge\",\"human_principal_id\":\"human-1\",\"kind\":\"device\",\"pairing_generation\":\"2\",\"scope_ceiling\":null,\"tenant_id\":\"tenant-1\",\"workspace_id\":null},\"claim_id\":\"claim-1\",\"lease_ref\":{\"adapter_credential_lease_id\":null,\"connection_lease_id\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\",\"kind\":\"device_connection\"},\"registry_identity\":{\"direction\":\"app-to-bridge\",\"envelope_schema_id\":\"urn:agent-life:protocol:v1:envelope:device_ping\",\"header_schema_id\":\"urn:agent-life:protocol:v1:header:device_ping\",\"message_schema_id\":\"urn:agent-life:protocol:v1:message:device_ping\",\"message_type\":\"device_ping\",\"signature_domain\":\"control/app-to-bridge\",\"signer_role\":\"device\"},\"replay_policy\":{\"class_id\":\"task5_default\",\"retention_rule_id\":\"retain_until_max_expires_at_or_admitted_at_plus_86400_seconds_v1\"},\"retention_until\":\"2026-08-09T00:00:01.000Z\",\"space\":{\"adapter_credential_generation\":null,\"credential_id\":\"credential-1\",\"direction\":\"app-to-bridge\",\"key_id\":\"key-1\",\"kind\":\"device\",\"pairing_generation\":\"2\"}}";
+    const expected = "{\"admitted_at\":\"2026-08-08T00:00:01.000Z\",\"binding_snapshot\":{\"adapter_credential_generation\":null,\"agent_instance_id\":null,\"agent_principal_id\":null,\"connection_generation\":\"7\",\"credential_id\":\"credential-1\",\"device_id\":\"device-1\",\"direction\":\"app-to-bridge\",\"human_principal_id\":\"human-1\",\"kind\":\"device\",\"pairing_generation\":\"2\",\"scope_ceiling\":null,\"tenant_id\":\"tenant-1\",\"workspace_id\":null},\"claim_id\":\"claim-1\",\"lease_ref\":{\"adapter_credential_lease_id\":null,\"connection_lease_id\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\",\"kind\":\"device_connection\"},\"registry_identity\":{\"direction\":\"app-to-bridge\",\"envelope_schema_id\":\"urn:open-android-intelligence:protocol:v1:envelope:device_ping\",\"header_schema_id\":\"urn:open-android-intelligence:protocol:v1:header:device_ping\",\"message_schema_id\":\"urn:open-android-intelligence:protocol:v1:message:device_ping\",\"message_type\":\"device_ping\",\"signature_domain\":\"control/app-to-bridge\",\"signer_role\":\"device\"},\"replay_policy\":{\"class_id\":\"task5_default\",\"retention_rule_id\":\"retain_until_max_expires_at_or_admitted_at_plus_86400_seconds_v1\"},\"retention_until\":\"2026-08-09T00:00:01.000Z\",\"space\":{\"adapter_credential_generation\":null,\"credential_id\":\"credential-1\",\"direction\":\"app-to-bridge\",\"key_id\":\"key-1\",\"kind\":\"device\",\"pairing_generation\":\"2\"}}";
     expect(new TextDecoder().decode(canonicalReplayIntentMetadataBytes(metadata))).toBe(expected);
     expect(() => canonicalReplayIntentMetadataBytes({ ...metadata, database_id: "leak" } as never))
       .toThrowError("INVALID_REPLAY_INTENT_METADATA");
@@ -291,9 +291,9 @@ describe("closed persisted replay intent metadata", () => {
       { ...valid, registry_identity: { ...valid.registry_identity, direction: "adapter-to-bridge" }, binding_snapshot: { ...valid.binding_snapshot, direction: "adapter-to-bridge" }, space: { ...valid.space, direction: "adapter-to-bridge" } },
       { ...valid, registry_identity: { ...valid.registry_identity, signer_role: "bridge-command" } },
       { ...valid, registry_identity: { ...valid.registry_identity, signature_domain: "key-rotation/app-to-bridge" } },
-      { ...valid, registry_identity: { ...valid.registry_identity, message_schema_id: "urn:agent-life:protocol:v1:message:bridge_ping" } },
-      { ...valid, registry_identity: { ...valid.registry_identity, header_schema_id: "urn:agent-life:protocol:v1:header:bridge_ping" } },
-      { ...valid, registry_identity: { ...valid.registry_identity, envelope_schema_id: "urn:agent-life:protocol:v1:envelope:bridge_ping" } },
+      { ...valid, registry_identity: { ...valid.registry_identity, message_schema_id: "urn:open-android-intelligence:protocol:v1:message:bridge_ping" } },
+      { ...valid, registry_identity: { ...valid.registry_identity, header_schema_id: "urn:open-android-intelligence:protocol:v1:header:bridge_ping" } },
+      { ...valid, registry_identity: { ...valid.registry_identity, envelope_schema_id: "urn:open-android-intelligence:protocol:v1:envelope:bridge_ping" } },
       { ...valid, lease_ref: { ...valid.lease_ref, connection_lease_id: `${"A".repeat(42)}B` } },
       { ...valid, claim_id: "contains space" },
       { ...valid, binding_snapshot: { ...valid.binding_snapshot, credential_id: "" }, space: { ...valid.space, credential_id: "" } },
@@ -317,9 +317,9 @@ describe("closed persisted replay intent metadata", () => {
       claim_id: "claim-2",
       lease_ref: { adapter_credential_lease_id: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", connection_lease_id: null, kind: "adapter_credential" },
       registry_identity: {
-        direction: "adapter-to-bridge", envelope_schema_id: "urn:agent-life:protocol:v1:envelope:adapter_key_rotation",
-        header_schema_id: "urn:agent-life:protocol:v1:header:adapter_key_rotation",
-        message_schema_id: "urn:agent-life:protocol:v1:message:adapter_key_rotation",
+        direction: "adapter-to-bridge", envelope_schema_id: "urn:open-android-intelligence:protocol:v1:envelope:adapter_key_rotation",
+        header_schema_id: "urn:open-android-intelligence:protocol:v1:header:adapter_key_rotation",
+        message_schema_id: "urn:open-android-intelligence:protocol:v1:message:adapter_key_rotation",
         message_type: "adapter_key_rotation", signature_domain: parseSignatureDomain("key-rotation/adapter-to-bridge"), signer_role: "adapter",
       },
       replay_policy: REPLAY_POLICY_LITERALS.task5Default,

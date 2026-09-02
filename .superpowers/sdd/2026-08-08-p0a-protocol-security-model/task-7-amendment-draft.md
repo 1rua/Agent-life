@@ -65,14 +65,14 @@ Work is split by these gates:
 
 Document `$id` values are exact:
 
-- `urn:agent-life:protocol:v1:operation`
-- `urn:agent-life:protocol:v1:receipt`
-- `urn:agent-life:protocol:v1:migration-receipt`
-- `urn:agent-life:protocol:v1:error-response`
-- `urn:agent-life:protocol:v1:errors-registry`
-- `urn:agent-life:protocol:v1:replay-policies-registry`
+- `urn:open-android-intelligence:protocol:v1:operation`
+- `urn:open-android-intelligence:protocol:v1:receipt`
+- `urn:open-android-intelligence:protocol:v1:migration-receipt`
+- `urn:open-android-intelligence:protocol:v1:error-response`
+- `urn:open-android-intelligence:protocol:v1:errors-registry`
+- `urn:open-android-intelligence:protocol:v1:replay-policies-registry`
 
-Registry instances use `$schema` equal to their registry-schema `$id`, `registry_id` equal to `urn:agent-life:protocol:v1:registry:errors` or `urn:agent-life:protocol:v1:registry:replay-policies`, and `protocol_version:"1.0"`.
+Registry instances use `$schema` equal to their registry-schema `$id`, `registry_id` equal to `urn:open-android-intelligence:protocol:v1:registry:errors` or `urn:open-android-intelligence:protocol:v1:registry:replay-policies`, and `protocol_version:"1.0"`.
 
 ## 1. Freeze opaque authorities and operation binding
 
@@ -153,8 +153,8 @@ export interface OperationBindingStore {
 
 Each of the 13 existing Task 7 message rows keeps the direction/domain/schema ID already listed in Task 7. Additionally, every message `M` MUST define:
 
-- header ID `urn:agent-life:protocol:v1:header:M`;
-- envelope ID `urn:agent-life:protocol:v1:envelope:M`;
+- header ID `urn:open-android-intelligence:protocol:v1:header:M`;
+- envelope ID `urn:open-android-intelligence:protocol:v1:envelope:M`;
 - a closed payload `$id` equal to the `messages.json` `schema_id`;
 - a closed envelope `{header,payload,signature}` with no unevaluated members.
 
@@ -276,8 +276,8 @@ export interface ReplayPolicyRegistryRow<T extends P0aReplayMessageType> {
 }
 
 export interface ReplayPoliciesRegistry {
-  readonly $schema:"urn:agent-life:protocol:v1:replay-policies-registry";
-  readonly registry_id:"urn:agent-life:protocol:v1:registry:replay-policies";
+  readonly $schema:"urn:open-android-intelligence:protocol:v1:replay-policies-registry";
+  readonly registry_id:"urn:open-android-intelligence:protocol:v1:registry:replay-policies";
   readonly protocol_version:"1.0";
   readonly policies:readonly ReplayPolicyRegistryRow<P0aReplayMessageType>[];
 }
@@ -713,8 +713,8 @@ export interface ErrorRegistryRow {
 }
 
 export interface ErrorsRegistry {
-  readonly $schema:"urn:agent-life:protocol:v1:errors-registry";
-  readonly registry_id:"urn:agent-life:protocol:v1:registry:errors";
+  readonly $schema:"urn:open-android-intelligence:protocol:v1:errors-registry";
+  readonly registry_id:"urn:open-android-intelligence:protocol:v1:registry:errors";
   readonly protocol_version:"1.0";
   readonly entries:readonly ErrorRegistryRow[];
 }

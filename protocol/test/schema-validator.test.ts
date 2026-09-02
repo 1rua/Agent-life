@@ -15,7 +15,7 @@ const readProfile = (): ProfileFixture => JSON.parse(
   readFileSync(new URL("../profile/v1.json", import.meta.url), "utf8"),
 ) as ProfileFixture;
 
-const PROFILE_SCHEMA_ID = "urn:agent-life:protocol:v1:profile";
+const PROFILE_SCHEMA_ID = "urn:open-android-intelligence:protocol:v1:profile";
 const { PROTOCOL_SCHEMA_DOCUMENTS, REQUIRED_PROTOCOL_SCHEMA_IDS } = schemaCatalog;
 
 describe("Draft 2020-12 schema validation", () => {
@@ -48,7 +48,7 @@ describe("Draft 2020-12 schema validation", () => {
   });
 
   it("rejects an unknown schema ID instead of selecting a fallback", () => {
-    expect(() => validateSchema("urn:agent-life:protocol:v1:unknown", readProfile()))
+    expect(() => validateSchema("urn:open-android-intelligence:protocol:v1:unknown", readProfile()))
       .toThrowError("UNKNOWN_SCHEMA_ID");
   });
 
@@ -71,17 +71,17 @@ describe("Draft 2020-12 schema validation", () => {
     ["01", false],
     ["-1", false],
   ])("enforces the common decimal-u64 boundary for %s", (value, valid) => {
-    const run = () => validateSchema("urn:agent-life:protocol:v1:common#/$defs/decimal_u64", value);
+    const run = () => validateSchema("urn:open-android-intelligence:protocol:v1:common#/$defs/decimal_u64", value);
     if (valid) expect(run).not.toThrow();
     else expect(run).toThrowError("SCHEMA_INVALID");
   });
 
   it.each([
-    ["urn:agent-life:protocol:v1:common#/$defs/lowercase_uuid_v4", "018f4f9a-4444-4444-8444-444444444444", true],
-    ["urn:agent-life:protocol:v1:common#/$defs/lowercase_uuid_v4", "018F4F9A-4444-4444-8444-444444444444", false],
-    ["urn:agent-life:protocol:v1:common#/$defs/timestamp", "2026-08-08T00:00:00.000Z", true],
-    ["urn:agent-life:protocol:v1:common#/$defs/timestamp", "2026-08-08T00:00:00Z", false],
-    ["urn:agent-life:protocol:v1:common#/$defs/timestamp", "2026-02-30T00:00:00.000Z", false],
+    ["urn:open-android-intelligence:protocol:v1:common#/$defs/lowercase_uuid_v4", "018f4f9a-4444-4444-8444-444444444444", true],
+    ["urn:open-android-intelligence:protocol:v1:common#/$defs/lowercase_uuid_v4", "018F4F9A-4444-4444-8444-444444444444", false],
+    ["urn:open-android-intelligence:protocol:v1:common#/$defs/timestamp", "2026-08-08T00:00:00.000Z", true],
+    ["urn:open-android-intelligence:protocol:v1:common#/$defs/timestamp", "2026-08-08T00:00:00Z", false],
+    ["urn:open-android-intelligence:protocol:v1:common#/$defs/timestamp", "2026-02-30T00:00:00.000Z", false],
   ])("enforces custom format %s", (schemaId, value, valid) => {
     const run = () => validateSchema(schemaId, value);
     if (valid) expect(run).not.toThrow();
@@ -89,7 +89,7 @@ describe("Draft 2020-12 schema validation", () => {
   });
 
   it("keeps enrollment error retry fields coupled to RATE_LIMITED", () => {
-    const schemaId = "urn:agent-life:protocol:v1:message:enrollment_error";
+    const schemaId = "urn:open-android-intelligence:protocol:v1:message:enrollment_error";
     expect(() => validateSchema(schemaId, { code: "RATE_LIMITED", retry_after_seconds: "7" })).not.toThrow();
     expect(() => validateSchema(schemaId, { code: "RATE_LIMITED" })).toThrowError("SCHEMA_INVALID");
     expect(() => validateSchema(schemaId, { code: "AUTH_FAILED", retry_after_seconds: "7" })).toThrowError("SCHEMA_INVALID");
@@ -157,7 +157,7 @@ const EVENT_PAYLOAD = {
 const EVENT_ACK_PAYLOAD = { source_epoch: EVENT_EPOCH, source_capability: "notifications.metadata", highest_contiguous_cursor: "9" };
 const task5Header = (type: Task5Type) => {
   const base = {
-    protocol_version: "1.0", message_schema: `urn:agent-life:protocol:v1:message:${type}`,
+    protocol_version: "1.0", message_schema: `urn:open-android-intelligence:protocol:v1:message:${type}`,
     message_type: type, message_id: "018f4f9a-4444-4444-8444-444444444444",
     key_id: "key", direction: TASK5_DIRECTIONS[type], sequence: "1",
     issued_at: "2026-08-08T00:00:00.000Z", expires_at: "2026-08-08T00:01:00.000Z",
@@ -206,7 +206,7 @@ const NEW_DIRECTIONS: Record<NewMessageType, "app-to-bridge" | "bridge-to-app" |
 };
 const newHeader = (type: NewMessageType): Record<string, unknown> => {
   const base: Record<string, unknown> = {
-    protocol_version: "1.0", message_schema: `urn:agent-life:protocol:v1:message:${type}`, message_type: type,
+    protocol_version: "1.0", message_schema: `urn:open-android-intelligence:protocol:v1:message:${type}`, message_type: type,
     message_id: NEW_UUID, key_id: "key", direction: NEW_DIRECTIONS[type], sequence: "1",
     issued_at: "2026-08-08T00:00:00.000Z", expires_at: "2026-08-08T00:01:00.000Z", payload_digest: B32,
   };
@@ -220,59 +220,59 @@ const operationRecordFixture = {
   }, operation_expires_at: "2026-08-08T00:15:00.000Z", offline_policy: "WAIT_READ", state_revision: "0", state: OPERATION_STATE, reconciliation: null,
 };
 const receiptFixture = NEW_PAYLOADS.operation_receipt;
-const errorRegistryFixture = { $schema: "urn:agent-life:protocol:v1:errors-registry", registry_id: "urn:agent-life:protocol:v1:registry:errors", protocol_version: "1.0", errors: [{ code: "SCHEMA_INVALID", stage: "canonical_schema", retryable: false, operation_reason: null, internal_reason: "NONE" }] };
+const errorRegistryFixture = { $schema: "urn:open-android-intelligence:protocol:v1:errors-registry", registry_id: "urn:open-android-intelligence:protocol:v1:registry:errors", protocol_version: "1.0", errors: [{ code: "SCHEMA_INVALID", stage: "canonical_schema", retryable: false, operation_reason: null, internal_reason: "NONE" }] };
 const fixtureFor = (schemaId: string): unknown => {
   const fixtures: Record<string, unknown> = {
-    "urn:agent-life:protocol:v1:profile": readProfile(),
-    "urn:agent-life:protocol:v1:common": {},
-    "urn:agent-life:protocol:v1:enrollment": {},
-    "urn:agent-life:protocol:v1:connect": {},
-    "urn:agent-life:protocol:v1:control-envelope": {},
-    "urn:agent-life:protocol:v1:event": {},
-    "urn:agent-life:protocol:v1:key-rotation": {},
-    "urn:agent-life:protocol:v1:messages-registry": { $schema: "urn:agent-life:protocol:v1:messages-registry", registry_id: "urn:agent-life:protocol:v1:registry:messages", protocol_version: "1.0", messages: [] },
-    "urn:agent-life:protocol:v1:versions-registry": { $schema: "urn:agent-life:protocol:v1:versions-registry", registry_id: "urn:agent-life:protocol:v1:registry:versions", protocol_version: "1.0", versions: [{ version: "1.0", negotiable: true }, { version: "0.9", negotiable: false, fixture_owner: "Task7" }] },
-    "urn:agent-life:protocol:v1:message:enrollment_challenge": { challenge: B32, bridge_nonce: B32, bridge_fingerprint: B32, bridge_command_public_jwk: JWK, supported_versions: ["1.0"] },
-    "urn:agent-life:protocol:v1:message:enrollment_response": { ticket: B32, challenge_response: B32, device_public_jwk: JWK, client_nonce: B32, supported_versions: ["1.0"] },
-    "urn:agent-life:protocol:v1:message:enrollment_complete": { device_id: "device", pairing_generation: "1", tenant_id: "tenant", human_principal_id: "human", agent_instance_id: "agent", enrollment_scope_ceiling: [], selected_protocol: "1.0", client_nonce: B32, bridge_nonce: B32, bridge_fingerprint: B32, device_jwk_thumbprint: B32 },
-    "urn:agent-life:protocol:v1:message:enrollment_error": { code: "AUTH_FAILED" },
-    "urn:agent-life:protocol:v1:message:connect_hello": { client_nonce: B32, supported_versions: ["1.0"], last_manifest_generation: null, last_event_cursor: null },
-    "urn:agent-life:protocol:v1:message:connect_welcome": { client_offer_digest: B32, client_nonce: B32, bridge_nonce: B32, selected_protocol: "1.0", bridge_time: "2026-08-08T00:00:00.000Z", command_key_set: { current: JWK, next: null }, connection_generation: "1" },
+    "urn:open-android-intelligence:protocol:v1:profile": readProfile(),
+    "urn:open-android-intelligence:protocol:v1:common": {},
+    "urn:open-android-intelligence:protocol:v1:enrollment": {},
+    "urn:open-android-intelligence:protocol:v1:connect": {},
+    "urn:open-android-intelligence:protocol:v1:control-envelope": {},
+    "urn:open-android-intelligence:protocol:v1:event": {},
+    "urn:open-android-intelligence:protocol:v1:key-rotation": {},
+    "urn:open-android-intelligence:protocol:v1:messages-registry": { $schema: "urn:open-android-intelligence:protocol:v1:messages-registry", registry_id: "urn:open-android-intelligence:protocol:v1:registry:messages", protocol_version: "1.0", messages: [] },
+    "urn:open-android-intelligence:protocol:v1:versions-registry": { $schema: "urn:open-android-intelligence:protocol:v1:versions-registry", registry_id: "urn:open-android-intelligence:protocol:v1:registry:versions", protocol_version: "1.0", versions: [{ version: "1.0", negotiable: true }, { version: "0.9", negotiable: false, fixture_owner: "Task7" }] },
+    "urn:open-android-intelligence:protocol:v1:message:enrollment_challenge": { challenge: B32, bridge_nonce: B32, bridge_fingerprint: B32, bridge_command_public_jwk: JWK, supported_versions: ["1.0"] },
+    "urn:open-android-intelligence:protocol:v1:message:enrollment_response": { ticket: B32, challenge_response: B32, device_public_jwk: JWK, client_nonce: B32, supported_versions: ["1.0"] },
+    "urn:open-android-intelligence:protocol:v1:message:enrollment_complete": { device_id: "device", pairing_generation: "1", tenant_id: "tenant", human_principal_id: "human", agent_instance_id: "agent", enrollment_scope_ceiling: [], selected_protocol: "1.0", client_nonce: B32, bridge_nonce: B32, bridge_fingerprint: B32, device_jwk_thumbprint: B32 },
+    "urn:open-android-intelligence:protocol:v1:message:enrollment_error": { code: "AUTH_FAILED" },
+    "urn:open-android-intelligence:protocol:v1:message:connect_hello": { client_nonce: B32, supported_versions: ["1.0"], last_manifest_generation: null, last_event_cursor: null },
+    "urn:open-android-intelligence:protocol:v1:message:connect_welcome": { client_offer_digest: B32, client_nonce: B32, bridge_nonce: B32, selected_protocol: "1.0", bridge_time: "2026-08-08T00:00:00.000Z", command_key_set: { current: JWK, next: null }, connection_generation: "1" },
   };
   const payload = fixtures[schemaId];
   if (payload !== undefined) return payload;
   for (const type of TASK5_TYPES) {
-    if (schemaId === `urn:agent-life:protocol:v1:message:${type}`) return TASK5_PAYLOADS[type];
-    if (schemaId === `urn:agent-life:protocol:v1:header:${type}`) return task5Header(type);
-    if (schemaId === `urn:agent-life:protocol:v1:envelope:${type}`) {
+    if (schemaId === `urn:open-android-intelligence:protocol:v1:message:${type}`) return TASK5_PAYLOADS[type];
+    if (schemaId === `urn:open-android-intelligence:protocol:v1:header:${type}`) return task5Header(type);
+    if (schemaId === `urn:open-android-intelligence:protocol:v1:envelope:${type}`) {
       return { header: task5Header(type), payload: TASK5_PAYLOADS[type], signature: SIG };
     }
   }
-  if (schemaId === "urn:agent-life:protocol:v1:message:device_event") return EVENT_PAYLOAD;
-  if (schemaId === "urn:agent-life:protocol:v1:message:event_ack") return EVENT_ACK_PAYLOAD;
-  const enrollmentHeader = { protocol_version: "1.0", message_schema: "urn:agent-life:protocol:v1:message:enrollment_response", message_type: "enrollment_response", message_id: "018f4f9a-4444-4444-8444-444444444444", key_id: "key", direction: "app-to-bridge", issued_at: "2026-08-08T00:00:00.000Z", expires_at: "2026-08-08T00:05:00.000Z", payload_digest: B32, enrollment_ticket_digest: B32 };
-  const connectHeader = { protocol_version: "1.0", message_schema: "urn:agent-life:protocol:v1:message:connect_hello", message_type: "connect_hello", message_id: "018f4f9a-4444-4444-8444-444444444444", key_id: "key", direction: "app-to-bridge", sequence: "1", issued_at: "2026-08-08T00:00:00.000Z", expires_at: "2026-08-08T00:05:00.000Z", payload_digest: B32, device_id: "device", pairing_generation: "1" };
-  if (schemaId === "urn:agent-life:protocol:v1:header:enrollment_app_to_bridge") return enrollmentHeader;
-  if (schemaId === "urn:agent-life:protocol:v1:header:enrollment_bridge_to_app") return { ...enrollmentHeader, message_type: "enrollment_challenge", message_schema: "urn:agent-life:protocol:v1:message:enrollment_challenge", direction: "bridge-to-app" };
-  if (schemaId === "urn:agent-life:protocol:v1:header:connect_hello") return connectHeader;
-  if (schemaId === "urn:agent-life:protocol:v1:header:connect_welcome") return { ...connectHeader, message_type: "connect_welcome", message_schema: "urn:agent-life:protocol:v1:message:connect_welcome", direction: "bridge-to-app" };
-  if (schemaId === "urn:agent-life:protocol:v1:envelope:enrollment_app_to_bridge") return { header: enrollmentHeader, payload: fixtures["urn:agent-life:protocol:v1:message:enrollment_response"], signature: SIG };
-  if (schemaId === "urn:agent-life:protocol:v1:envelope:enrollment_bridge_to_app") return { header: { ...enrollmentHeader, message_type: "enrollment_challenge", message_schema: "urn:agent-life:protocol:v1:message:enrollment_challenge", direction: "bridge-to-app" }, payload: fixtures["urn:agent-life:protocol:v1:message:enrollment_challenge"], signature: SIG };
-  if (schemaId === "urn:agent-life:protocol:v1:envelope:connect_hello") return { header: connectHeader, payload: fixtures["urn:agent-life:protocol:v1:message:connect_hello"], signature: SIG };
-  if (schemaId === "urn:agent-life:protocol:v1:envelope:connect_welcome") return { header: { ...connectHeader, message_type: "connect_welcome", message_schema: "urn:agent-life:protocol:v1:message:connect_welcome", direction: "bridge-to-app" }, payload: fixtures["urn:agent-life:protocol:v1:message:connect_welcome"], signature: SIG };
-  if (schemaId === "urn:agent-life:protocol:v1:header:device_event") return { ...connectHeader, message_type: "device_event", message_schema: "urn:agent-life:protocol:v1:message:device_event", direction: "app-to-bridge", expires_at: "2026-08-09T00:00:00.000Z", connection_generation: "1" };
-  if (schemaId === "urn:agent-life:protocol:v1:header:event_ack") return { ...connectHeader, message_type: "event_ack", message_schema: "urn:agent-life:protocol:v1:message:event_ack", direction: "bridge-to-app", connection_generation: "1" };
-  if (schemaId === "urn:agent-life:protocol:v1:envelope:device_event") return { header: { ...connectHeader, message_type: "device_event", message_schema: "urn:agent-life:protocol:v1:message:device_event", direction: "app-to-bridge", expires_at: "2026-08-09T00:00:00.000Z", connection_generation: "1" }, payload: EVENT_PAYLOAD, signature: SIG };
-  if (schemaId === "urn:agent-life:protocol:v1:envelope:event_ack") return { header: { ...connectHeader, message_type: "event_ack", message_schema: "urn:agent-life:protocol:v1:message:event_ack", direction: "bridge-to-app", connection_generation: "1" }, payload: EVENT_ACK_PAYLOAD, signature: SIG };
-  if (schemaId === "urn:agent-life:protocol:v1:operation") return operationRecordFixture;
-  if (schemaId === "urn:agent-life:protocol:v1:receipt") return receiptFixture;
-  if (schemaId === "urn:agent-life:protocol:v1:migration-receipt") return { migration_id: "migration", source_schema_id: "urn:agent-life:protocol:v0.9:pending-operation", source_record_digest: B32, source_signature: SIG, target_schema_id: "urn:agent-life:protocol:v1:operation", target_record_digest: B32, target_record_id: "operation", migrated_at: "2026-08-08T00:00:00.000Z" };
-  if (schemaId === "urn:agent-life:protocol:v1:error-response") return NEW_PAYLOADS.device_protocol_error;
-  if (schemaId === "urn:agent-life:protocol:v1:errors-registry") return errorRegistryFixture;
+  if (schemaId === "urn:open-android-intelligence:protocol:v1:message:device_event") return EVENT_PAYLOAD;
+  if (schemaId === "urn:open-android-intelligence:protocol:v1:message:event_ack") return EVENT_ACK_PAYLOAD;
+  const enrollmentHeader = { protocol_version: "1.0", message_schema: "urn:open-android-intelligence:protocol:v1:message:enrollment_response", message_type: "enrollment_response", message_id: "018f4f9a-4444-4444-8444-444444444444", key_id: "key", direction: "app-to-bridge", issued_at: "2026-08-08T00:00:00.000Z", expires_at: "2026-08-08T00:05:00.000Z", payload_digest: B32, enrollment_ticket_digest: B32 };
+  const connectHeader = { protocol_version: "1.0", message_schema: "urn:open-android-intelligence:protocol:v1:message:connect_hello", message_type: "connect_hello", message_id: "018f4f9a-4444-4444-8444-444444444444", key_id: "key", direction: "app-to-bridge", sequence: "1", issued_at: "2026-08-08T00:00:00.000Z", expires_at: "2026-08-08T00:05:00.000Z", payload_digest: B32, device_id: "device", pairing_generation: "1" };
+  if (schemaId === "urn:open-android-intelligence:protocol:v1:header:enrollment_app_to_bridge") return enrollmentHeader;
+  if (schemaId === "urn:open-android-intelligence:protocol:v1:header:enrollment_bridge_to_app") return { ...enrollmentHeader, message_type: "enrollment_challenge", message_schema: "urn:open-android-intelligence:protocol:v1:message:enrollment_challenge", direction: "bridge-to-app" };
+  if (schemaId === "urn:open-android-intelligence:protocol:v1:header:connect_hello") return connectHeader;
+  if (schemaId === "urn:open-android-intelligence:protocol:v1:header:connect_welcome") return { ...connectHeader, message_type: "connect_welcome", message_schema: "urn:open-android-intelligence:protocol:v1:message:connect_welcome", direction: "bridge-to-app" };
+  if (schemaId === "urn:open-android-intelligence:protocol:v1:envelope:enrollment_app_to_bridge") return { header: enrollmentHeader, payload: fixtures["urn:open-android-intelligence:protocol:v1:message:enrollment_response"], signature: SIG };
+  if (schemaId === "urn:open-android-intelligence:protocol:v1:envelope:enrollment_bridge_to_app") return { header: { ...enrollmentHeader, message_type: "enrollment_challenge", message_schema: "urn:open-android-intelligence:protocol:v1:message:enrollment_challenge", direction: "bridge-to-app" }, payload: fixtures["urn:open-android-intelligence:protocol:v1:message:enrollment_challenge"], signature: SIG };
+  if (schemaId === "urn:open-android-intelligence:protocol:v1:envelope:connect_hello") return { header: connectHeader, payload: fixtures["urn:open-android-intelligence:protocol:v1:message:connect_hello"], signature: SIG };
+  if (schemaId === "urn:open-android-intelligence:protocol:v1:envelope:connect_welcome") return { header: { ...connectHeader, message_type: "connect_welcome", message_schema: "urn:open-android-intelligence:protocol:v1:message:connect_welcome", direction: "bridge-to-app" }, payload: fixtures["urn:open-android-intelligence:protocol:v1:message:connect_welcome"], signature: SIG };
+  if (schemaId === "urn:open-android-intelligence:protocol:v1:header:device_event") return { ...connectHeader, message_type: "device_event", message_schema: "urn:open-android-intelligence:protocol:v1:message:device_event", direction: "app-to-bridge", expires_at: "2026-08-09T00:00:00.000Z", connection_generation: "1" };
+  if (schemaId === "urn:open-android-intelligence:protocol:v1:header:event_ack") return { ...connectHeader, message_type: "event_ack", message_schema: "urn:open-android-intelligence:protocol:v1:message:event_ack", direction: "bridge-to-app", connection_generation: "1" };
+  if (schemaId === "urn:open-android-intelligence:protocol:v1:envelope:device_event") return { header: { ...connectHeader, message_type: "device_event", message_schema: "urn:open-android-intelligence:protocol:v1:message:device_event", direction: "app-to-bridge", expires_at: "2026-08-09T00:00:00.000Z", connection_generation: "1" }, payload: EVENT_PAYLOAD, signature: SIG };
+  if (schemaId === "urn:open-android-intelligence:protocol:v1:envelope:event_ack") return { header: { ...connectHeader, message_type: "event_ack", message_schema: "urn:open-android-intelligence:protocol:v1:message:event_ack", direction: "bridge-to-app", connection_generation: "1" }, payload: EVENT_ACK_PAYLOAD, signature: SIG };
+  if (schemaId === "urn:open-android-intelligence:protocol:v1:operation") return operationRecordFixture;
+  if (schemaId === "urn:open-android-intelligence:protocol:v1:receipt") return receiptFixture;
+  if (schemaId === "urn:open-android-intelligence:protocol:v1:migration-receipt") return { migration_id: "migration", source_schema_id: "urn:open-android-intelligence:protocol:v0.9:pending-operation", source_record_digest: B32, source_signature: SIG, target_schema_id: "urn:open-android-intelligence:protocol:v1:operation", target_record_digest: B32, target_record_id: "operation", migrated_at: "2026-08-08T00:00:00.000Z" };
+  if (schemaId === "urn:open-android-intelligence:protocol:v1:error-response") return NEW_PAYLOADS.device_protocol_error;
+  if (schemaId === "urn:open-android-intelligence:protocol:v1:errors-registry") return errorRegistryFixture;
   for (const type of NEW_MESSAGE_TYPES) {
-    if (schemaId === `urn:agent-life:protocol:v1:message:${type}`) return NEW_PAYLOADS[type];
-    if (schemaId === `urn:agent-life:protocol:v1:header:${type}`) return newHeader(type);
-    if (schemaId === `urn:agent-life:protocol:v1:envelope:${type}`) return { header: newHeader(type), payload: NEW_PAYLOADS[type], signature: SIG };
+    if (schemaId === `urn:open-android-intelligence:protocol:v1:message:${type}`) return NEW_PAYLOADS[type];
+    if (schemaId === `urn:open-android-intelligence:protocol:v1:header:${type}`) return newHeader(type);
+    if (schemaId === `urn:open-android-intelligence:protocol:v1:envelope:${type}`) return { header: newHeader(type), payload: NEW_PAYLOADS[type], signature: SIG };
   }
   throw new Error(`missing fixture ${schemaId}`);
 };
@@ -280,7 +280,7 @@ const fixtureFor = (schemaId: string): unknown => {
 describe("validated protocol profile", () => {
   it("derives every runtime constant from the machine-readable profile", () => {
     expect(loadProtocolProfile()).toMatchObject({
-      profile_id: "agent-life-json-es256/1.0",
+      profile_id: "open-android-intelligence-json-es256/1.0",
       max_envelope_bytes: "262144",
       replay_window_size: "1024",
       key_rotation_grace_seconds: "900",

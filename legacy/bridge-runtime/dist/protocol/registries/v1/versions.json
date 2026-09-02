@@ -1,6 +1,6 @@
 {
-    "$schema": "urn:agent-life:protocol:v1:versions-registry",
-    "registry_id": "urn:agent-life:protocol:v1:registry:versions",
+    "$schema": "urn:open-android-intelligence:protocol:v1:versions-registry",
+    "registry_id": "urn:open-android-intelligence:protocol:v1:registry:versions",
     "protocol_version": "1.0",
     "versions": [
         { "version": "1.0", "negotiable": true },

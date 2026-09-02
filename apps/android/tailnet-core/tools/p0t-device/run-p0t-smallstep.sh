@@ -56,7 +56,7 @@ bash "$(dirname "${BASH_SOURCE[0]}")/provision-failclosed-bundle.sh"
 instrument() {
   local pkg="$1" arg="$2" out="$3"
   adb_dev shell am instrument -w -r \
-    -e p0tFailClosedBundle /data/local/tmp/agentlife-p0t/failclosed.bundle \
+    -e p0tFailClosedBundle /data/local/tmp/openandroidintelligence-p0t/failclosed.bundle \
     $arg "$pkg/androidx.test.runner.AndroidJUnitRunner" >"$out" 2>&1 || true
 }
 
@@ -89,9 +89,9 @@ if [[ ${#CASES[@]} -gt 0 ]]; then
     label="case-$(printf '%s' "$case" | tr '.#:' '___')"
     mm="${case%#*}"
     case "$mm" in
-      com.agentlife.tailnet.core.*) pkg="com.agentlife.tailnet.core.test";;
-      com.agentlife.transport.*)    pkg="com.agentlife.transport.test";;
-      com.agentlife.mobile.*)       pkg="com.agentlife.mobile.test";;
+      com.openandroidintelligence.tailnet.core.*) pkg="com.openandroidintelligence.tailnet.core.test";;
+      com.openandroidintelligence.transport.*)    pkg="com.openandroidintelligence.transport.test";;
+      com.openandroidintelligence.mobile.*)       pkg="com.openandroidintelligence.mobile.test";;
       *) echo "P0T_BLOCKED: unknown module for $case" >&2; exit 2;;
     esac
     arg="-e class $case"

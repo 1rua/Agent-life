@@ -30,7 +30,7 @@ const encode = (value: unknown) => canonicalBytes(value);
 const signedConnect = (type: "connect_hello" | "connect_welcome", payload: Record<string, unknown>, key: TestJwk, privateKey: TestJwk, headerPatch: Record<string, unknown> = {}) => {
   const app = type === "connect_hello";
   const header = {
-    protocol_version: "1.0", message_schema: `urn:agent-life:protocol:v1:message:${type}`, message_type: type,
+    protocol_version: "1.0", message_schema: `urn:open-android-intelligence:protocol:v1:message:${type}`, message_type: type,
     message_id: app ? "018f4f9a-4444-4444-8444-444444444444" : "018f4f9a-4555-4555-8555-555555555555",
     key_id: key.kid, direction: app ? "app-to-bridge" : "bridge-to-app", sequence: app ? "1" : "2",
     issued_at: "2026-08-08T00:00:00.000Z", expires_at: "2026-08-08T00:05:00.000Z",
@@ -118,7 +118,7 @@ describe("protocol version negotiation", () => {
     ["device", { device_id: "device-b" }, "AUTH_BINDING_MISMATCH"],
     ["pairing", { pairing_generation: "4" }, "AUTH_BINDING_MISMATCH"],
     ["type", { message_type: "connect_welcome" }, "SCHEMA_INVALID"],
-    ["schema", { message_schema: "urn:agent-life:protocol:v1:message:connect_welcome" }, "SCHEMA_INVALID"],
+    ["schema", { message_schema: "urn:open-android-intelligence:protocol:v1:message:connect_welcome" }, "SCHEMA_INVALID"],
     ["direction", { direction: "bridge-to-app" }, "SCHEMA_INVALID"],
   ] as const)("rejects signed hello header %s mutation", async (_label, patch, error) => {
     await expect(verifyConnectMessage(signedConnect("connect_hello", helloPayload, devicePublic, devicePrivate, patch), "connect_hello", context("device", devicePublic))).rejects.toThrowError(error);

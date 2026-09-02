@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:agent-life:protocol:v1:common",
+  "$id": "urn:open-android-intelligence:protocol:v1:common",
   "type": "object",
   "unevaluatedProperties": false,
   "$defs": {
@@ -47,7 +47,7 @@
       "required": ["protocol_version", "message_schema", "message_type", "message_id", "key_id", "direction", "sequence", "issued_at", "expires_at", "payload_digest"],
       "properties": {
         "protocol_version": { "const": "1.0" },
-        "message_schema": { "type": "string", "pattern": "^urn:agent-life:protocol:v1:message:[a-z][a-z0-9_]*$" },
+        "message_schema": { "type": "string", "pattern": "^urn:open-android-intelligence:protocol:v1:message:[a-z][a-z0-9_]*$" },
         "message_type": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
         "message_id": { "$ref": "#/$defs/lowercase_uuid_v4" },
         "key_id": { "$ref": "#/$defs/opaque_server_id" },

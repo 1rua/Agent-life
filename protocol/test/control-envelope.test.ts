@@ -80,7 +80,7 @@ const wireFor = ({
   const domain = rotation ? "key-rotation/app-to-bridge" : "control/app-to-bridge";
   const header = {
     protocol_version: "1.0",
-    message_schema: `urn:agent-life:protocol:v1:message:${messageType}`,
+    message_schema: `urn:open-android-intelligence:protocol:v1:message:${messageType}`,
     message_type: messageType,
     message_id: messageId,
     key_id: DEVICE_PUBLIC.kid,
@@ -349,9 +349,9 @@ describe("real signed Task 5 admission", () => {
       claim_id: admitted.frame.claim.claimId,
       lease_ref: { adapter_credential_lease_id: null, connection_lease_id: leaseId, kind: "device_connection" },
       registry_identity: {
-        direction: "app-to-bridge", envelope_schema_id: "urn:agent-life:protocol:v1:envelope:device_ping",
-        header_schema_id: "urn:agent-life:protocol:v1:header:device_ping",
-        message_schema_id: "urn:agent-life:protocol:v1:message:device_ping",
+        direction: "app-to-bridge", envelope_schema_id: "urn:open-android-intelligence:protocol:v1:envelope:device_ping",
+        header_schema_id: "urn:open-android-intelligence:protocol:v1:header:device_ping",
+        message_schema_id: "urn:open-android-intelligence:protocol:v1:message:device_ping",
         message_type: "device_ping", signature_domain: "control/app-to-bridge", signer_role: "device",
       },
       replay_policy: {

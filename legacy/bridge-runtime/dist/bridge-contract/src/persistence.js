@@ -1,6 +1,6 @@
 import { BridgeServiceError } from "./service-types.js";
 /** Stable identity for the SQLite-backed Bridge adapter boundary. */
-export const SQLITE_BRIDGE_ADAPTER_PORT = "agent-life.bridge-sqlite-adapter.v1";
+export const SQLITE_BRIDGE_ADAPTER_PORT = "open-android-intelligence.bridge-sqlite-adapter.v1";
 /**
  * Closed state partitions that a production persistence adapter may expose.
  * The list is deliberately shared with the generic durable-store contract so

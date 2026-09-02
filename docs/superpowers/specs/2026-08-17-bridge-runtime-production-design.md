@@ -1,7 +1,7 @@
 # Bridge runtime 生产部署设计（2026-08-17）
 
 > [!WARNING]
-> 本文已于 2026-08-24 被 [Agent-life 模块化插件架构规格](./2026-08-24-modular-plugin-architecture.md) 取代，仅保留历史背景。独立 Docker/systemd Bridge 不再是生产目标；Gateway 直接安装为 Hermes 或 OpenClaw 宿主插件。
+> 本文已于 2026-08-24 被 [Open Android Intelligence 模块化插件架构规格](./2026-08-24-modular-plugin-architecture.md) 取代，仅保留历史背景。独立 Docker/systemd Bridge 不再是生产目标；Gateway 直接安装为 Hermes 或 OpenClaw 宿主插件。
 
 ## 结论
 
@@ -19,9 +19,9 @@ failover、公网 ingress、云 KMS 或完整 Android E2E。
   userspace Tailnet listener、`WhoIs` 认证和 Unix socket 反向代理。
 - Node runtime 只监听本机 Unix socket；sidecar 与 runtime 使用独立
   service user 和 socket 权限隔离。
-- 业务 SQLite 文件位于 `/var/lib/agent-life-bridge/bridge.sqlite`，
+- 业务 SQLite 文件位于 `/var/lib/open-android-intelligence-bridge/bridge.sqlite`，
   只归 Bridge service user 写入。
-- pairing 验证公钥位于 `/var/lib/agent-life-bridge/secrets/`，由部署
+- pairing 验证公钥位于 `/var/lib/open-android-intelligence-bridge/secrets/`，由部署
   层只读挂载。Bridge 不能读取或接收签发私钥。
 - 不发布 Docker host port，不声明 systemd `ListenStream`，不启用
   Funnel/public wildcard。
@@ -31,7 +31,7 @@ failover、公网 ingress、云 KMS 或完整 Android E2E。
 `bridge-contract` 的 SQLite port 从“external driver required”升级为
 “locked node-sqlite adapter”：
 
-- port：`agent-life.bridge-sqlite-adapter.v1`
+- port：`open-android-intelligence.bridge-sqlite-adapter.v1`
 - driver：`node:sqlite@24.18.0/sqlite@3.53.1`
 - schema version：从 0 到 1，使用不可变、连续迁移
 - 表：
@@ -116,7 +116,7 @@ SQLite、lease、pairing verifier 和 tsnet sidecar 检查，不泄露异常文�
 
 ### systemd
 
-- `agent-life-bridge.service` 和 `agent-life-ingress.service` 分别运行
+- `open-android-intelligence-bridge.service` 和 `open-android-intelligence-ingress.service` 分别运行
   Node 与 Go sidecar。
 - Node 服务只绑定 Unix socket。
 - Go sidecar 持有 tsnet state。

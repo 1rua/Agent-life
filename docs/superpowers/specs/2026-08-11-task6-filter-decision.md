@@ -8,7 +8,7 @@ capability 必须引用一个版本化、闭合的 schema；未知 capability、
 语言，也不接受通用 `filter_all_v1` 作为通知授权。
 
 通知 capability 使用闭合 schema
-`urn:agent-life:protocol:v1:filter:notifications_v1`：
+`urn:open-android-intelligence:protocol:v1:filter:notifications_v1`：
 
 - `packages`（可选）必须是至少一个合法 Android package name，唯一且按
   Unicode code point 排序；

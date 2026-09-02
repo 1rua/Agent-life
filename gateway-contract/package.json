@@ -1,5 +1,5 @@
 {
-  "name": "@agent-life/gateway-contract",
+  "name": "@open-android-intelligence/gateway-contract",
   "version": "2.0.0",
   "private": true,
   "type": "module",

@@ -4829,7 +4829,7 @@
       "properties": [
         {
           "name": "go:replace",
-          "value": "/mnt/\u6570\u636e/\u9879\u76ee/Agent-life/.toolchains/tsnet-src-v1.98.10@"
+          "value": "/mnt/\u6570\u636e/\u9879\u76ee/open-android-intelligence/.toolchains/tsnet-src-v1.98.10@"
         }
       ],
       "purl": "pkg:golang/tailscale.com@v0.0.0",
@@ -4868,7 +4868,7 @@
     "tools": [
       {
         "name": "build-tsnet-aar.sh",
-        "vendor": "Agent Life",
+        "vendor": "Open Android Intelligence",
         "version": "1"
       },
       {

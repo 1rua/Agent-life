@@ -67,7 +67,7 @@ describe("canonical JSON wire encoding", () => {
   it("constructs the frozen domain and big-endian length preimage", () => {
     const value = { sequence: "1", message_id: "018f4f9a-4444-4444-8444-444444444444" };
     const preimage = signingPreimage(controlDomain, value);
-    const prefix = utf8.encode("agent-life/v1/control/app-to-bridge\0");
+    const prefix = utf8.encode("open-android-intelligence/v1/control/app-to-bridge\0");
 
     expect(preimage.slice(0, prefix.byteLength)).toEqual(prefix);
     expect(Array.from(preimage.slice(prefix.byteLength, prefix.byteLength + 4))).toEqual([0, 0, 0, 68]);

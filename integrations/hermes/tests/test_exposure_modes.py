@@ -5,9 +5,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from agent_life_gateway.admin import HostApiCompatibility
-from agent_life_gateway.http import EXPOSURE_MODES, create_gateway_exposure
-from agent_life_gateway.core import create_gateway_core
+from open_android_intelligence_gateway.admin import HostApiCompatibility
+from open_android_intelligence_gateway.http import EXPOSURE_MODES, create_gateway_exposure
+from open_android_intelligence_gateway.core import create_gateway_core
 from test_support import make_secret_store, make_verified_request, trust_core
 
 
@@ -41,7 +41,7 @@ class FakeCore:
         }
 
 
-def _verified(target="/agent-life/v2/negotiate"):
+def _verified(target="/open-android-intelligence/v2/negotiate"):
     return make_verified_request({
         "context": {
             "accountId": "account-a", "deviceId": "device-a", "sessionId": "session-a",
@@ -59,14 +59,14 @@ def test_all_three_exposure_modes_share_routes_and_verified_core_result():
     for mode in EXPOSURE_MODES:
         core = FakeCore()
         exposure = create_gateway_exposure(mode, core=core, host_version="1.0.0", host_api=TEST_HOST_API)
-        route = next(item for item in exposure.routes if item.path == "/agent-life/v2/negotiate")
+        route = next(item for item in exposure.routes if item.path == "/open-android-intelligence/v2/negotiate")
         response = route.handle({"verifiedRequest": _verified()})
         results.append(response)
         assert exposure.admin.remote_port is None
         assert exposure.admin.remotePort is None
     assert results[0] == results[1] == results[2]
     assert results[0]["statusCode"] == 200
-    assert results[0]["body"]["data"] == {"accepted": True, "target": "/agent-life/v2/negotiate"}
+    assert results[0]["body"]["data"] == {"accepted": True, "target": "/open-android-intelligence/v2/negotiate"}
 
 
 def test_verified_route_rejects_a_plain_mapping_even_when_the_host_is_compatible():
@@ -74,14 +74,14 @@ def test_verified_route_rejects_a_plain_mapping_even_when_the_host_is_compatible
     exposure = create_gateway_exposure(
         "host-route", core=core, host_version="1.0.0", host_api=TEST_HOST_API
     )
-    route = next(item for item in exposure.routes if item.path == "/agent-life/v2/conversations")
+    route = next(item for item in exposure.routes if item.path == "/open-android-intelligence/v2/conversations")
     plain_mapping = {
         "context": {
             "accountId": "account-a", "deviceId": "device-a", "sessionId": "session-a",
             "requestId": "request-a", "correlationId": "correlation-a",
             "pairingGeneration": 1, "grantRevision": 1,
         },
-        "method": "POST", "target": "/agent-life/v2/conversations",
+        "method": "POST", "target": "/open-android-intelligence/v2/conversations",
         "body": {"clientConversationId": "conv_untrusted"},
     }
 
@@ -97,7 +97,7 @@ def test_incompatible_or_missing_host_fails_closed_before_core_for_each_mode():
         for mode in EXPOSURE_MODES:
             core = FakeCore()
             exposure = create_gateway_exposure(mode, core=core, host_version=host_version)
-            route = next(item for item in exposure.routes if item.path == "/agent-life/v2/negotiate")
+            route = next(item for item in exposure.routes if item.path == "/open-android-intelligence/v2/negotiate")
             response = route.handle({"verifiedRequest": _verified()})
             assert response["statusCode"] == 503
             assert response["body"]["error"]["code"] == "HOST_INCOMPATIBLE"
@@ -105,7 +105,7 @@ def test_incompatible_or_missing_host_fails_closed_before_core_for_each_mode():
 
 
 class RawRequest:
-    def __init__(self, body=b"{}", url="/agent-life/v2/negotiate"):
+    def __init__(self, body=b"{}", url="/open-android-intelligence/v2/negotiate"):
         self.method = "POST"
         self.url = url
         self.headers = {"content-type": "application/json"}
@@ -129,9 +129,9 @@ class RawResponse:
 def test_raw_host_boundary_requires_verifier_and_enforces_body_limit():
     core = FakeCore()
     exposure = create_gateway_exposure("host-route", core=core, host_version="1.0.0", host_api=TEST_HOST_API)
-    route = next(item for item in exposure.routes if item.path == "/agent-life/v2/events")
+    route = next(item for item in exposure.routes if item.path == "/open-android-intelligence/v2/events")
     response = RawResponse()
-    route.handler(RawRequest(url="/agent-life/v2/events"), response)
+    route.handler(RawRequest(url="/open-android-intelligence/v2/events"), response)
     assert response.status_code == 401
     assert core.requests == []
 
@@ -140,7 +140,7 @@ def test_raw_host_boundary_requires_verifier_and_enforces_body_limit():
         "host-route", core=core, host_version="1.0.0", host_api=TEST_HOST_API, max_body_bytes=1,
         verify_request=lambda request: verifier_calls.append(request) or _verified(),
     )
-    route = next(item for item in exposure.routes if item.path == "/agent-life/v2/negotiate")
+    route = next(item for item in exposure.routes if item.path == "/open-android-intelligence/v2/negotiate")
     response = RawResponse()
     route.handler(RawRequest(), response)
     assert response.status_code == 413
@@ -156,12 +156,12 @@ def test_raw_host_boundary_passes_exact_bytes_to_verifier_before_core():
         return _verified(request["target"])
 
     exposure = create_gateway_exposure("direct-tls", core=core, host_version="1.0.0", host_api=TEST_HOST_API, verify_request=verifier)
-    route = next(item for item in exposure.routes if item.path == "/agent-life/v2/conversations")
+    route = next(item for item in exposure.routes if item.path == "/open-android-intelligence/v2/conversations")
     response = RawResponse()
-    route.handler(RawRequest(b"{}", url="/agent-life/v2/conversations"), response)
+    route.handler(RawRequest(b"{}", url="/open-android-intelligence/v2/conversations"), response)
     assert response.status_code == 200
     assert seen[0]["body"] == b"{}"
-    assert core.requests[0].target == "/agent-life/v2/conversations"
+    assert core.requests[0].target == "/open-android-intelligence/v2/conversations"
 
 
 def test_verified_exposure_seam_reaches_the_independent_python_core(tmp_path):
@@ -172,12 +172,12 @@ def test_verified_exposure_seam_reaches_the_independent_python_core(tmp_path):
             "requestId": "request-a", "correlationId": "correlation-a",
             "pairingGeneration": 1, "grantRevision": 1,
         },
-        "method": "POST", "target": "/agent-life/v2/conversations",
+        "method": "POST", "target": "/open-android-intelligence/v2/conversations",
         "body": {"clientConversationId": "conv_exposure"},
         "idempotencyKey": "request-a",
     })
     exposure = create_gateway_exposure("loopback-reverse-proxy", core=core, host_version="1.0.0", host_api=TEST_HOST_API)
-    route = next(item for item in exposure.routes if item.path == "/agent-life/v2/conversations")
+    route = next(item for item in exposure.routes if item.path == "/open-android-intelligence/v2/conversations")
 
     response = route.handle({"verifiedRequest": request})
 
@@ -202,7 +202,7 @@ def test_negotiate_raw_route_has_independent_pre_auth_input_without_verifier(tmp
         "host-route", core=core, host_version="1.0.0",
         host_api=HostApiCompatibility("1.0.0", "1.0.0", "0123456789abcdef0123456789abcdef01234567"),
     )
-    route = next(item for item in exposure.routes if item.path == "/agent-life/v2/negotiate")
+    route = next(item for item in exposure.routes if item.path == "/open-android-intelligence/v2/negotiate")
     request = RawRequest(json.dumps(body).encode("utf-8"))
     response = RawResponse()
 

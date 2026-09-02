@@ -13,7 +13,7 @@ const privateJwk = readJson("test-only/keys/bridge-command-private.jwk.json");
 const publicJwk = readJson("test-only/keys/bridge-command-public.jwk.json");
 
 const legacyPayload = {
-  message_schema: "urn:agent-life:protocol:v0.9:pending-operation",
+  message_schema: "urn:open-android-intelligence:protocol:v0.9:pending-operation",
   operation_id: "legacy-operation-1",
   parameters_digest: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
   state: "pending",
@@ -62,7 +62,7 @@ describe("Task 7 signed legacy migration", () => {
       source_schema_id: legacyPayload.message_schema,
       source_record_digest: sourceDigest,
       source_signature: source.signature,
-      target_schema_id: "urn:agent-life:protocol:v1:operation",
+      target_schema_id: "urn:open-android-intelligence:protocol:v1:operation",
       target_record_id: legacyPayload.operation_id,
     });
     expect(result.receipt.target_record_digest).toBe(sha256B64Url(canonicalBytes(result.target)));

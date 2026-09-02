@@ -1,4 +1,4 @@
-module agentlife/tsnetbridge
+module openandroidintelligence/tsnetbridge
 
 go 1.26.5
 

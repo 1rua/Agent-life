@@ -9,8 +9,8 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = (
     ROOT
-    / "artifact-ports/src/main/kotlin/com/agentlife/artifact/ArtifactSelectionPorts.kt",
-    ROOT / "core-model/src/main/kotlin/com/agentlife/core/model/AssistantAudioContracts.kt",
+    / "artifact-ports/src/main/kotlin/com/openandroidintelligence/artifact/ArtifactSelectionPorts.kt",
+    ROOT / "core-model/src/main/kotlin/com/openandroidintelligence/core/model/AssistantAudioContracts.kt",
 )
 FORBIDDEN_BACKEND_SURFACE = re.compile(
     r"^\s*import\s+(?i:android|androidx)\.|"

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:agent-life:mvp:notification-api:v1",
-  "title": "Agent Life notification API",
+  "$id": "urn:open-android-intelligence:mvp:notification-api:v1",
+  "title": "Open Android Intelligence notification API",
   "unevaluatedProperties": false,
   "oneOf": [
     { "$ref": "#/$defs/query" },
@@ -51,7 +51,7 @@
     "packages": {
       "type": "array", "minItems": 1, "uniqueItems": true,
       "items": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]*(?:\\.[A-Za-z][A-Za-z0-9_]*)+$" },
-      "x-agent-life-order": "strictly Unicode-code-point sorted"
+      "x-open-android-intelligence-order": "strictly Unicode-code-point sorted"
     },
     "query_response": {
       "type": "object", "additionalProperties": false,
@@ -59,7 +59,7 @@
       "properties": {
         "status": { "enum": ["complete", "waiting_device", "failed"] },
         "policy_revision": { "$ref": "#/$defs/u64" },
-        "records": { "type": "array", "items": { "$ref": "urn:agent-life:mvp:notification-record:v1" } },
+        "records": { "type": "array", "items": { "$ref": "urn:open-android-intelligence:mvp:notification-record:v1" } },
         "error": { "type": ["string", "null"] }
       }
     },

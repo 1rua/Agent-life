@@ -8,9 +8,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from agent_life_gateway.audit import scrub
-from agent_life_gateway.backup import GatewayBackupService
-from agent_life_gateway.core import create_gateway_core
+from open_android_intelligence_gateway.audit import scrub
+from open_android_intelligence_gateway.backup import GatewayBackupService
+from open_android_intelligence_gateway.core import create_gateway_core
 
 
 SENSITIVE_VALUES = (

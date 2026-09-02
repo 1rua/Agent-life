@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://agent-life.dev/schemas/gateway/v2/session.schema.json",
+  "$id": "https://open-android-intelligence.dev/schemas/gateway/v2/session.schema.json",
   "$defs": {
     "password": {
       "type": "object",
@@ -8,7 +8,7 @@
       "required": ["negotiationId", "username", "password", "installation"],
       "properties": {
         "negotiationId": {
-          "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
+          "$ref": "https://open-android-intelligence.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
         },
         "username": { "type": "string", "minLength": 1 },
         "password": { "type": "string", "minLength": 1 },
@@ -18,11 +18,11 @@
           "required": ["installationId", "displayName", "devicePublicKey"],
           "properties": {
             "installationId": {
-              "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
+              "$ref": "https://open-android-intelligence.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
             },
             "displayName": { "type": "string", "minLength": 1 },
             "devicePublicKey": {
-              "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/base64urlEd25519PublicKey"
+              "$ref": "https://open-android-intelligence.dev/schemas/gateway/v2/envelope.schema.json#/$defs/base64urlEd25519PublicKey"
             }
           }
         }
@@ -40,16 +40,16 @@
       ],
       "properties": {
         "negotiationId": {
-          "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
+          "$ref": "https://open-android-intelligence.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
         },
         "accountId": {
-          "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
+          "$ref": "https://open-android-intelligence.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
         },
         "installationId": {
-          "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
+          "$ref": "https://open-android-intelligence.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
         },
         "deviceId": {
-          "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
+          "$ref": "https://open-android-intelligence.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
         },
         "refreshCredential": { "type": "string", "minLength": 1 }
       }
@@ -70,23 +70,23 @@
       ],
       "properties": {
         "negotiationId": {
-          "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
+          "$ref": "https://open-android-intelligence.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
         },
         "accountId": {
-          "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
+          "$ref": "https://open-android-intelligence.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
         },
         "username": { "type": "string", "minLength": 1 },
         "installationId": {
-          "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
+          "$ref": "https://open-android-intelligence.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
         },
         "deviceId": {
-          "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
+          "$ref": "https://open-android-intelligence.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
         },
         "challenge": {
-          "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
+          "$ref": "https://open-android-intelligence.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
         },
         "signature": {
-          "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/base64urlEd25519Signature"
+          "$ref": "https://open-android-intelligence.dev/schemas/gateway/v2/envelope.schema.json#/$defs/base64urlEd25519Signature"
         }
       }
     }

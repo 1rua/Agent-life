@@ -3,33 +3,33 @@
 version = 4
 
 [[package]]
-name = "agent-life-call-log"
+name = "open-android-intelligence-call-log"
 version = "0.1.0"
 dependencies = [
- "agent-life-sdk",
+ "open-android-intelligence-sdk",
 ]
 
 [[package]]
-name = "agent-life-echo"
+name = "open-android-intelligence-echo"
 version = "0.1.0"
 dependencies = [
- "agent-life-sdk",
+ "open-android-intelligence-sdk",
 ]
 
 [[package]]
-name = "agent-life-notifications"
+name = "open-android-intelligence-notifications"
 version = "0.1.0"
 dependencies = [
- "agent-life-sdk",
+ "open-android-intelligence-sdk",
 ]
 
 [[package]]
-name = "agent-life-sdk"
+name = "open-android-intelligence-sdk"
 version = "0.1.0"
 
 [[package]]
-name = "agent-life-sms"
+name = "open-android-intelligence-sms"
 version = "0.1.0"
 dependencies = [
- "agent-life-sdk",
+ "open-android-intelligence-sdk",
 ]

@@ -81,8 +81,8 @@ const identityFor = <T extends string>(messageType: T): LockedReplayRegistryIden
   return {
     messageType,
     messageSchemaId: entry.schema_id,
-    headerSchemaId: `urn:agent-life:protocol:v1:header:${messageType}`,
-    envelopeSchemaId: `urn:agent-life:protocol:v1:envelope:${messageType}`,
+    headerSchemaId: `urn:open-android-intelligence:protocol:v1:header:${messageType}`,
+    envelopeSchemaId: `urn:open-android-intelligence:protocol:v1:envelope:${messageType}`,
     direction: entry.direction,
     signatureDomain: parseSignatureDomain(entry.signature_domain),
     signerRole: entry.direction === "app-to-bridge" ? "device"
@@ -270,8 +270,8 @@ describe("Task 7 canonical receipt-replay artifacts", () => {
         payload: { original_receipt_wire_b64: string; original_receipt_digest: string };
         signature: string;
       };
-      validateSchema("urn:agent-life:protocol:v1:envelope:operation_receipt", inner);
-      validateSchema("urn:agent-life:protocol:v1:envelope:receipt_replay", outer);
+      validateSchema("urn:open-android-intelligence:protocol:v1:envelope:operation_receipt", inner);
+      validateSchema("urn:open-android-intelligence:protocol:v1:envelope:receipt_replay", outer);
       expect(entryFor(inner.header.message_type)).toMatchObject({
         direction: inner.header.direction, schema_id: inner.header.message_schema, signature_domain: "receipt/device",
       });

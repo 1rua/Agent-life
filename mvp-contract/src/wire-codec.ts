@@ -529,7 +529,7 @@ const validUnicodeScalars = (value: string): boolean => {
 export const createCallRecordSchemaValidator = (schema: object) => {
   const ajv = new Ajv2020({ strict: false });
   ajv.addKeyword({
-    keyword: "x-agent-life-maxUtf8Bytes",
+    keyword: "x-open-android-intelligence-maxUtf8Bytes",
     type: "string",
     schemaType: "number",
     validate: (limit: unknown, value: unknown): boolean =>

@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.agentlife.notifications"
+    namespace = "com.openandroidintelligence.notifications"
     sourceSets {
         getByName("test") {
             kotlin.srcDir("../transport/src/testFixtures/kotlin")

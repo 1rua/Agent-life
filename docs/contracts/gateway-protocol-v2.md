@@ -1,7 +1,7 @@
 ---
 status: accepted
 date: 2026-08-24
-contract: agent-life-gateway-protocol
+contract: open-android-intelligence-gateway-protocol
 version: 2.0.0
 ---
 
@@ -18,7 +18,7 @@ V2 是新协议，不兼容 Bridge Protocol v1。所有端点必须使用 HTTPS�
 默认基路径：
 
 ```text
-/agent-life/v2
+/open-android-intelligence/v2
 ```
 
 所有 JSON：
@@ -256,28 +256,28 @@ TypeScript validation diagnostics 的唯一规范化算法为：每个 Ajv error
 
 ```http
 Authorization: Bearer <opaque-access-token>
-X-Agent-Life-Protocol: 2.0
-X-Agent-Life-Account: <account-id>
-X-Agent-Life-Device: <device-id>
-X-Agent-Life-Session: <session-id>
-X-Agent-Life-Request-Id: <request-id>
-X-Agent-Life-Timestamp: <RFC3339 UTC>
-X-Agent-Life-Nonce: <base64url 16 random bytes>
-X-Agent-Life-Signature: <base64url Ed25519 signature>
+X-Open-Android-Intelligence-Protocol: 2.0
+X-Open-Android-Intelligence-Account: <account-id>
+X-Open-Android-Intelligence-Device: <device-id>
+X-Open-Android-Intelligence-Session: <session-id>
+X-Open-Android-Intelligence-Request-Id: <request-id>
+X-Open-Android-Intelligence-Timestamp: <RFC3339 UTC>
+X-Open-Android-Intelligence-Nonce: <base64url 16 random bytes>
+X-Open-Android-Intelligence-Signature: <base64url Ed25519 signature>
 ```
 
 HTTP 入口必须从 framework 合并、逗号折叠或 first/last 选择之前的 raw header 列表证明下列九个认证 header 始终各恰好出现一次：
 
 ```text
 Authorization
-X-Agent-Life-Protocol
-X-Agent-Life-Account
-X-Agent-Life-Device
-X-Agent-Life-Session
-X-Agent-Life-Request-Id
-X-Agent-Life-Timestamp
-X-Agent-Life-Nonce
-X-Agent-Life-Signature
+X-Open-Android-Intelligence-Protocol
+X-Open-Android-Intelligence-Account
+X-Open-Android-Intelligence-Device
+X-Open-Android-Intelligence-Session
+X-Open-Android-Intelligence-Request-Id
+X-Open-Android-Intelligence-Timestamp
+X-Open-Android-Intelligence-Nonce
+X-Open-Android-Intelligence-Signature
 ```
 
 以下五个条件 header 也必须从同一 raw header 列表执行 singleton 规则：
@@ -313,9 +313,9 @@ e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 
 ### 6.3 Canonical request target
 
-签名输入只允许 `/agent-life/v2` 基路径内的 HTTP origin-form target。语言无关的逐字节算法必须按以下顺序执行：
+签名输入只允许 `/open-android-intelligence/v2` 基路径内的 HTTP origin-form target。语言无关的逐字节算法必须按以下顺序执行：
 
-1. 拒绝 absolute-form、authority-form、`*`、fragment、空白和控制字符；path 必须是 `/agent-life/v2` 或其下级路径。
+1. 拒绝 absolute-form、authority-form、`*`、fragment、空白和控制字符；path 必须是 `/open-android-intelligence/v2` 或其下级路径。
 2. 只在第一个字面量 `?` 分离 path/query；query 内出现字面量 `?` 属于非规范输入。
 3. path 使用字面量 `/` 分段；每个完整 `%HH` 解码为一个 byte，畸形或不完整的 percent escape 拒绝。
 4. byte 属于 `[A-Za-z0-9._~-]` 时原样输出，其他 byte 输出大写 `%HH`。
@@ -331,7 +331,7 @@ e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 设备签名预像严格由以下 10 个 ASCII 字段和字段间 9 个 `0x0A` 组成：
 
 ```text
-ASCII("AGENT-LIFE-REQUEST-V2") LF
+ASCII("OPEN-ANDROID-INTELLIGENCE-REQUEST-V2") LF
 ASCII(method) LF
 ASCII(canonicalTarget) LF
 ASCII(accountId) LF
@@ -350,7 +350,7 @@ ASCII(lowercaseHex(SHA-256(exactBodyBytes)))
 ```json
 {
   "method": "GET",
-  "target": "/agent-life/v2/events?cursor=evt_1&z=last",
+  "target": "/open-android-intelligence/v2/events?cursor=evt_1&z=last",
   "accountId": "acct_1",
   "deviceId": "dev_1",
   "sessionId": "sess_1",
@@ -364,7 +364,7 @@ ASCII(lowercaseHex(SHA-256(exactBodyBytes)))
 其 canonical target 为：
 
 ```text
-/agent-life/v2/events?cursor=evt_1&z=last
+/open-android-intelligence/v2/events?cursor=evt_1&z=last
 ```
 
 其 expected preimage hex 为：
@@ -377,7 +377,7 @@ Gateway 随后校验账号、设备、配对 generation、时间窗、nonce、�
 
 ### 6.5 幂等绑定
 
-读请求重复可以安全重试。所有创建、副作用和附件提交请求必须携带 `Idempotency-Key`，且值必须逐字节精确等于已签名的 `X-Agent-Life-Request-Id`。同一账号、设备和 request ID 在保留期内返回同一终态，不重复执行。客户端重试可以更换 timestamp 和 nonce，但必须保持 request ID 不变。
+读请求重复可以安全重试。所有创建、副作用和附件提交请求必须携带 `Idempotency-Key`，且值必须逐字节精确等于已签名的 `X-Open-Android-Intelligence-Request-Id`。同一账号、设备和 request ID 在保留期内返回同一终态，不重复执行。客户端重试可以更换 timestamp 和 nonce，但必须保持 request ID 不变。
 
 ## 7. 对话
 
@@ -510,11 +510,11 @@ Agent 宿主通过 Gateway Core 创建结构化设备请求；模型不能提供
 {
   "requestId": "device_req_01...",
   "capability": {
-    "id": "org.agentlife.sms.query",
+    "id": "org.openandroidintelligence.sms.query",
     "version": "1.0.0"
   },
   "provider": {
-    "pluginId": "org.agentlife.sms",
+    "pluginId": "org.openandroidintelligence.sms",
     "authorKeyId": "sha256:..."
   },
   "parameters": {},
@@ -788,7 +788,7 @@ sha256:597cd548512a66963ae944e75af529fddd0c40cdf8fc59b3fe3cab5287b6c725
 
 #### `device.sms-query.v1`
 
-Logical key：`{ kind:"device.request", pluginId:"org.agentlife.sms", authorKeyId:"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", capabilityId:"org.agentlife.sms.query", capabilityVersion:"1.0.0" }`
+Logical key：`{ kind:"device.request", pluginId:"org.openandroidintelligence.sms", authorKeyId:"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", capabilityId:"org.openandroidintelligence.sms.query", capabilityVersion:"1.0.0" }`
 
 规范 JCS bytes：
 

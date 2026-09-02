@@ -1,4 +1,4 @@
-//! 检查 echo 插件的 **wasm 产物**是否符合 `agent_life_kernel_v1` 的 ABI 形状。
+//! 检查 echo 插件的 **wasm 产物**是否符合 `open_android_intelligence_kernel_v1` 的 ABI 形状。
 //!
 //! 这是零依赖的手写 WASM 二进制解析器：只读取验证所需的最小信息（类型段、
 //! 导入段、函数段、导出段）。不引入 `wasmparser` 之类的依赖，是为了让
@@ -9,7 +9,7 @@
 //! 1. 产物是合法的 wasm 模块；
 //! 2. **导入数为 0**——即没有 WASI，也没有任何未知导入
 //!    （`docs/contracts/device-plugin-package-v1.md` §5.1）；
-//! 3. 导出 `agent_life_plugin_main`，签名 `(i32, i32) -> i64`；
+//! 3. 导出 `open_android_intelligence_plugin_main`，签名 `(i32, i32) -> i64`；
 //! 4. 只导出入口与 `memory`（外加链接器的两个全局），没有多余的攻击面；
 //! 5. 导出线性内存 `memory`；
 //! 6. **插件数据全部链接在交换区之上**——宿主往 `memory[0 .. 64 KiB)` 写
@@ -301,7 +301,7 @@ fn parse(bytes: &[u8]) -> Parsed<Module> {
 }
 
 fn artifact_path() -> PathBuf {
-    if let Ok(explicit) = std::env::var("AGENT_LIFE_ECHO_WASM") {
+    if let Ok(explicit) = std::env::var("OPEN_ANDROID_INTELLIGENCE_ECHO_WASM") {
         return PathBuf::from(explicit);
     }
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -371,18 +371,18 @@ fn artifact_exports_the_kernel_entrypoint() {
     let bytes = load_artifact();
     let module = parse(&bytes).unwrap();
     let export = module
-        .export("agent_life_plugin_main")
-        .expect("必须导出 agent_life_plugin_main");
+        .export("open_android_intelligence_plugin_main")
+        .expect("必须导出 open_android_intelligence_plugin_main");
     let signature = module
         .exported_func_type(export)
-        .expect("agent_life_plugin_main 必须是函数导出");
+        .expect("open_android_intelligence_plugin_main 必须是函数导出");
     assert_eq!(
         signature,
         &FuncType {
             params: vec![VALTYPE_I32, VALTYPE_I32],
             results: vec![VALTYPE_I64],
         },
-        "agent_life_plugin_main 的签名必须是 (i32, i32) -> i64"
+        "open_android_intelligence_plugin_main 的签名必须是 (i32, i32) -> i64"
     );
 }
 
@@ -396,7 +396,7 @@ fn artifact_exports_nothing_beyond_the_entrypoint_and_memory() {
         .iter()
         .map(|e| e.name.clone())
         .filter(|name| {
-            name != "agent_life_plugin_main"
+            name != "open_android_intelligence_plugin_main"
                 && name != "memory"
                 && !LINKER_GLOBAL_EXPORTS.contains(&name.as_str())
         })

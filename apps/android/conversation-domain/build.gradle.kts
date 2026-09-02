@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.agentlife.conversation.domain"
+    namespace = "com.openandroidintelligence.conversation.domain"
     defaultConfig { testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" }
 }
 

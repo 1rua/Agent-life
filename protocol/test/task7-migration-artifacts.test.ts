@@ -29,10 +29,10 @@ describe("Task 7 migration and error independent artifacts", () => {
   it("keeps the v0.9 fixture conformance-only and non-negotiable", () => {
     expect(profile).toEqual({
       protocol_version: "0.9",
-      profile_id: "agent-life-json-es256/0.9-fixture",
+      profile_id: "open-android-intelligence-json-es256/0.9-fixture",
       negotiable: false,
       fixture_owner: "Task7",
-      pending_operation_schema: "urn:agent-life:protocol:v0.9:pending-operation",
+      pending_operation_schema: "urn:open-android-intelligence:protocol:v0.9:pending-operation",
     });
     expect(validateLegacy(legacyPayload)).toBe(true);
     expect(validateLegacy({ ...legacyPayload, unexpected: true })).toBe(false);
@@ -43,21 +43,21 @@ describe("Task 7 migration and error independent artifacts", () => {
   it("validates the closed v1 migration receipt without enabling migration code", () => {
     const receipt = {
       migration_id: "migration-1",
-      source_schema_id: "urn:agent-life:protocol:v0.9:pending-operation",
+      source_schema_id: "urn:open-android-intelligence:protocol:v0.9:pending-operation",
       source_record_digest: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
       source_signature: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-      target_schema_id: "urn:agent-life:protocol:v1:operation",
+      target_schema_id: "urn:open-android-intelligence:protocol:v1:operation",
       target_record_digest: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
       target_record_id: "operation-1",
       migrated_at: "2026-08-11T00:00:00.000Z",
     };
-    expect(() => validateSchema("urn:agent-life:protocol:v1:migration-receipt", receipt)).not.toThrow();
-    expect(() => validateSchema("urn:agent-life:protocol:v1:migration-receipt", { ...receipt, extra: true })).toThrowError("SCHEMA_INVALID");
-    expect(() => validateSchema("urn:agent-life:protocol:v1:migration-receipt", { ...receipt, source_schema_id: "urn:agent-life:protocol:v1:operation" })).toThrowError("SCHEMA_INVALID");
+    expect(() => validateSchema("urn:open-android-intelligence:protocol:v1:migration-receipt", receipt)).not.toThrow();
+    expect(() => validateSchema("urn:open-android-intelligence:protocol:v1:migration-receipt", { ...receipt, extra: true })).toThrowError("SCHEMA_INVALID");
+    expect(() => validateSchema("urn:open-android-intelligence:protocol:v1:migration-receipt", { ...receipt, source_schema_id: "urn:open-android-intelligence:protocol:v1:operation" })).toThrowError("SCHEMA_INVALID");
   });
 
   it("keeps the independent error registry closed and unique", () => {
-    expect(() => validateSchema("urn:agent-life:protocol:v1:errors-registry", errors)).not.toThrow();
+    expect(() => validateSchema("urn:open-android-intelligence:protocol:v1:errors-registry", errors)).not.toThrow();
     const rows = errors.errors as Array<Record<string, unknown>>;
     expect(new Set(rows.map((row) => row.code)).size).toBe(rows.length);
     expect(rows.filter((row) => row.retryable).map((row) => row.code).sort()).toEqual(["FLOW_CONTROL_VIOLATION", "RATE_LIMITED", "SECURITY_LEDGER_FULL"]);

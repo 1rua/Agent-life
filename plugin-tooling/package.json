@@ -1,5 +1,5 @@
 {
-  "name": "@agent-life/plugin-tooling",
+  "name": "@open-android-intelligence/plugin-tooling",
   "private": true,
   "type": "module",
   "version": "0.1.0",

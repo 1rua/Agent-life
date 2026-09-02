@@ -23,7 +23,7 @@ import {
 const roots: string[] = [];
 
 const makeRoot = async (): Promise<string> => {
-  const root = await mkdtemp(join(tmpdir(), "agent-life-production-composition-"));
+  const root = await mkdtemp(join(tmpdir(), "open-android-intelligence-production-composition-"));
   roots.push(root);
   return root;
 };

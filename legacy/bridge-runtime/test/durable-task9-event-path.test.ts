@@ -49,7 +49,7 @@ const SUBSCRIPTION = {
 };
 
 const makeRoot = async (): Promise<string> => {
-  const root = await mkdtemp(join(tmpdir(), "agent-life-task9-"));
+  const root = await mkdtemp(join(tmpdir(), "open-android-intelligence-task9-"));
   roots.push(root);
   return root;
 };

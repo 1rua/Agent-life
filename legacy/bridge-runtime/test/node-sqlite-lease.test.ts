@@ -8,7 +8,7 @@ import {
 } from "../src/production-ports.js";
 import { openNodeSqliteBridgeAdapter } from "../src/node-sqlite-adapter.js";
 
-const root = await mkdtemp(join(tmpdir(), "agent-life-node-sqlite-lease-"));
+const root = await mkdtemp(join(tmpdir(), "open-android-intelligence-node-sqlite-lease-"));
 let clock = 0;
 let adapter = await openNodeSqliteBridgeAdapter({
   databasePath: join(root, "bridge.sqlite"),

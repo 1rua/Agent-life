@@ -1,8 +1,8 @@
 [package]
-name = "agent-life-call-log"
+name = "open-android-intelligence-call-log"
 version = "0.1.0"
 edition = "2021"
-description = "Agent-life 通话记录查询参考插件"
+description = "Open Android Intelligence 通话记录查询参考插件"
 publish = false
 
 [lib]
@@ -10,5 +10,5 @@ name = "call_log"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-agent-life-sdk = { path = "../sdk-rust" }
+open-android-intelligence-sdk = { path = "../sdk-rust" }
 

@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.agentlife.plugin.runtime.wasm"
+    namespace = "com.openandroidintelligence.plugin.runtime.wasm"
     defaultConfig {
         // Chicory is a pure Java interpreter: no JNI and no bundled `.so`, so
         // the plugin runtime stays inside the host process sandbox.

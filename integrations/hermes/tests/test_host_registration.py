@@ -4,8 +4,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from agent_life_gateway.admin import run_admin_command
-from agent_life_gateway.plugin import register
+from open_android_intelligence_gateway.admin import run_admin_command
+from open_android_intelligence_gateway.plugin import register
 from test_support import PasswordVerifierDouble
 
 
@@ -40,7 +40,7 @@ def test_registers_platform_and_management_surface(tmp_path):
 
     register(context)
 
-    assert context.platform_ids == ["agent-life-gateway"]
+    assert context.platform_ids == ["open-android-intelligence-gateway"]
     assert len(context.admin_surfaces) == 1
 
 
@@ -50,7 +50,7 @@ def test_registration_exposes_native_core_routes_and_local_only_management(tmp_p
     register(context)
 
     platform = context.platforms[0]
-    assert platform.id == "agent-life-gateway"
+    assert platform.id == "open-android-intelligence-gateway"
     assert platform is not context.admin_surfaces[0].panel
     assert platform.core is context.admin_surfaces[0].panel.service.core
     assert platform.core.credential_verifier is context.credential_verifier
@@ -62,12 +62,12 @@ def test_registration_exposes_native_core_routes_and_local_only_management(tmp_p
     assert context.admin_surfaces[0].remote_port is None
     assert context.admin_surfaces[0].local_only is True
     assert {route["path"] for route in context.http_routes} >= {
-        "/agent-life/v2/negotiate",
-        "/agent-life/v2/events",
-        "/agent-life/v2/attachments",
-        "/agent-life/v2/device-requests/",
+        "/open-android-intelligence/v2/negotiate",
+        "/open-android-intelligence/v2/events",
+        "/open-android-intelligence/v2/attachments",
+        "/open-android-intelligence/v2/device-requests/",
     }
-    assert context.cli_registrations[0][1]["commands"] == ["agent-life"]
+    assert context.cli_registrations[0][1]["commands"] == ["open-android-intelligence"]
 
 
 def test_registration_marks_unknown_host_read_only_before_writes(tmp_path):
@@ -78,7 +78,7 @@ def test_registration_marks_unknown_host_read_only_before_writes(tmp_path):
     assert context.admin_surfaces[0].read_only is True
     result = context.admin_surfaces[0].create_account({"accountId": "acct", "localConfirmation": True})
     assert result["error"]["code"] == "HOST_INCOMPATIBLE"
-    assert not (Path(tmp_path) / "agent-life-gateway" / "accounts").exists()
+    assert not (Path(tmp_path) / "open-android-intelligence-gateway" / "accounts").exists()
 
 
 def test_registered_no_argument_cli_reuses_the_panel_admin_service(tmp_path):

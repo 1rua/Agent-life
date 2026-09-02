@@ -166,7 +166,7 @@ export async function consumeEnrollmentAttempt(
   const principalDecision = limiter.admitPrincipal(consumed.record.humanPrincipalId, monotonicNowMs);
 
   try {
-    validateSchema("urn:agent-life:protocol:v1:envelope:enrollment_app_to_bridge", parsed);
+    validateSchema("urn:open-android-intelligence:protocol:v1:envelope:enrollment_app_to_bridge", parsed);
     const wire = parsed as EnrollmentResponseWire;
     const entry = loadMessageRegistry().messages.find((candidate) => candidate.message_type === "enrollment_response");
     if (!entry

@@ -17,7 +17,7 @@ import {
 const roots: string[] = [];
 
 const makeRoot = async (): Promise<string> => {
-  const root = await mkdtemp(join(tmpdir(), "agent-life-bridge-runtime-"));
+  const root = await mkdtemp(join(tmpdir(), "open-android-intelligence-bridge-runtime-"));
   roots.push(root);
   return root;
 };
@@ -34,7 +34,7 @@ describe("FileBackedBridgeStore (deterministic local WP-06 adapter)", () => {
     const root = await makeRoot();
     const store = await FileBackedBridgeStore.open({ rootDir: root });
 
-    expect(store.port).toBe("agent-life.bridge-store.v1");
+    expect(store.port).toBe("open-android-intelligence.bridge-store.v1");
     expect(store.durability).toBe("durable");
     expect(isDurableBridgeStore(store)).toBe(true);
     expect(assertDurableBridgeStore(store)).toBe(store);
@@ -168,7 +168,7 @@ describe("FileBackedBridgeStore (deterministic local WP-06 adapter)", () => {
   it("upgrades a version-one local snapshot without dropping existing state", async () => {
     const root = await makeRoot();
     const state = {
-      format: "agent-life.bridge-store.state.v1",
+      format: "open-android-intelligence.bridge-store.state.v1",
       version: 1,
       generation: 4,
       namespaces: Object.fromEntries(BRIDGE_STORE_NAMESPACES

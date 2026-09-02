@@ -1,5 +1,5 @@
 {
-  "name": "@agent-life/bridge-contract",
+  "name": "@open-android-intelligence/bridge-contract",
   "private": true,
   "type": "module",
   "scripts": {

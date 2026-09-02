@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from agent_life_gateway.core import VerifiedGatewayRequest, VerifiedRequestContext
+from open_android_intelligence_gateway.core import VerifiedGatewayRequest, VerifiedRequestContext
 
 
 class HermesAeadProviderDouble:

@@ -8,9 +8,9 @@
     "sqlite": "3.53.1"
   },
   "database": {
-    "source": "/tmp/agent-life-bridge-drill-XQhW38/source.sqlite",
-    "restoreTarget": "/tmp/agent-life-bridge-drill-XQhW38/restore.sqlite",
-    "backupArtifact": "/tmp/agent-life-bridge-drill-XQhW38/backup.sqlite",
+    "source": "/tmp/open-android-intelligence-bridge-drill-XQhW38/source.sqlite",
+    "restoreTarget": "/tmp/open-android-intelligence-bridge-drill-XQhW38/restore.sqlite",
+    "backupArtifact": "/tmp/open-android-intelligence-bridge-drill-XQhW38/backup.sqlite",
     "schemaVersion": 1
   },
   "report": {
@@ -66,15 +66,15 @@
   },
   "cleanup": {
     "removedPaths": [
-      "/tmp/agent-life-bridge-drill-XQhW38/source.sqlite",
-      "/tmp/agent-life-bridge-drill-XQhW38/source.sqlite-wal",
-      "/tmp/agent-life-bridge-drill-XQhW38/source.sqlite-shm",
-      "/tmp/agent-life-bridge-drill-XQhW38/restore.sqlite",
-      "/tmp/agent-life-bridge-drill-XQhW38/restore.sqlite-wal",
-      "/tmp/agent-life-bridge-drill-XQhW38/restore.sqlite-shm",
-      "/tmp/agent-life-bridge-drill-XQhW38/backup.sqlite",
-      "/tmp/agent-life-bridge-drill-XQhW38/backup.sqlite-wal",
-      "/tmp/agent-life-bridge-drill-XQhW38/backup.sqlite-shm"
+      "/tmp/open-android-intelligence-bridge-drill-XQhW38/source.sqlite",
+      "/tmp/open-android-intelligence-bridge-drill-XQhW38/source.sqlite-wal",
+      "/tmp/open-android-intelligence-bridge-drill-XQhW38/source.sqlite-shm",
+      "/tmp/open-android-intelligence-bridge-drill-XQhW38/restore.sqlite",
+      "/tmp/open-android-intelligence-bridge-drill-XQhW38/restore.sqlite-wal",
+      "/tmp/open-android-intelligence-bridge-drill-XQhW38/restore.sqlite-shm",
+      "/tmp/open-android-intelligence-bridge-drill-XQhW38/backup.sqlite",
+      "/tmp/open-android-intelligence-bridge-drill-XQhW38/backup.sqlite-wal",
+      "/tmp/open-android-intelligence-bridge-drill-XQhW38/backup.sqlite-shm"
     ]
   }
 }

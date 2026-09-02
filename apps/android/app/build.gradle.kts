@@ -5,9 +5,9 @@ plugins {
 }
 
 android {
-    namespace = "com.agentlife.mobile"
+    namespace = "com.openandroidintelligence.mobile"
     defaultConfig {
-        applicationId = "com.agentlife.mobile"
+        applicationId = "com.openandroidintelligence.mobile"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.agentlife.transport"
+    namespace = "com.openandroidintelligence.transport"
     defaultConfig {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

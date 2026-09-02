@@ -95,7 +95,7 @@ describe("runtime adapter backend capabilities", () => {
       challenge: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", next_adapter_credential_generation: "5",
     };
     const header = {
-      protocol_version: "1.0", message_schema: "urn:agent-life:protocol:v1:message:adapter_key_rotation",
+      protocol_version: "1.0", message_schema: "urn:open-android-intelligence:protocol:v1:message:adapter_key_rotation",
       message_type: "adapter_key_rotation", message_id: "018f4f9a-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
       key_id: publicJwk.kid, direction: "adapter-to-bridge", sequence: "1",
       issued_at: "2026-08-08T00:00:00.000Z", expires_at: "2026-08-08T00:05:00.000Z",

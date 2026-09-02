@@ -20,8 +20,8 @@
 - 只接受 `INCOMING`、`OUTGOING`、`MISSED`、`REJECTED`；voicemail、blocked、answered externally 在 SQL 层排除，未知/OEM type 或 presentation 使整批失败。
 - 对方号码只有在本机 grant 与 request 都选择 `NUMBER`、presentation 为 `ALLOWED`、值非空白且 UTF-8 不超过 256 bytes 时才释放；不做 E.164 猜测，不查联系人名称。
 - `CallHistoryPolicy.fromEpochMs` 为 null 或非负；`maxRecords` 为 `1..10_000`。按需结果按 `(date DESC,id DESC)`，自动批次按 `(date ASC,id ASC)`。
-- 通话 outbox 文件固定为 `noBackupFilesDir/call-log-outbox-v1.aesgcm`，alias 固定为 `agent_life_call_log_outbox_v1`。
-- 通话 sync state 文件固定为 `noBackupFilesDir/call-log-sync-state-v1.aesgcm`，alias 固定为 `agent_life_call_log_state_v1`；两个 alias 不得与 SMS/notification 共用。
+- 通话 outbox 文件固定为 `noBackupFilesDir/call-log-outbox-v1.aesgcm`，alias 固定为 `open_android_intelligence_call_log_outbox_v1`。
+- 通话 sync state 文件固定为 `noBackupFilesDir/call-log-sync-state-v1.aesgcm`，alias 固定为 `open_android_intelligence_call_log_state_v1`；两个 alias 不得与 SMS/notification 共用。
 - AES-GCM envelope 固定为 12-byte random IV、authenticated ciphertext、128-bit tag；通话行、号码、wire 和 sync state 不得明文落盘。
 - `CapabilityOutboxStore` 的 byte-key 构造器只接受 32 bytes；Android Keystore 生成器继续固定 `setKeySize(256)`，不能以既有 128/192-bit 兼容分支削弱本切片。
 - 单 capability outbox 最多 10,000 events，单 event wire 最多 4 MiB；满容量拒绝新记录，不驱逐旧记录，不推进 cursor。
@@ -45,18 +45,18 @@
 ```text
 apps/android/
   capability-ports/
-    src/main/kotlin/com/agentlife/capability/CallLogCapabilityContracts.kt
-    src/main/kotlin/com/agentlife/capability/CapabilityPorts.kt
-    src/main/kotlin/com/agentlife/capability/CapabilityProviderContracts.kt
-    src/test/kotlin/com/agentlife/capability/CallLogCapabilityContractsTest.kt
-    src/test/kotlin/com/agentlife/capability/LocalCallLogAutoSendAuthorizerTest.kt
+    src/main/kotlin/com/openandroidintelligence/capability/CallLogCapabilityContracts.kt
+    src/main/kotlin/com/openandroidintelligence/capability/CapabilityPorts.kt
+    src/main/kotlin/com/openandroidintelligence/capability/CapabilityProviderContracts.kt
+    src/test/kotlin/com/openandroidintelligence/capability/CallLogCapabilityContractsTest.kt
+    src/test/kotlin/com/openandroidintelligence/capability/LocalCallLogAutoSendAuthorizerTest.kt
   capability-sync-runtime/
     build.gradle.kts
-    src/main/kotlin/com/agentlife/sync/CapabilityOutboxDispatcher.kt
-    src/test/kotlin/com/agentlife/sync/CapabilityOutboxDispatcherTest.kt
+    src/main/kotlin/com/openandroidintelligence/sync/CapabilityOutboxDispatcher.kt
+    src/test/kotlin/com/openandroidintelligence/sync/CapabilityOutboxDispatcherTest.kt
   call-log-collector/
     build.gradle.kts
-    src/main/kotlin/com/agentlife/calls/
+    src/main/kotlin/com/openandroidintelligence/calls/
       CallLogReader.kt
       AndroidCallLogReader.kt
       AndroidCallLogAvailability.kt
@@ -70,7 +70,7 @@ apps/android/
       CallLogSyncScheduler.kt
       CallLogSyncJobService.kt
       CallLogRevocationCoordinator.kt
-    src/test/kotlin/com/agentlife/calls/
+    src/test/kotlin/com/openandroidintelligence/calls/
       CallLogTestFixtures.kt
       AndroidCallLogReaderTest.kt
       AndroidCallLogAvailabilityTest.kt
@@ -83,23 +83,23 @@ apps/android/
       CallLogSyncJobServiceTest.kt
       CallLogRevocationCoordinatorTest.kt
   core-model/
-    src/main/kotlin/com/agentlife/core/model/CapabilityOutboxContracts.kt
-    src/test/kotlin/com/agentlife/core/model/CapabilityOutboxContractsTest.kt
+    src/main/kotlin/com/openandroidintelligence/core/model/CapabilityOutboxContracts.kt
+    src/test/kotlin/com/openandroidintelligence/core/model/CapabilityOutboxContractsTest.kt
   encrypted-store/
-    src/main/kotlin/com/agentlife/encrypted/store/AesGcmEncryptedBlobStore.kt
-    src/main/kotlin/com/agentlife/encrypted/store/AndroidKeystoreOutboxKeyProvider.kt
-    src/main/kotlin/com/agentlife/encrypted/store/CapabilityOutboxStore.kt
-    src/test/kotlin/com/agentlife/encrypted/store/AesGcmEncryptedBlobStoreTest.kt
-    src/test/kotlin/com/agentlife/encrypted/store/CapabilityOutboxStoreTest.kt
-  sms-collector/src/main/kotlin/com/agentlife/sms/SmsAutoSyncCoordinator.kt
+    src/main/kotlin/com/openandroidintelligence/encrypted/store/AesGcmEncryptedBlobStore.kt
+    src/main/kotlin/com/openandroidintelligence/encrypted/store/AndroidKeystoreOutboxKeyProvider.kt
+    src/main/kotlin/com/openandroidintelligence/encrypted/store/CapabilityOutboxStore.kt
+    src/test/kotlin/com/openandroidintelligence/encrypted/store/AesGcmEncryptedBlobStoreTest.kt
+    src/test/kotlin/com/openandroidintelligence/encrypted/store/CapabilityOutboxStoreTest.kt
+  sms-collector/src/main/kotlin/com/openandroidintelligence/sms/SmsAutoSyncCoordinator.kt
   app/
     src/main/AndroidManifest.xml
-    src/main/kotlin/com/agentlife/mobile/CallLogComposition.kt
-    src/main/kotlin/com/agentlife/mobile/CallLogSettingsState.kt
-    src/main/kotlin/com/agentlife/mobile/AgentLifeApplication.kt
-    src/main/kotlin/com/agentlife/mobile/MainActivity.kt
-    src/test/kotlin/com/agentlife/mobile/CallLogCompositionTest.kt
-    src/test/kotlin/com/agentlife/mobile/CallLogSettingsStateTest.kt
+    src/main/kotlin/com/openandroidintelligence/mobile/CallLogComposition.kt
+    src/main/kotlin/com/openandroidintelligence/mobile/CallLogSettingsState.kt
+    src/main/kotlin/com/openandroidintelligence/mobile/OpenAndroidIntelligenceApplication.kt
+    src/main/kotlin/com/openandroidintelligence/mobile/MainActivity.kt
+    src/test/kotlin/com/openandroidintelligence/mobile/CallLogCompositionTest.kt
+    src/test/kotlin/com/openandroidintelligence/mobile/CallLogSettingsStateTest.kt
   tools/test_call_log_collector_static.py
 mvp-contract/
   tsconfig.json
@@ -130,12 +130,12 @@ File responsibilities are deliberately narrow:
 
 **Files:**
 
-- Create: `apps/android/capability-ports/src/main/kotlin/com/agentlife/capability/CallLogCapabilityContracts.kt`
-- Modify: `apps/android/capability-ports/src/main/kotlin/com/agentlife/capability/CapabilityPorts.kt`
-- Modify: `apps/android/capability-ports/src/main/kotlin/com/agentlife/capability/CapabilityProviderContracts.kt`
-- Create: `apps/android/capability-ports/src/test/kotlin/com/agentlife/capability/CallLogCapabilityContractsTest.kt`
-- Create: `apps/android/capability-ports/src/test/kotlin/com/agentlife/capability/LocalCallLogAutoSendAuthorizerTest.kt`
-- Modify: `apps/android/capability-ports/src/test/kotlin/com/agentlife/capability/CapabilityProviderContractsTest.kt`
+- Create: `apps/android/capability-ports/src/main/kotlin/com/openandroidintelligence/capability/CallLogCapabilityContracts.kt`
+- Modify: `apps/android/capability-ports/src/main/kotlin/com/openandroidintelligence/capability/CapabilityPorts.kt`
+- Modify: `apps/android/capability-ports/src/main/kotlin/com/openandroidintelligence/capability/CapabilityProviderContracts.kt`
+- Create: `apps/android/capability-ports/src/test/kotlin/com/openandroidintelligence/capability/CallLogCapabilityContractsTest.kt`
+- Create: `apps/android/capability-ports/src/test/kotlin/com/openandroidintelligence/capability/LocalCallLogAutoSendAuthorizerTest.kt`
+- Modify: `apps/android/capability-ports/src/test/kotlin/com/openandroidintelligence/capability/CapabilityProviderContractsTest.kt`
 - Modify: `apps/android/tools/test_capability_ports_static.py`
 
 **Interfaces:**
@@ -202,11 +202,11 @@ Add tests for negative history start, max 0/10,001, all enum entries, four inter
 - [ ] **Step 2: Run the focused tests and confirm RED**
 
 ```bash
-cd /home/djbd/项目/Agent-life/apps/android
+cd /home/djbd/项目/open-android-intelligence/apps/android
 ./gradlew --no-daemon --console=plain \
   :capability-ports:testDebugUnitTest \
-  --tests 'com.agentlife.capability.CallLogCapabilityContractsTest' \
-  --tests 'com.agentlife.capability.LocalCallLogAutoSendAuthorizerTest'
+  --tests 'com.openandroidintelligence.capability.CallLogCapabilityContractsTest' \
+  --tests 'com.openandroidintelligence.capability.LocalCallLogAutoSendAuthorizerTest'
 ```
 
 Expected: compilation fails because the call-specific types and normalizers do not exist.
@@ -323,9 +323,9 @@ It returns null unless availability is READY, capability/filter are exact, `auto
 - [ ] **Step 5: Run contract and static regressions**
 
 ```bash
-cd /home/djbd/项目/Agent-life/apps/android
+cd /home/djbd/项目/open-android-intelligence/apps/android
 ./gradlew --no-daemon --console=plain :capability-ports:testDebugUnitTest
-cd /home/djbd/项目/Agent-life
+cd /home/djbd/项目/open-android-intelligence
 python3 -m unittest apps/android/tools/test_capability_ports_static.py
 ```
 
@@ -358,7 +358,7 @@ Expected: staged files match this task only and the Chinese commit succeeds.
 
 **Interfaces:**
 
-- Produces registered module `:call-log-collector`, namespace `com.agentlife.calls`, and the only new phone permission `READ_CALL_LOG`.
+- Produces registered module `:call-log-collector`, namespace `com.openandroidintelligence.calls`, and the only new phone permission `READ_CALL_LOG`.
 - Consumes `:capability-ports`, `:core-model` and coroutines; no transport dependency is permitted.
 
 - [ ] **Step 1: Write failing registration/manifest tests**
@@ -382,7 +382,7 @@ Assert module registration/App dependency, forbid the ten phone permissions, and
 - [ ] **Step 2: Run static tests and confirm RED**
 
 ```bash
-cd /home/djbd/项目/Agent-life
+cd /home/djbd/项目/open-android-intelligence
 python3 -m unittest \
   apps/android/tools/test_call_log_collector_static.py \
   apps/android/tools/test_sms_collector_static.py
@@ -397,7 +397,7 @@ plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.android")
 }
-android { namespace = "com.agentlife.calls" }
+android { namespace = "com.openandroidintelligence.calls" }
 dependencies {
     implementation(project(":capability-ports"))
     implementation(project(":core-model"))
@@ -417,7 +417,7 @@ Do not add a role, receiver or service yet. Add call-log-collector to the root f
 - [ ] **Step 4: Verify module and manifest scaffolding**
 
 ```bash
-cd /home/djbd/项目/Agent-life
+cd /home/djbd/项目/open-android-intelligence
 python3 -m unittest \
   apps/android/tools/test_call_log_collector_static.py \
   apps/android/tools/test_sms_collector_static.py
@@ -430,7 +430,7 @@ Expected: both static tests pass and the empty module test task completes.
 - [ ] **Step 5: Commit the module boundary**
 
 ```bash
-cd /home/djbd/项目/Agent-life
+cd /home/djbd/项目/open-android-intelligence
 git add \
   apps/android/settings.gradle.kts \
   apps/android/app/build.gradle.kts \
@@ -452,11 +452,11 @@ Expected: only the seven listed module/manifest/static files are committed.
 
 **Files:**
 
-- Create: `apps/android/call-log-collector/src/main/kotlin/com/agentlife/calls/CallLogReader.kt`
-- Create: `apps/android/call-log-collector/src/main/kotlin/com/agentlife/calls/AndroidCallLogReader.kt`
-- Create: `apps/android/call-log-collector/src/main/kotlin/com/agentlife/calls/AndroidCallLogAvailability.kt`
-- Create: `apps/android/call-log-collector/src/test/kotlin/com/agentlife/calls/AndroidCallLogReaderTest.kt`
-- Create: `apps/android/call-log-collector/src/test/kotlin/com/agentlife/calls/AndroidCallLogAvailabilityTest.kt`
+- Create: `apps/android/call-log-collector/src/main/kotlin/com/openandroidintelligence/calls/CallLogReader.kt`
+- Create: `apps/android/call-log-collector/src/main/kotlin/com/openandroidintelligence/calls/AndroidCallLogReader.kt`
+- Create: `apps/android/call-log-collector/src/main/kotlin/com/openandroidintelligence/calls/AndroidCallLogAvailability.kt`
+- Create: `apps/android/call-log-collector/src/test/kotlin/com/openandroidintelligence/calls/AndroidCallLogReaderTest.kt`
+- Create: `apps/android/call-log-collector/src/test/kotlin/com/openandroidintelligence/calls/AndroidCallLogAvailabilityTest.kt`
 - Modify: `apps/android/tools/test_call_log_collector_static.py`
 
 **Interfaces:**
@@ -492,11 +492,11 @@ Inject enabled/provider/permission/probe seams. Assert Disabled, PlatformUnsuppo
 - [ ] **Step 3: Run focused tests and confirm RED**
 
 ```bash
-cd /home/djbd/项目/Agent-life/apps/android
+cd /home/djbd/项目/open-android-intelligence/apps/android
 ./gradlew --no-daemon --console=plain \
   :call-log-collector:testDebugUnitTest \
-  --tests 'com.agentlife.calls.AndroidCallLogReaderTest' \
-  --tests 'com.agentlife.calls.AndroidCallLogAvailabilityTest'
+  --tests 'com.openandroidintelligence.calls.AndroidCallLogReaderTest' \
+  --tests 'com.openandroidintelligence.calls.AndroidCallLogAvailabilityTest'
 ```
 
 Expected: compilation fails because the call reader, query and availability types do not exist.
@@ -595,9 +595,9 @@ An internal constructor accepts four zero-argument test seams in the same order.
 Static tests assert the sole URI, LIMIT_PARAM_KEY, six fields, no SQL LIMIT, no insert/update/delete/bulkInsert, no forbidden CallLog URIs, phone managers/listeners/services, sockets/URLs, Accessibility/MediaProjection/process APIs.
 
 ```bash
-cd /home/djbd/项目/Agent-life/apps/android
+cd /home/djbd/项目/open-android-intelligence/apps/android
 ./gradlew --no-daemon --console=plain :call-log-collector:testDebugUnitTest
-cd /home/djbd/项目/Agent-life
+cd /home/djbd/项目/open-android-intelligence
 python3 -m unittest apps/android/tools/test_call_log_collector_static.py
 ```
 
@@ -620,8 +620,8 @@ Expected: only call reader/availability source, tests and its static gate are co
 
 **Files:**
 
-- Create: `apps/android/call-log-collector/src/main/kotlin/com/agentlife/calls/CallLogSettingsAuthority.kt`
-- Create: `apps/android/call-log-collector/src/test/kotlin/com/agentlife/calls/CallLogSettingsAuthorityTest.kt`
+- Create: `apps/android/call-log-collector/src/main/kotlin/com/openandroidintelligence/calls/CallLogSettingsAuthority.kt`
+- Create: `apps/android/call-log-collector/src/test/kotlin/com/openandroidintelligence/calls/CallLogSettingsAuthorityTest.kt`
 
 **Interfaces:**
 
@@ -652,10 +652,10 @@ fun revoking_target_survives_restart_and_never_exposes_a_grant() {
 - [ ] **Step 2: Run focused test and confirm RED**
 
 ```bash
-cd /home/djbd/项目/Agent-life/apps/android
+cd /home/djbd/项目/open-android-intelligence/apps/android
 ./gradlew --no-daemon --console=plain \
   :call-log-collector:testDebugUnitTest \
-  --tests 'com.agentlife.calls.CallLogSettingsAuthorityTest'
+  --tests 'com.openandroidintelligence.calls.CallLogSettingsAuthorityTest'
 ```
 
 Expected: compilation fails because the call settings policy, phases and authority do not exist.
@@ -727,7 +727,7 @@ class PersistentCallLogSettingsAuthority(
 Encode:
 
 ```text
-magic AGENT_LIFE_CALL_SETTINGS_V1
+magic OPEN_ANDROID_INTELLIGENCE_CALL_SETTINGS_V1
 phase tag 0 disabled / 1 enabled / 2 revoking
 authorization revision as ULong bits
 epochExhausted boolean
@@ -739,7 +739,7 @@ Policy encoding order is optional history start, max records, four-bit canonical
 - [ ] **Step 5: Run the settings authority suite**
 
 ```bash
-cd /home/djbd/项目/Agent-life/apps/android
+cd /home/djbd/项目/open-android-intelligence/apps/android
 ./gradlew --no-daemon --console=plain :call-log-collector:testDebugUnitTest
 ```
 
@@ -748,7 +748,7 @@ Expected: fresh, Enabled, Revoking, corruption and restart tests all pass.
 - [ ] **Step 6: Commit the settings authority**
 
 ```bash
-cd /home/djbd/项目/Agent-life
+cd /home/djbd/项目/open-android-intelligence
 git add apps/android/call-log-collector/src
 git diff --cached --check
 git diff --cached --name-only
@@ -763,15 +763,15 @@ Expected: the commit contains only Task 4 production/test files.
 
 **Files:**
 
-- Modify: `apps/android/core-model/src/main/kotlin/com/agentlife/core/model/CapabilityOutboxContracts.kt`
-- Create: `apps/android/core-model/src/test/kotlin/com/agentlife/core/model/CapabilityOutboxContractsTest.kt`
-- Create: `apps/android/encrypted-store/src/main/kotlin/com/agentlife/encrypted/store/AesGcmEncryptedBlobStore.kt`
-- Modify: `apps/android/encrypted-store/src/main/kotlin/com/agentlife/encrypted/store/AndroidKeystoreOutboxKeyProvider.kt`
-- Modify: `apps/android/encrypted-store/src/main/kotlin/com/agentlife/encrypted/store/CapabilityOutboxStore.kt`
-- Create: `apps/android/encrypted-store/src/test/kotlin/com/agentlife/encrypted/store/AesGcmEncryptedBlobStoreTest.kt`
-- Modify: `apps/android/encrypted-store/src/test/kotlin/com/agentlife/encrypted/store/CapabilityOutboxStoreTest.kt`
-- Create: `apps/android/call-log-collector/src/main/kotlin/com/agentlife/calls/CallLogSyncState.kt`
-- Create: `apps/android/call-log-collector/src/test/kotlin/com/agentlife/calls/CallLogSyncStateTest.kt`
+- Modify: `apps/android/core-model/src/main/kotlin/com/openandroidintelligence/core/model/CapabilityOutboxContracts.kt`
+- Create: `apps/android/core-model/src/test/kotlin/com/openandroidintelligence/core/model/CapabilityOutboxContractsTest.kt`
+- Create: `apps/android/encrypted-store/src/main/kotlin/com/openandroidintelligence/encrypted/store/AesGcmEncryptedBlobStore.kt`
+- Modify: `apps/android/encrypted-store/src/main/kotlin/com/openandroidintelligence/encrypted/store/AndroidKeystoreOutboxKeyProvider.kt`
+- Modify: `apps/android/encrypted-store/src/main/kotlin/com/openandroidintelligence/encrypted/store/CapabilityOutboxStore.kt`
+- Create: `apps/android/encrypted-store/src/test/kotlin/com/openandroidintelligence/encrypted/store/AesGcmEncryptedBlobStoreTest.kt`
+- Modify: `apps/android/encrypted-store/src/test/kotlin/com/openandroidintelligence/encrypted/store/CapabilityOutboxStoreTest.kt`
+- Create: `apps/android/call-log-collector/src/main/kotlin/com/openandroidintelligence/calls/CallLogSyncState.kt`
+- Create: `apps/android/call-log-collector/src/test/kotlin/com/openandroidintelligence/calls/CallLogSyncStateTest.kt`
 - Modify: `apps/android/call-log-collector/build.gradle.kts`
 
 **Interfaces:**
@@ -819,12 +819,12 @@ Also prove `resetWithRotatedKey(target)` succeeds from an uninitialized store, f
 - [ ] **Step 3: Run focused tests and confirm RED**
 
 ```bash
-cd /home/djbd/项目/Agent-life/apps/android
+cd /home/djbd/项目/open-android-intelligence/apps/android
 ./gradlew --no-daemon --console=plain \
   :encrypted-store:testDebugUnitTest \
   :call-log-collector:testDebugUnitTest \
-  --tests 'com.agentlife.encrypted.store.AesGcmEncryptedBlobStoreTest' \
-  --tests 'com.agentlife.calls.CallLogSyncStateTest'
+  --tests 'com.openandroidintelligence.encrypted.store.AesGcmEncryptedBlobStoreTest' \
+  --tests 'com.openandroidintelligence.calls.CallLogSyncStateTest'
 ```
 
 Expected: new key/blob/state APIs do not compile.
@@ -883,14 +883,14 @@ class EncryptedCallLogSyncStateStore(
 ) : CallLogSyncStateStore
 ```
 
-Encode magic `AGENT_LIFE_CALL_SYNC_STATE_V1`, source epoch raw bits, nullable cursor and policy revision. Construction does not eagerly decrypt state. `snapshot()` performs authenticated restore and missing file returns null; authenticated/format failure throws `CallLogSyncStateCorrupted("CALL_LOG_SYNC_STATE_CORRUPTED")`, never an empty cursor. `resetWithRotatedKey` never reads or decodes old ciphertext: it idempotently deletes the old alias if present, clears ciphertext if present, creates a fresh key, writes the exact persisted target and updates memory only after success. Repeating it after any partial failure is safe and cannot derive a different epoch/revision.
+Encode magic `OPEN_ANDROID_INTELLIGENCE_CALL_SYNC_STATE_V1`, source epoch raw bits, nullable cursor and policy revision. Construction does not eagerly decrypt state. `snapshot()` performs authenticated restore and missing file returns null; authenticated/format failure throws `CallLogSyncStateCorrupted("CALL_LOG_SYNC_STATE_CORRUPTED")`, never an empty cursor. `resetWithRotatedKey` never reads or decodes old ciphertext: it idempotently deletes the old alias if present, clears ciphertext if present, creates a fresh key, writes the exact persisted target and updates memory only after success. Repeating it after any partial failure is safe and cannot derive a different epoch/revision.
 
 Add `implementation(project(":encrypted-store"))` to `call-log-collector/build.gradle.kts`; no other new dependency belongs in this task.
 
 - [ ] **Step 6: Run encrypted-state regressions**
 
 ```bash
-cd /home/djbd/项目/Agent-life/apps/android
+cd /home/djbd/项目/open-android-intelligence/apps/android
 ./gradlew --no-daemon --console=plain \
   :core-model:testDebugUnitTest \
   :encrypted-store:testDebugUnitTest \
@@ -903,7 +903,7 @@ Expected: core, encrypted-store, SMS and Call Log tests all pass.
 - [ ] **Step 7: Commit encrypted state support**
 
 ```bash
-cd /home/djbd/项目/Agent-life
+cd /home/djbd/项目/open-android-intelligence
 git add apps/android/core-model apps/android/encrypted-store apps/android/call-log-collector
 git diff --cached --check
 git diff --cached --name-only
@@ -918,10 +918,10 @@ Expected: the commit contains only Task 5 contracts, stores, dependencies and te
 
 **Files:**
 
-- Create: `apps/android/call-log-collector/src/main/kotlin/com/agentlife/calls/AndroidCallLogCapabilityProvider.kt`
-- Create: `apps/android/call-log-collector/src/main/kotlin/com/agentlife/calls/CallLogAudit.kt`
-- Create: `apps/android/call-log-collector/src/test/kotlin/com/agentlife/calls/CallLogTestFixtures.kt`
-- Create: `apps/android/call-log-collector/src/test/kotlin/com/agentlife/calls/AndroidCallLogCapabilityProviderTest.kt`
+- Create: `apps/android/call-log-collector/src/main/kotlin/com/openandroidintelligence/calls/AndroidCallLogCapabilityProvider.kt`
+- Create: `apps/android/call-log-collector/src/main/kotlin/com/openandroidintelligence/calls/CallLogAudit.kt`
+- Create: `apps/android/call-log-collector/src/test/kotlin/com/openandroidintelligence/calls/CallLogTestFixtures.kt`
+- Create: `apps/android/call-log-collector/src/test/kotlin/com/openandroidintelligence/calls/AndroidCallLogCapabilityProviderTest.kt`
 
 **Interfaces:**
 
@@ -950,10 +950,10 @@ Prove:
 - [ ] **Step 2: Run focused test and confirm RED**
 
 ```bash
-cd /home/djbd/项目/Agent-life/apps/android
+cd /home/djbd/项目/open-android-intelligence/apps/android
 ./gradlew --no-daemon --console=plain \
   :call-log-collector:testDebugUnitTest \
-  --tests 'com.agentlife.calls.AndroidCallLogCapabilityProviderTest'
+  --tests 'com.openandroidintelligence.calls.AndroidCallLogCapabilityProviderTest'
 ```
 
 Expected: compilation fails because the typed call provider, failures and audit values do not exist.
@@ -1046,7 +1046,7 @@ Task 1 validation makes this conversion total; no other production code reparses
 - [ ] **Step 5: Run provider and contract regressions**
 
 ```bash
-cd /home/djbd/项目/Agent-life/apps/android
+cd /home/djbd/项目/open-android-intelligence/apps/android
 ./gradlew --no-daemon --console=plain \
   :capability-ports:testDebugUnitTest \
   :call-log-collector:testDebugUnitTest
@@ -1057,7 +1057,7 @@ Expected: all authorization, provider, ordering, failure and audit tests pass.
 - [ ] **Step 6: Commit the typed provider**
 
 ```bash
-cd /home/djbd/项目/Agent-life
+cd /home/djbd/项目/open-android-intelligence
 git add apps/android/call-log-collector/src
 git diff --cached --check
 git diff --cached --name-only
@@ -1078,13 +1078,13 @@ Expected: only Task 6 production/test files are committed.
 - Create: `mvp-contract/tsconfig.json`
 - Modify: `mvp-contract/src/wire-codec.ts`
 - Create: `mvp-contract/test/call-contract.test.ts`
-- Create: `apps/android/call-log-collector/src/main/kotlin/com/agentlife/calls/CallLogWireCodec.kt`
-- Create: `apps/android/call-log-collector/src/main/kotlin/com/agentlife/calls/StrictCallLogWireDecoder.kt`
-- Create: `apps/android/call-log-collector/src/test/kotlin/com/agentlife/calls/CallLogWireCodecTest.kt`
+- Create: `apps/android/call-log-collector/src/main/kotlin/com/openandroidintelligence/calls/CallLogWireCodec.kt`
+- Create: `apps/android/call-log-collector/src/main/kotlin/com/openandroidintelligence/calls/StrictCallLogWireDecoder.kt`
+- Create: `apps/android/call-log-collector/src/test/kotlin/com/openandroidintelligence/calls/CallLogWireCodecTest.kt`
 
 **Interfaces:**
 
-- Produces schema ID `urn:agent-life:mvp:call-record:v1`, TypeScript `WireCallRecord`/encode/validate, Kotlin `CallLogEventCodec`, deterministic codec and redacted `DecodedCallLogRecord`.
+- Produces schema ID `urn:open-android-intelligence:mvp:call-record:v1`, TypeScript `WireCallRecord`/encode/validate, Kotlin `CallLogEventCodec`, deterministic codec and redacted `DecodedCallLogRecord`.
 - Consumes CallsPayload, source epoch, policy revision and CallLogCursor.
 
 - [ ] **Step 1: Write TypeScript/schema RED tests**
@@ -1111,13 +1111,13 @@ Assert exact UTF-8 golden bytes and fixed order. Reject duplicate root/nested ke
 - [ ] **Step 3: Run both focused suites and confirm RED**
 
 ```bash
-cd /home/djbd/项目/Agent-life
+cd /home/djbd/项目/open-android-intelligence
 ./tools/run-node24 npx --no-install vitest --root . run \
   mvp-contract/test/call-contract.test.ts
 cd apps/android
 ./gradlew --no-daemon --console=plain \
   :call-log-collector:testDebugUnitTest \
-  --tests 'com.agentlife.calls.CallLogWireCodecTest'
+  --tests 'com.openandroidintelligence.calls.CallLogWireCodecTest'
 ```
 
 Expected: TypeScript reports missing call exports/schema and Kotlin reports missing codec/decoder APIs.
@@ -1197,7 +1197,7 @@ TypeScript validates both shared fixture files. Kotlin finds the same files by w
 - [ ] **Step 8: Run cross-language wire verification**
 
 ```bash
-cd /home/djbd/项目/Agent-life
+cd /home/djbd/项目/open-android-intelligence
 ./tools/run-node24 npx --no-install vitest --root . run \
   mvp-contract/test/call-contract.test.ts
 ./tools/run-node24 npx --no-install tsc --noEmit -p mvp-contract/tsconfig.json
@@ -1210,7 +1210,7 @@ Expected: schemas, strict TypeScript/Kotlin decoders, fixtures and typecheck all
 - [ ] **Step 9: Commit the wire contract**
 
 ```bash
-cd /home/djbd/项目/Agent-life
+cd /home/djbd/项目/open-android-intelligence
 git add mvp-contract apps/android/call-log-collector/src
 git diff --cached --check
 git diff --cached --name-only
@@ -1226,15 +1226,15 @@ Expected: only Task 7 schema, fixtures, codecs and tests are committed.
 **Files:**
 
 - Create: `apps/android/capability-sync-runtime/build.gradle.kts`
-- Create: `apps/android/capability-sync-runtime/src/main/kotlin/com/agentlife/sync/CapabilityOutboxDispatcher.kt`
-- Create: `apps/android/capability-sync-runtime/src/test/kotlin/com/agentlife/sync/CapabilityOutboxDispatcherTest.kt`
+- Create: `apps/android/capability-sync-runtime/src/main/kotlin/com/openandroidintelligence/sync/CapabilityOutboxDispatcher.kt`
+- Create: `apps/android/capability-sync-runtime/src/test/kotlin/com/openandroidintelligence/sync/CapabilityOutboxDispatcherTest.kt`
 - Modify: `apps/android/settings.gradle.kts`
 - Modify: `apps/android/gradle/mvp-forbidden-surfaces.gradle.kts`
 - Modify: `apps/android/sms-collector/build.gradle.kts`
-- Modify: `apps/android/sms-collector/src/main/kotlin/com/agentlife/sms/SmsAutoSyncCoordinator.kt`
-- Modify: `apps/android/sms-collector/src/test/kotlin/com/agentlife/sms/SmsAutoSyncCoordinatorTest.kt`
+- Modify: `apps/android/sms-collector/src/main/kotlin/com/openandroidintelligence/sms/SmsAutoSyncCoordinator.kt`
+- Modify: `apps/android/sms-collector/src/test/kotlin/com/openandroidintelligence/sms/SmsAutoSyncCoordinatorTest.kt`
 - Modify: `apps/android/app/build.gradle.kts`
-- Modify: `apps/android/app/src/main/kotlin/com/agentlife/mobile/AgentLifeApplication.kt`
+- Modify: `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/OpenAndroidIntelligenceApplication.kt`
 
 **Interfaces:**
 
@@ -1249,7 +1249,7 @@ Test successful ordered ACK deletion; mismatched capability retained while a lat
 - [ ] **Step 2: Run new module and confirm RED**
 
 ```bash
-cd /home/djbd/项目/Agent-life/apps/android
+cd /home/djbd/项目/open-android-intelligence/apps/android
 ./gradlew --no-daemon --console=plain :capability-sync-runtime:testDebugUnitTest
 ```
 
@@ -1308,12 +1308,12 @@ Remove SMS binding/gate/private dispatcher types. Construct generic dispatcher f
 - [ ] **Step 5: Run dispatcher, SMS and App regressions**
 
 ```bash
-cd /home/djbd/项目/Agent-life/apps/android
+cd /home/djbd/项目/open-android-intelligence/apps/android
 ./gradlew --no-daemon --console=plain \
   :capability-sync-runtime:testDebugUnitTest \
   :sms-collector:testDebugUnitTest \
   :app:testDebugUnitTest
-cd /home/djbd/项目/Agent-life
+cd /home/djbd/项目/open-android-intelligence
 python3 -m unittest \
   apps/android/tools/test_transport_boundary.py \
   apps/android/tools/test_sms_collector_static.py
@@ -1330,7 +1330,7 @@ git add \
   apps/android/gradle/mvp-forbidden-surfaces.gradle.kts \
   apps/android/sms-collector \
   apps/android/app/build.gradle.kts \
-  apps/android/app/src/main/kotlin/com/agentlife/mobile/AgentLifeApplication.kt
+  apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/OpenAndroidIntelligenceApplication.kt
 git diff --cached --check
 git diff --cached --name-only
 git commit -m "重构: 抽取能力 outbox 投递器"
@@ -1344,8 +1344,8 @@ Expected: only the new runtime, SMS migration, build registration and required A
 
 **Files:**
 
-- Create: `apps/android/call-log-collector/src/main/kotlin/com/agentlife/calls/CallLogAutoSyncCoordinator.kt`
-- Create: `apps/android/call-log-collector/src/test/kotlin/com/agentlife/calls/CallLogAutoSyncCoordinatorTest.kt`
+- Create: `apps/android/call-log-collector/src/main/kotlin/com/openandroidintelligence/calls/CallLogAutoSyncCoordinator.kt`
+- Create: `apps/android/call-log-collector/src/test/kotlin/com/openandroidintelligence/calls/CallLogAutoSyncCoordinatorTest.kt`
 - Modify: `apps/android/call-log-collector/build.gradle.kts`
 
 **Interfaces:**
@@ -1374,10 +1374,10 @@ Cover every crash cut: query before enqueue, enqueue before state, state before 
 - [ ] **Step 2: Run focused test and confirm RED**
 
 ```bash
-cd /home/djbd/项目/Agent-life/apps/android
+cd /home/djbd/项目/open-android-intelligence/apps/android
 ./gradlew --no-daemon --console=plain \
   :call-log-collector:testDebugUnitTest \
-  --tests 'com.agentlife.calls.CallLogAutoSyncCoordinatorTest'
+  --tests 'com.openandroidintelligence.calls.CallLogAutoSyncCoordinatorTest'
 ```
 
 Expected: compilation fails because the call coordinator/result and dispatcher integration do not exist.
@@ -1472,7 +1472,7 @@ Add `implementation(project(":capability-sync-runtime"))` to `call-log-collector
 - [ ] **Step 7: Run coordinator regressions**
 
 ```bash
-cd /home/djbd/项目/Agent-life/apps/android
+cd /home/djbd/项目/open-android-intelligence/apps/android
 ./gradlew --no-daemon --console=plain \
   :capability-sync-runtime:testDebugUnitTest \
   :encrypted-store:testDebugUnitTest \
@@ -1484,7 +1484,7 @@ Expected: all three modules pass, including every reconciliation crash cut and e
 - [ ] **Step 8: Commit the durable coordinator**
 
 ```bash
-cd /home/djbd/项目/Agent-life
+cd /home/djbd/项目/open-android-intelligence
 git add apps/android/call-log-collector
 git diff --cached --check
 git diff --cached --name-only
@@ -1499,10 +1499,10 @@ Expected: only the call coordinator, its tests and the call module dependency ch
 
 **Files:**
 
-- Create: `apps/android/call-log-collector/src/main/kotlin/com/agentlife/calls/CallLogSyncScheduler.kt`
-- Create: `apps/android/call-log-collector/src/main/kotlin/com/agentlife/calls/CallLogSyncJobService.kt`
-- Create: `apps/android/call-log-collector/src/test/kotlin/com/agentlife/calls/CallLogSyncSchedulerTest.kt`
-- Create: `apps/android/call-log-collector/src/test/kotlin/com/agentlife/calls/CallLogSyncJobServiceTest.kt`
+- Create: `apps/android/call-log-collector/src/main/kotlin/com/openandroidintelligence/calls/CallLogSyncScheduler.kt`
+- Create: `apps/android/call-log-collector/src/main/kotlin/com/openandroidintelligence/calls/CallLogSyncJobService.kt`
+- Create: `apps/android/call-log-collector/src/test/kotlin/com/openandroidintelligence/calls/CallLogSyncSchedulerTest.kt`
+- Create: `apps/android/call-log-collector/src/test/kotlin/com/openandroidintelligence/calls/CallLogSyncJobServiceTest.kt`
 - Modify: `apps/android/app/src/main/AndroidManifest.xml`
 - Modify: `apps/android/tools/test_call_log_collector_static.py`
 
@@ -1518,11 +1518,11 @@ Assert MANUAL cancels; 15/30/60 map to 900,000/1,800,000/3,600,000 ms; JobInfo a
 - [ ] **Step 2: Run focused tests and confirm RED**
 
 ```bash
-cd /home/djbd/项目/Agent-life/apps/android
+cd /home/djbd/项目/open-android-intelligence/apps/android
 ./gradlew --no-daemon --console=plain \
   :call-log-collector:testDebugUnitTest \
-  --tests 'com.agentlife.calls.CallLogSyncSchedulerTest' \
-  --tests 'com.agentlife.calls.CallLogSyncJobServiceTest'
+  --tests 'com.openandroidintelligence.calls.CallLogSyncSchedulerTest' \
+  --tests 'com.openandroidintelligence.calls.CallLogSyncJobServiceTest'
 ```
 
 Expected: compilation fails because the call scheduler, runtime registry and JobService do not exist.
@@ -1592,7 +1592,7 @@ The JobService follows the SMS lifecycle with its own scope, returns START_NOT_S
 
 ```xml
 <service
-    android:name="com.agentlife.calls.CallLogSyncJobService"
+    android:name="com.openandroidintelligence.calls.CallLogSyncJobService"
     android:exported="false"
     android:permission="android.permission.BIND_JOB_SERVICE" />
 ```
@@ -1602,9 +1602,9 @@ Assert no RECEIVE_BOOT_COMPLETED, receiver or `setPersisted(true)`.
 - [ ] **Step 6: Run scheduler and static regressions**
 
 ```bash
-cd /home/djbd/项目/Agent-life/apps/android
+cd /home/djbd/项目/open-android-intelligence/apps/android
 ./gradlew --no-daemon --console=plain :call-log-collector:testDebugUnitTest
-cd /home/djbd/项目/Agent-life
+cd /home/djbd/项目/open-android-intelligence
 python3 -m unittest apps/android/tools/test_call_log_collector_static.py
 ```
 
@@ -1613,7 +1613,7 @@ Expected: scheduler/runtime/JobService tests pass and static checks confirm the 
 - [ ] **Step 7: Commit low-frequency scheduling**
 
 ```bash
-cd /home/djbd/项目/Agent-life
+cd /home/djbd/项目/open-android-intelligence
 git add \
   apps/android/call-log-collector/src \
   apps/android/app/src/main/AndroidManifest.xml \
@@ -1631,8 +1631,8 @@ Expected: only the scheduler/service implementation, protected manifest entry an
 
 **Files:**
 
-- Create: `apps/android/call-log-collector/src/main/kotlin/com/agentlife/calls/CallLogRevocationCoordinator.kt`
-- Create: `apps/android/call-log-collector/src/test/kotlin/com/agentlife/calls/CallLogRevocationCoordinatorTest.kt`
+- Create: `apps/android/call-log-collector/src/main/kotlin/com/openandroidintelligence/calls/CallLogRevocationCoordinator.kt`
+- Create: `apps/android/call-log-collector/src/test/kotlin/com/openandroidintelligence/calls/CallLogRevocationCoordinatorTest.kt`
 
 **Interfaces:**
 
@@ -1659,10 +1659,10 @@ Inject failure after every effect, reconstruct and assert Revoking persists, gra
 - [ ] **Step 2: Run focused test and confirm RED**
 
 ```bash
-cd /home/djbd/项目/Agent-life/apps/android
+cd /home/djbd/项目/open-android-intelligence/apps/android
 ./gradlew --no-daemon --console=plain \
   :call-log-collector:testDebugUnitTest \
-  --tests 'com.agentlife.calls.CallLogRevocationCoordinatorTest'
+  --tests 'com.openandroidintelligence.calls.CallLogRevocationCoordinatorTest'
 ```
 
 Expected: compilation fails because the revocation effects, controller and failure type do not exist.
@@ -1727,7 +1727,7 @@ Inside `withSyncQuiesced`: re-read the exact Revoking target; cancel schedule; i
 - [ ] **Step 6: Run revocation regressions**
 
 ```bash
-cd /home/djbd/项目/Agent-life/apps/android
+cd /home/djbd/项目/open-android-intelligence/apps/android
 ./gradlew --no-daemon --console=plain \
   :call-log-collector:testDebugUnitTest \
   :encrypted-store:testDebugUnitTest \
@@ -1739,7 +1739,7 @@ Expected: all crash-cut, first-enable, replacement, disable, key-erasure and ter
 - [ ] **Step 7: Commit the revocation state machine**
 
 ```bash
-cd /home/djbd/项目/Agent-life
+cd /home/djbd/项目/open-android-intelligence
 git add apps/android/call-log-collector/src
 git diff --cached --check
 git diff --cached --name-only
@@ -1754,12 +1754,12 @@ Expected: only the call revocation controller/effects and their tests are commit
 
 **Files:**
 
-- Create: `apps/android/app/src/main/kotlin/com/agentlife/mobile/CallLogComposition.kt`
-- Create: `apps/android/app/src/main/kotlin/com/agentlife/mobile/CallLogSettingsState.kt`
-- Modify: `apps/android/app/src/main/kotlin/com/agentlife/mobile/AgentLifeApplication.kt`
-- Modify: `apps/android/app/src/main/kotlin/com/agentlife/mobile/MainActivity.kt`
-- Create: `apps/android/app/src/test/kotlin/com/agentlife/mobile/CallLogCompositionTest.kt`
-- Create: `apps/android/app/src/test/kotlin/com/agentlife/mobile/CallLogSettingsStateTest.kt`
+- Create: `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/CallLogComposition.kt`
+- Create: `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/CallLogSettingsState.kt`
+- Modify: `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/OpenAndroidIntelligenceApplication.kt`
+- Modify: `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/MainActivity.kt`
+- Create: `apps/android/app/src/test/kotlin/com/openandroidintelligence/mobile/CallLogCompositionTest.kt`
+- Create: `apps/android/app/src/test/kotlin/com/openandroidintelligence/mobile/CallLogSettingsStateTest.kt`
 - Modify: `apps/android/tools/test_call_log_collector_static.py`
 
 **Interfaces:**
@@ -1771,15 +1771,15 @@ Expected: only the call revocation controller/effects and their tests are commit
 
 ```kotlin
 assertEquals("call-log-outbox-v1.aesgcm", CallLogComposition.CALL_OUTBOX_FILE)
-assertEquals("agent_life_call_log_outbox_v1", CallLogComposition.CALL_OUTBOX_KEY_ALIAS)
+assertEquals("open_android_intelligence_call_log_outbox_v1", CallLogComposition.CALL_OUTBOX_KEY_ALIAS)
 assertEquals("call-log-sync-state-v1.aesgcm", CallLogComposition.CALL_STATE_FILE)
-assertEquals("agent_life_call_log_state_v1", CallLogComposition.CALL_STATE_KEY_ALIAS)
+assertEquals("open_android_intelligence_call_log_state_v1", CallLogComposition.CALL_STATE_KEY_ALIAS)
 assertNotEquals(
     CallLogComposition.CALL_OUTBOX_KEY_ALIAS,
     CallLogComposition.CALL_STATE_KEY_ALIAS,
 )
 assertNotEquals(
-    "agent_life_sms_outbox_v1",
+    "open_android_intelligence_sms_outbox_v1",
     CallLogComposition.CALL_OUTBOX_KEY_ALIAS,
 )
 ```
@@ -1848,11 +1848,11 @@ class CallLogSettingsPresenter(
 - [ ] **Step 3: Run App tests and confirm RED**
 
 ```bash
-cd /home/djbd/项目/Agent-life/apps/android
+cd /home/djbd/项目/open-android-intelligence/apps/android
 ./gradlew --no-daemon --console=plain \
   :app:testDebugUnitTest \
-  --tests 'com.agentlife.mobile.CallLogCompositionTest' \
-  --tests 'com.agentlife.mobile.CallLogSettingsStateTest'
+  --tests 'com.openandroidintelligence.mobile.CallLogCompositionTest' \
+  --tests 'com.openandroidintelligence.mobile.CallLogSettingsStateTest'
 ```
 
 Expected: compilation fails because App composition and pure settings state do not exist.
@@ -1863,9 +1863,9 @@ Expected: compilation fails because App composition and pure settings state do n
 
 ACK verification delegates to the existing authenticated bound verifier with full epoch-bearing event ID. Egress re-reads Enabled phase/exact revision each invocation. Any settings/key/cipher/state construction failure installs deny-first runtime, preserves evidence files and exposes a stable unavailable state.
 
-Composition supplies `CallLogAuditSink { event -> Log.i("AgentLifeCallAudit", event.toString()) }`. Static tests permit only this allowlist event at the Log call site and assert that raw row, payload, cursor, durable event, wire, Provider exception and caught exception variables never reach `Log`.
+Composition supplies `CallLogAuditSink { event -> Log.i("OpenAndroidIntelligenceCallAudit", event.toString()) }`. Static tests permit only this allowlist event at the Log call site and assert that raw row, payload, cursor, durable event, wire, Provider exception and caught exception variables never reach `Log`.
 
-Expose an internal `suspend fun initialize(): CallLogCompositionState`. `AgentLifeApplication.onCreate` first resets the call runtime registry to deny-first, marks composition INITIALIZING, then launches initialization in an application-owned `CoroutineScope(SupervisorJob() + Dispatchers.IO)`. A pending Revoking phase is resumed inside `initialize`; only a successful final Enabled phase installs the active runtime. JobService invocations and UI mutations before completion observe deny-first/unavailable state.
+Expose an internal `suspend fun initialize(): CallLogCompositionState`. `OpenAndroidIntelligenceApplication.onCreate` first resets the call runtime registry to deny-first, marks composition INITIALIZING, then launches initialization in an application-owned `CoroutineScope(SupervisorJob() + Dispatchers.IO)`. A pending Revoking phase is resumed inside `initialize`; only a successful final Enabled phase installs the active runtime. JobService invocations and UI mutations before completion observe deny-first/unavailable state.
 
 - [ ] **Step 5: Expose local-only App access**
 
@@ -1899,11 +1899,11 @@ Assert exact files/aliases, no alias reuse, no assistant-holder dependency, perm
 - [ ] **Step 8: Run App integration and static regressions**
 
 ```bash
-cd /home/djbd/项目/Agent-life/apps/android
+cd /home/djbd/项目/open-android-intelligence/apps/android
 ./gradlew --no-daemon --console=plain \
   :call-log-collector:testDebugUnitTest \
   :app:testDebugUnitTest
-cd /home/djbd/项目/Agent-life
+cd /home/djbd/项目/open-android-intelligence
 python3 -m unittest \
   apps/android/tools/test_call_log_collector_static.py \
   apps/android/tools/test_sms_collector_static.py \
@@ -1915,7 +1915,7 @@ Expected: the fail-closed composition, local-only presenter/UI and all SMS/trans
 - [ ] **Step 9: Commit App composition and local settings**
 
 ```bash
-cd /home/djbd/项目/Agent-life
+cd /home/djbd/项目/open-android-intelligence
 git add apps/android/app/src apps/android/tools/test_call_log_collector_static.py
 git diff --cached --check
 git diff --cached --name-only
@@ -1964,7 +1964,7 @@ Assert SDK-free smoke explicitly includes the call TypeScript test.
 - [ ] **Step 2: Run readiness assertion and confirm RED**
 
 ```bash
-cd /home/djbd/项目/Agent-life
+cd /home/djbd/项目/open-android-intelligence
 python3 -m unittest apps/android/tools/test_call_log_collector_static.py
 ```
 
@@ -1979,7 +1979,7 @@ Update capability readiness: SMS and Calls have adapters; contacts/calendar/sens
 - [ ] **Step 4: Run focused Kotlin acceptance**
 
 ```bash
-cd /home/djbd/项目/Agent-life/apps/android
+cd /home/djbd/项目/open-android-intelligence/apps/android
 ./gradlew --no-daemon --console=plain \
   :capability-ports:testDebugUnitTest \
   :capability-sync-runtime:testDebugUnitTest \
@@ -1992,7 +1992,7 @@ cd /home/djbd/项目/Agent-life/apps/android
 - [ ] **Step 5: Run schema/typecheck acceptance**
 
 ```bash
-cd /home/djbd/项目/Agent-life
+cd /home/djbd/项目/open-android-intelligence
 ./tools/run-node24 npx --no-install vitest --root . run \
   mvp-contract/test/call-contract.test.ts
 ./tools/run-node24 npx --no-install tsc --noEmit -p mvp-contract/tsconfig.json
@@ -2001,7 +2001,7 @@ cd /home/djbd/项目/Agent-life
 - [ ] **Step 6: Run SDK-free security gates**
 
 ```bash
-cd /home/djbd/项目/Agent-life
+cd /home/djbd/项目/open-android-intelligence
 python3 -m unittest \
   apps/android/tools/test_call_log_collector_static.py \
   apps/android/tools/test_sms_collector_static.py \
@@ -2016,7 +2016,7 @@ Expected: source gates pass; dependency/device status remains explicitly pending
 - [ ] **Step 7: Run full Android check when configured SDK is available**
 
 ```bash
-cd /home/djbd/项目/Agent-life/apps/android
+cd /home/djbd/项目/open-android-intelligence/apps/android
 ./gradlew --no-daemon --console=plain check
 ```
 
@@ -2031,7 +2031,7 @@ Record only counts, stable codes, build/installer identity and permission state.
 - [ ] **Step 9: Review final diff**
 
 ```bash
-cd /home/djbd/项目/Agent-life
+cd /home/djbd/项目/open-android-intelligence
 git diff --check
 git status --short
 git diff --name-only

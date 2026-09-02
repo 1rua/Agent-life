@@ -53,8 +53,8 @@ export type CapabilityFilterValidation =
   | { readonly ok: true; readonly filter: unknown }
   | { readonly ok: false; readonly error: "SCHEMA_INVALID" | "SCOPE_DENIED" };
 
-const REGISTRY_ID = "urn:agent-life:protocol:v1:registry:capabilities";
-const REGISTRY_SCHEMA = "urn:agent-life:protocol:v1:capability-registry";
+const REGISTRY_ID = "urn:open-android-intelligence:protocol:v1:registry:capabilities";
+const REGISTRY_SCHEMA = "urn:open-android-intelligence:protocol:v1:capability-registry";
 const VERSION = "1.0";
 const FORBIDDEN_SCOPES = new Set(["shell.root", "shell.exec", "exec", "generic.exec", "script"]);
 const SCOPE_PATTERN = /^[a-z][a-z0-9._<>-]{0,127}$/;

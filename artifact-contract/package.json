@@ -1,5 +1,5 @@
 {
-  "name": "@agent-life/artifact-contract",
+  "name": "@open-android-intelligence/artifact-contract",
   "private": true,
   "type": "module",
   "scripts": {

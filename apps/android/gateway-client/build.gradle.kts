@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.agentlife.gateway.client"
+    namespace = "com.openandroidintelligence.gateway.client"
     defaultConfig { testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" }
 }
 

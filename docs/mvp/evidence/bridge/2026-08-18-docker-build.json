@@ -4,7 +4,7 @@
   "command": "./bridge-runtime/deploy/verify-production.sh",
   "result": "BRIDGE_PRODUCTION_VERIFY_PASS",
   "defaults": {
-    "hostname": "agent-life-bridge",
+    "hostname": "open-android-intelligence-bridge",
     "control_url": "https://controlplane.tailscale.com",
     "auth_key": "optional (interactive login URL when absent)"
   },

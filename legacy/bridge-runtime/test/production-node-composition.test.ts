@@ -7,7 +7,7 @@ import { createFencedDurableBridgeComposition } from "../src/composition.js";
 import { LocalPairingTicketVerifier } from "../src/local-pairing-ticket-verifier.js";
 import { openNodeSqliteBridgeAdapter } from "../src/node-sqlite-adapter.js";
 
-const root = await mkdtemp(join(tmpdir(), "agent-life-production-node-"));
+const root = await mkdtemp(join(tmpdir(), "open-android-intelligence-production-node-"));
 const publicPath = join(root, "public.pem");
 const { publicKey, privateKey } = generateKeyPairSync("ed25519");
 await mkdir(root, { recursive: true });
@@ -27,10 +27,10 @@ const envelope = async (): Promise<unknown> => {
     expiresAtMs: 10_000,
   })).toString("base64url");
   return {
-    envelope: "agent-life.pairing-ticket/v1",
+    envelope: "open-android-intelligence.pairing-ticket/v1",
     keyId: verifier.keyId,
     payload,
-    signature: sign(null, Buffer.from(`agent-life.pairing-ticket/v1\n${verifier.keyId}\n${payload}`), privateKey).toString("base64url"),
+    signature: sign(null, Buffer.from(`open-android-intelligence.pairing-ticket/v1\n${verifier.keyId}\n${payload}`), privateKey).toString("base64url"),
   };
 };
 

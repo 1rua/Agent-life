@@ -10,13 +10,13 @@ import {
 } from "../../../bridge-contract/src/operation-dispatch.js";
 import { sessionKey } from "../../../bridge-contract/src/service-types.js";
 
-export const DURABLE_OPERATION_DISPATCHER_PORT = "agent-life.operation-dispatcher.v1" as const;
+export const DURABLE_OPERATION_DISPATCHER_PORT = "open-android-intelligence.operation-dispatcher.v1" as const;
 const OPERATION_NAMESPACE = "operation.claims" as const;
 const REPLAY_ASSOCIATION_NAMESPACE = "operation.replay-associations" as const;
 const OPERATION_SCOPE = "operation.claim" as const;
 
 type JsonValue = null | boolean | number | string | JsonValue[] | { readonly [key: string]: JsonValue };
-const BIGINT_TAG = "$agentLifeType" as const;
+const BIGINT_TAG = "$openAndroidIntelligenceType" as const;
 const BIGINT_KIND = "bigint" as const;
 
 type StoredOperation = Readonly<{

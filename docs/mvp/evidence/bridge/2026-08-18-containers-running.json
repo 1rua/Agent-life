@@ -18,7 +18,7 @@
     }
   ],
   "interactive_login": {
-    "hostname": "agent-life-bridge",
+    "hostname": "open-android-intelligence-bridge",
     "control_url": "https://controlplane.tailscale.com",
     "auth_key": "optional",
     "outcome": "login URL issued and node authorized"

@@ -46,7 +46,7 @@ lease、只监听 Unix socket，并提供 `/health/live` 与 `/health/ready`。
 - 将 peer node key 的 SHA-256 fingerprint 写入仅由 runtime 信任的 sidecar
   header；
 - 通过 Unix socket 反向代理到 Node runtime；
-- hostname 默认 `agent-life-bridge`；
+- hostname 默认 `open-android-intelligence-bridge`；
 - control 服务器默认官方 `https://controlplane.tailscale.com`；
 - auth key 可选：不提供时会在日志里打印官方登录网址，由操作员交互式登录。
 

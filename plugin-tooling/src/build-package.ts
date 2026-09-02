@@ -116,7 +116,7 @@ export function buildSignatureInput(
   canonicalManifestBytes: Uint8Array,
   canonicalFilesBytes: Uint8Array,
 ): Uint8Array {
-  const prefix = new TextEncoder().encode("AGENT-LIFE-PLUGIN-PACKAGE-V1\n");
+  const prefix = new TextEncoder().encode("OPEN-ANDROID-INTELLIGENCE-PLUGIN-PACKAGE-V1\n");
   const newline = new TextEncoder().encode("\n");
   const total = new Uint8Array(
     prefix.length + canonicalManifestBytes.length + newline.length + canonicalFilesBytes.length,

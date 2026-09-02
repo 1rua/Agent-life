@@ -3,7 +3,7 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
-android { namespace = "com.agentlife.core.model" }
+android { namespace = "com.openandroidintelligence.core.model" }
 
 dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")

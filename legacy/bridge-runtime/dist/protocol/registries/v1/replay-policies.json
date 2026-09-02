@@ -1,6 +1,6 @@
 {
-    "$schema": "urn:agent-life:protocol:v1:replay-policies-registry",
-    "registry_id": "urn:agent-life:protocol:v1:registry:replay-policies",
+    "$schema": "urn:open-android-intelligence:protocol:v1:replay-policies-registry",
+    "registry_id": "urn:open-android-intelligence:protocol:v1:registry:replay-policies",
     "protocol_version": "1.0",
     "policy_classes": [
         {

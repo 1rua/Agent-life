@@ -70,17 +70,17 @@ claimed from image build success alone.
 - `bridge-runtime/deploy/Dockerfile`
 - `bridge-runtime/deploy/Dockerfile.ingress`
 - `bridge-runtime/deploy/docker-compose.yml`
-- `bridge-runtime/deploy/agent-life-bridge.service`
-- `bridge-runtime/deploy/agent-life-ingress.service`
+- `bridge-runtime/deploy/open-android-intelligence-bridge.service`
+- `bridge-runtime/deploy/open-android-intelligence-ingress.service`
 - `bridge-runtime/deploy/verify-production.sh`
 - `bridge-runtime/deploy/install-systemd.sh`
 
 Operators must provide:
 
-- `/var/lib/agent-life-bridge` state volume;
+- `/var/lib/open-android-intelligence-bridge` state volume;
 - read-only `pairing-ticket-public.pem`;
 - tsnet state directory（auth key 可选，不提供则通过日志里的官方登录网址交互式登录）;
-- hostname（默认 `agent-life-bridge`）和 HTTPS control URL（默认官方 `https://controlplane.tailscale.com`）；
+- hostname（默认 `open-android-intelligence-bridge`）和 HTTPS control URL（默认官方 `https://controlplane.tailscale.com`）；
 - a running Docker daemon or a host with the systemd users/directories provisioned.
 
 The template intentionally does not include pairing private keys or Android

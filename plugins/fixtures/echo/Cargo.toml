@@ -1,8 +1,8 @@
 [package]
-name = "agent-life-echo"
+name = "open-android-intelligence-echo"
 version = "0.1.0"
 edition = "2021"
-description = "Agent-life echo 参考插件：原样回显请求字节"
+description = "Open Android Intelligence echo 参考插件：原样回显请求字节"
 publish = false
 
 [lib]
@@ -11,4 +11,4 @@ name = "echo"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-agent-life-sdk = { path = "../../sdk-rust" }
+open-android-intelligence-sdk = { path = "../../sdk-rust" }

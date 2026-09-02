@@ -1,5 +1,5 @@
 /**
- * TypeScript shapes for the Agent-life device plugin package manifest.
+ * TypeScript shapes for the Open Android Intelligence device plugin package manifest.
  *
  * Keep in sync with `docs/contracts/device-plugin-package-v1.md`.
  */
@@ -115,7 +115,7 @@ export const MINIMAL_MANIFEST: PluginManifest = {
   runtime: {
     type: "protected-wasm",
     abiVersion: "1.0",
-    entrypoint: "agent_life_plugin_main",
+    entrypoint: "open_android_intelligence_plugin_main",
     payload: "payload/plugin.wasm",
   },
   compatibility: {

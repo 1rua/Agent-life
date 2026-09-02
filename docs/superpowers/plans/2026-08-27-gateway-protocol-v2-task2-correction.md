@@ -50,14 +50,14 @@ wire ID 只覆盖协议封闭列举的 opaque record IDs，包括 request/correl
 
 ```text
 Authorization
-X-Agent-Life-Protocol
-X-Agent-Life-Account
-X-Agent-Life-Device
-X-Agent-Life-Session
-X-Agent-Life-Request-Id
-X-Agent-Life-Timestamp
-X-Agent-Life-Nonce
-X-Agent-Life-Signature
+X-Open-Android-Intelligence-Protocol
+X-Open-Android-Intelligence-Account
+X-Open-Android-Intelligence-Device
+X-Open-Android-Intelligence-Session
+X-Open-Android-Intelligence-Request-Id
+X-Open-Android-Intelligence-Timestamp
+X-Open-Android-Intelligence-Nonce
+X-Open-Android-Intelligence-Signature
 ```
 
 条件 singleton 也从同一 raw 列表验证：已认证 `POST|PUT|DELETE` 的 `Idempotency-Key` 恰好一次而 `GET` 不出现；`Last-Event-ID` 只允许在带 canonical query cursor 的 `GET /events` 出现零或一次；JSON body 的 `Content-Type` 恰好一次；attachment content 的 `Content-Length` 和 `Digest` 各恰好一次，其他 entity-body 的 `Content-Length` 为零或一次。任何重复（包括相同值重复）、逗号合并、trim 后才合法、CR/LF/NUL/其他控制字符全部拒绝；header 名大小写不敏感，值不做 trim、unfold、first/last 选择。token 验证出的账号、设备、会话必须与 header 精确相等，后续业务只能读取一个 `VerifiedRequestContext`。
@@ -77,11 +77,11 @@ method 在线上区分大小写，不得通过 `toUpperCase()` 接受别名。bo
 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 ```
 
-已认证 `POST|PUT|DELETE` 的 `Idempotency-Key` 必须精确等于已签名的 `X-Agent-Life-Request-Id`；重试可以更换 timestamp/nonce，但保持 request ID。认证 SSE 恢复以 canonical query 的 `cursor` 为权威，`Last-Event-ID` 若存在必须与 query 精确相等且其他路由拒绝该 header。
+已认证 `POST|PUT|DELETE` 的 `Idempotency-Key` 必须精确等于已签名的 `X-Open-Android-Intelligence-Request-Id`；重试可以更换 timestamp/nonce，但保持 request ID。认证 SSE 恢复以 canonical query 的 `cursor` 为权威，`Last-Event-ID` 若存在必须与 query 精确相等且其他路由拒绝该 header。
 
 - [ ] **Step 3: 固化 canonical request target 算法**
 
-输入只允许 `/agent-life/v2` 下的 HTTP origin-form。规范算法按以下顺序执行：
+输入只允许 `/open-android-intelligence/v2` 下的 HTTP origin-form。规范算法按以下顺序执行：
 
 1. 拒绝 absolute-form、authority-form、`*`、fragment、空白和控制字符。
 2. 只在第一个字面量 `?` 分离 path/query；query 内字面量 `?` 非规范。
@@ -99,7 +99,7 @@ e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 预像严格为：
 
 ```text
-ASCII("AGENT-LIFE-REQUEST-V2") LF
+ASCII("OPEN-ANDROID-INTELLIGENCE-REQUEST-V2") LF
 ASCII(method) LF
 ASCII(canonicalTarget) LF
 ASCII(accountId) LF
@@ -118,7 +118,7 @@ ASCII(lowercaseHex(SHA-256(exactBodyBytes)))
 ```json
 {
   "method": "GET",
-  "target": "/agent-life/v2/events?cursor=evt_1&z=last",
+  "target": "/open-android-intelligence/v2/events?cursor=evt_1&z=last",
   "accountId": "acct_1",
   "deviceId": "dev_1",
   "sessionId": "sess_1",
@@ -132,7 +132,7 @@ ASCII(lowercaseHex(SHA-256(exactBodyBytes)))
 canonical target：
 
 ```text
-/agent-life/v2/events?cursor=evt_1&z=last
+/open-android-intelligence/v2/events?cursor=evt_1&z=last
 ```
 
 expected preimage hex：

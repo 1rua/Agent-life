@@ -1,0 +1,211 @@
+package com.openandroidintelligence.policy
+
+import com.openandroidintelligence.core.model.NotificationCollectionPolicyV1
+import com.openandroidintelligence.core.model.NotificationDeliveryMode
+import com.openandroidintelligence.core.model.NotificationFieldAccess
+import com.openandroidintelligence.core.model.NotificationRuleMode
+import com.openandroidintelligence.core.model.PolicyRevisionRace
+import java.io.ByteArrayOutputStream
+import java.io.DataOutputStream
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class PersistentNotificationPolicyAuthorityTest {
+    @Test
+    fun delivery_mode_round_trips_with_grant_and_policy() {
+        val persistence = InMemoryNotificationPolicyPersistence()
+        val first = PersistentNotificationPolicyAuthority(persistence)
+        val policy = NotificationCollectionPolicyV1(
+            mode = NotificationRuleMode.ALLOWLIST,
+            packageIds = listOf("com.example.mail"),
+            fieldAccess = NotificationFieldAccess.CONTENT,
+            policyRevision = 1u,
+        )
+        first.localController().apply(
+            policy,
+            authorizationRevision = 1u,
+            granted = true,
+            deliveryMode = NotificationDeliveryMode.AUTO_SEND,
+        )
+
+        val restored = PersistentNotificationPolicyAuthority(persistence).snapshot()
+        assertEquals(NotificationDeliveryMode.AUTO_SEND, restored.deliveryMode)
+        assertEquals(true, restored.granted)
+        assertEquals(1uL, restored.policy.policyRevision)
+    }
+
+    @Test
+    fun changing_delivery_mode_without_an_authorization_revision_is_rejected() {
+        val authority = PersistentNotificationPolicyAuthority(InMemoryNotificationPolicyPersistence())
+        val controller = authority.localController()
+        controller.apply(
+            NotificationCollectionPolicyV1.default(),
+            1u,
+            true,
+            NotificationDeliveryMode.ON_DEMAND,
+        )
+
+        assertThrows(PolicyRevisionRace::class.java) {
+            controller.apply(
+                NotificationCollectionPolicyV1.default(),
+                1u,
+                true,
+                NotificationDeliveryMode.AUTO_SEND,
+            )
+        }
+    }
+
+    @Test
+    fun corrupt_persisted_bytes_restore_as_deny_first_corrupted_state() {
+        val persistence = InMemoryNotificationPolicyPersistence()
+        persistence.write(byteArrayOf(0x41, 0x42, 0x43))
+
+        val snapshot = PersistentNotificationPolicyAuthority(persistence).snapshot()
+        assertFalse(snapshot.granted)
+        assertTrue(snapshot.corrupted)
+    }
+
+    @Test
+    fun v2_invalid_delivery_mode_ordinal_restores_as_deny_first_corrupted_state() {
+        val persistence = InMemoryNotificationPolicyPersistence()
+        persistence.write(v2Bytes(deliveryModeOrdinal = NotificationDeliveryMode.entries.size))
+
+        val snapshot = PersistentNotificationPolicyAuthority(persistence).snapshot()
+        assertFalse(snapshot.granted)
+        assertTrue(snapshot.corrupted)
+    }
+
+    @Test
+    fun v2_trailing_bytes_restore_as_deny_first_corrupted_state() {
+        val persistence = InMemoryNotificationPolicyPersistence()
+        persistence.write(v2Bytes(trailingBytes = byteArrayOf(0x7F)))
+
+        val snapshot = PersistentNotificationPolicyAuthority(persistence).snapshot()
+        assertFalse(snapshot.granted)
+        assertTrue(snapshot.corrupted)
+    }
+
+    @Test
+    fun v1_invalid_boolean_restores_as_deny_first_corrupted_state() {
+        val persistence = InMemoryNotificationPolicyPersistence()
+        persistence.write(legacyV1Bytes(grantedByte = 2))
+
+        val snapshot = PersistentNotificationPolicyAuthority(persistence).snapshot()
+
+        assertFalse(snapshot.granted)
+        assertTrue(snapshot.corrupted)
+    }
+
+    @Test
+    fun v2_invalid_boolean_restores_as_deny_first_corrupted_state() {
+        val persistence = InMemoryNotificationPolicyPersistence()
+        persistence.write(v2Bytes(grantedByte = 2))
+
+        val snapshot = PersistentNotificationPolicyAuthority(persistence).snapshot()
+
+        assertFalse(snapshot.granted)
+        assertTrue(snapshot.corrupted)
+    }
+
+    @Test
+    fun v1_malformed_utf8_package_restores_as_deny_first_corrupted_state() {
+        val persistence = InMemoryNotificationPolicyPersistence()
+        persistence.write(legacyV1Bytes(packageBytes = byteArrayOf(0xC3.toByte(), 0x28)))
+
+        val snapshot = PersistentNotificationPolicyAuthority(persistence).snapshot()
+
+        assertFalse(snapshot.granted)
+        assertTrue(snapshot.corrupted)
+    }
+
+    @Test
+    fun v2_malformed_utf8_package_restores_as_deny_first_corrupted_state() {
+        val persistence = InMemoryNotificationPolicyPersistence()
+        persistence.write(v2Bytes(packageBytes = byteArrayOf(0xC3.toByte(), 0x28)))
+
+        val snapshot = PersistentNotificationPolicyAuthority(persistence).snapshot()
+
+        assertFalse(snapshot.granted)
+        assertTrue(snapshot.corrupted)
+    }
+
+    @Test
+    fun legacy_v1_bytes_restore_with_on_demand_delivery() {
+        val persistence = InMemoryNotificationPolicyPersistence()
+        persistence.write(legacyV1Bytes())
+
+        val snapshot = PersistentNotificationPolicyAuthority(persistence).snapshot()
+        assertEquals(7uL, snapshot.authorizationRevision)
+        assertTrue(snapshot.granted)
+        assertEquals(NotificationRuleMode.ALLOWLIST, snapshot.policy.mode)
+        assertEquals(NotificationFieldAccess.METADATA, snapshot.policy.fieldAccess)
+        assertEquals(3uL, snapshot.policy.policyRevision)
+        assertEquals(listOf("mail"), snapshot.policy.packageIds)
+        assertEquals(NotificationDeliveryMode.ON_DEMAND, snapshot.deliveryMode)
+    }
+
+    @Test
+    fun three_argument_apply_and_revoke_preserve_delivery_mode() {
+        val authority = PersistentNotificationPolicyAuthority(InMemoryNotificationPolicyPersistence())
+        val controller = authority.localController()
+        val policy = NotificationCollectionPolicyV1.default()
+        controller.apply(policy, 1u, true, NotificationDeliveryMode.AUTO_SEND)
+
+        controller.apply(policy, 2u, true)
+        assertEquals(NotificationDeliveryMode.AUTO_SEND, authority.snapshot().deliveryMode)
+
+        controller.revoke(3u)
+        assertEquals(NotificationDeliveryMode.AUTO_SEND, authority.snapshot().deliveryMode)
+        assertFalse(authority.snapshot().granted)
+    }
+
+    private fun legacyV1Bytes(
+        grantedByte: Int = 1,
+        packageBytes: ByteArray = "mail".toByteArray(Charsets.UTF_8),
+    ): ByteArray = ByteArrayOutputStream().use { bytes ->
+        DataOutputStream(bytes).use { output ->
+            writeLegacyString(output, "OPEN_ANDROID_INTELLIGENCE_NOTIFICATION_AUTHORITY_V1")
+            output.writeLong(7L)
+            output.writeByte(grantedByte)
+            output.writeByte(NotificationRuleMode.ALLOWLIST.ordinal)
+            output.writeByte(NotificationFieldAccess.METADATA.ordinal)
+            output.writeLong(3L)
+            output.writeInt(1)
+            writeLegacyString(output, packageBytes)
+        }
+        bytes.toByteArray()
+    }
+
+    private fun v2Bytes(
+        deliveryModeOrdinal: Int = NotificationDeliveryMode.ON_DEMAND.ordinal,
+        grantedByte: Int = 1,
+        packageBytes: ByteArray = "mail".toByteArray(Charsets.UTF_8),
+        trailingBytes: ByteArray = byteArrayOf(),
+    ): ByteArray = ByteArrayOutputStream().use { bytes ->
+        DataOutputStream(bytes).use { output ->
+            writeLegacyString(output, "OPEN_ANDROID_INTELLIGENCE_NOTIFICATION_AUTHORITY_V2")
+            output.writeLong(7L)
+            output.writeByte(grantedByte)
+            output.writeByte(deliveryModeOrdinal)
+            output.writeByte(NotificationRuleMode.ALLOWLIST.ordinal)
+            output.writeByte(NotificationFieldAccess.METADATA.ordinal)
+            output.writeLong(3L)
+            output.writeInt(1)
+            writeLegacyString(output, packageBytes)
+            output.write(trailingBytes)
+        }
+        bytes.toByteArray()
+    }
+
+    private fun writeLegacyString(output: DataOutputStream, value: String) {
+        writeLegacyString(output, value.toByteArray(Charsets.UTF_8))
+    }
+
+    private fun writeLegacyString(output: DataOutputStream, bytes: ByteArray) {
+        output.writeInt(bytes.size)
+        output.write(bytes)
+    }
+}

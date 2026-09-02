@@ -16,7 +16,7 @@ import xml.etree.ElementTree as ET
 ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = ROOT.parents[1]
 SMS_ROOT = ROOT / "sms-collector"
-SMS_SOURCE_ROOT = SMS_ROOT / "src" / "main" / "kotlin" / "com" / "agentlife" / "sms"
+SMS_SOURCE_ROOT = SMS_ROOT / "src" / "main" / "kotlin" / "com" / "openandroidintelligence" / "sms"
 INBOX_READER_SOURCE = SMS_SOURCE_ROOT / "AndroidSmsInboxReader.kt"
 CAPABILITY_PROVIDER_SOURCE = SMS_SOURCE_ROOT / "AndroidSmsCapabilityProvider.kt"
 SETTINGS_SOURCE = SMS_SOURCE_ROOT / "SmsSettingsAuthority.kt"
@@ -38,7 +38,7 @@ class SmsCollectorStaticTest(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=SMS_SOURCE_ROOT) as directory:
             nested = Path(directory) / "nested" / "NestedSmsBoundary.kt"
             nested.parent.mkdir()
-            nested.write_text("package com.agentlife.sms\n", encoding="utf-8")
+            nested.write_text("package com.openandroidintelligence.sms\n", encoding="utf-8")
 
             self.assertIn(nested, self.sms_sources())
 
@@ -46,7 +46,7 @@ class SmsCollectorStaticTest(unittest.TestCase):
         self.assertIn('":sms-collector"', SETTINGS_GRADLE.read_text(encoding="utf-8"))
         self.assertIn('implementation(project(":sms-collector"))', APP_BUILD_GRADLE.read_text(encoding="utf-8"))
         build = (SMS_ROOT / "build.gradle.kts").read_text(encoding="utf-8")
-        self.assertIn('namespace = "com.agentlife.sms"', build)
+        self.assertIn('namespace = "com.openandroidintelligence.sms"', build)
 
     def test_reader_uses_the_inbox_uri_and_no_other_sms_or_mms_surface(self):
         source = INBOX_READER_SOURCE.read_text(encoding="utf-8")
@@ -80,7 +80,7 @@ class SmsCollectorStaticTest(unittest.TestCase):
             (
                 candidate
                 for candidate in application.findall("service")
-                if candidate.get(f"{ANDROID_NS}name") == "com.agentlife.sms.SmsSyncJobService"
+                if candidate.get(f"{ANDROID_NS}name") == "com.openandroidintelligence.sms.SmsSyncJobService"
             ),
             None,
         )

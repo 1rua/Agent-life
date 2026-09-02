@@ -17,7 +17,7 @@ describe("runtime HTTP boundary", () => {
       .resolves.toMatchObject({ statusCode: 401, body: `{"error":"TAILNET_PEER_FINGERPRINT_REQUIRED"}` });
     await expect(handler({
       method: "GET", path: "/v1/control",
-      headers: { "x-agent-life-peer-fingerprint": ["sha256:a", "sha256:b"] },
+      headers: { "x-open-android-intelligence-peer-fingerprint": ["sha256:a", "sha256:b"] },
     })).resolves.toMatchObject({ statusCode: 400, body: `{"error":"TAILNET_PEER_FINGERPRINT_INVALID"}` });
   });
 
@@ -32,7 +32,7 @@ describe("runtime HTTP boundary", () => {
     });
     await expect(handler({
       method: "GET", path: "/v1/control",
-      headers: { "x-agent-life-peer-fingerprint": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+      headers: { "x-open-android-intelligence-peer-fingerprint": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
     })).resolves.toMatchObject({ statusCode: 204 });
     expect(observed).toBe("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
   });

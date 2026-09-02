@@ -14,11 +14,11 @@ related_adrs:
   - ADR-0046
 ---
 
-# Agent-life Android 对话、数字助理界面与动效设计
+# Open Android Intelligence Android 对话、数字助理界面与动效设计
 
 ## 1. 权威范围
 
-本文定义 Agent-life Android 主界面、系统数字助理界面、屏幕选区附件、共享消息编辑器、视觉系统、动效系统，以及这些前端交互所必需的 Gateway/Agent 接口。
+本文定义 Open Android Intelligence Android 主界面、系统数字助理界面、屏幕选区附件、共享消息编辑器、视觉系统、动效系统，以及这些前端交互所必需的 Gateway/Agent 接口。
 
 本文细化 `2026-08-24-modular-plugin-architecture.md`，不取代其中的账号隔离、Gateway Protocol v2、平台内核、插件运行类型、附件暂存与审计边界。领域术语以根目录 `CONTEXT.md` 为准；难回退决定以 ADR 0041–0046 为准；后续线协议修改必须写回 `docs/contracts/gateway-protocol-v2.md`、严格 Schema 和双宿主一致性向量后才可实现。
 
@@ -26,7 +26,7 @@ related_adrs:
 
 ## 2. 目标与体验原则
 
-目标是在 Android 14+ 上形成一套对话优先、Material 3 一致、可被系统数字助理入口唤起、并具有连贯物理动效的 Agent-life 产品界面。
+目标是在 Android 14+ 上形成一套对话优先、Material 3 一致、可被系统数字助理入口唤起、并具有连贯物理动效的 Open Android Intelligence 产品界面。
 
 设计借鉴 ChatGPT 的对话信息架构和 Gemini 的底部助理心智模型，但不复制其品牌色、私有系统动画、Circle to Search 特权或内部组件。产品应让用户感到：
 
@@ -50,7 +50,7 @@ related_adrs:
 
 ### 3.2 助理会话界面
 
-助理会话界面由用户选择 Agent-life 为默认数字助理后，经设备支持的系统 Assist 手势或按键唤起。它是同一个 Android Host 的临时对话表面，不是通用常驻 Overlay。
+助理会话界面由用户选择 Open Android Intelligence 为默认数字助理后，经设备支持的系统 Assist 手势或按键唤起。它是同一个 Android Host 的临时对话表面，不是通用常驻 Overlay。
 
 助理界面默认绑定：
 
@@ -74,7 +74,7 @@ related_adrs:
 
 ### 4.1 视觉命题
 
-“设计系统”把 Agent-life 设计成一张安静、可信的本机工作台，而不是带紫蓝渐变、星光、机器人头像和持续光晕的通用 AI 应用。
+“设计系统”把 Open Android Intelligence 设计成一张安静、可信的本机工作台，而不是带紫蓝渐变、星光、机器人头像和持续光晕的通用 AI 应用。
 
 界面只使用一个强记忆点：**信号缝线（Signal Stitch）**。它是一段 2–3dp 的墨绿短线与一个茶金小点：
 
@@ -564,7 +564,7 @@ interface ConversationMirrorStore {
 
 以下仅是设计目标。实现前必须更新权威协议、严格 Schema、向量和 Hermes/OpenClaw 一致性门禁。
 
-本节所有相对路由均以 `/agent-life/v2` 为基准。
+本节所有相对路由均以 `/open-android-intelligence/v2` 为基准。
 
 ### 17.1 功能协商
 

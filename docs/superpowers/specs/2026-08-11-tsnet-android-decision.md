@@ -1,7 +1,7 @@
 # TSNET Android transport decision
 
 > [!WARNING]
-> 本文已于 2026-08-24 被 [Agent-life 模块化插件架构规格](./2026-08-24-modular-plugin-architecture.md) 取代，仅保留历史背景。Tailscale 现为默认不安装、不启用的 Companion 连接插件，直接 HTTPS 是核心默认路径。
+> 本文已于 2026-08-24 被 [Open Android Intelligence 模块化插件架构规格](./2026-08-24-modular-plugin-architecture.md) 取代，仅保留历史背景。Tailscale 现为默认不安装、不启用的 Companion 连接插件，直接 HTTPS 是核心默认路径。
 
 状态：已确认（2026-08-11）
 

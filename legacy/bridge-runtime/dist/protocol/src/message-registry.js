@@ -14,7 +14,7 @@ const deepFreeze = (value) => {
     }
     return value;
 };
-validateSchema("urn:agent-life:protocol:v1:messages-registry", messagesFixture);
+validateSchema("urn:open-android-intelligence:protocol:v1:messages-registry", messagesFixture);
 const lockedRegistry = deepFreeze(messagesFixture);
 export function loadMessageRegistry() {
     return lockedRegistry;
@@ -90,7 +90,7 @@ export async function verifyEnrollmentBridgeMessage(rawWire, context) {
     const allowedTypes = context.phase === "challenge" ? ["enrollment_challenge"] : ["enrollment_complete", "enrollment_error"];
     if (!allowedTypes.includes(wire.header.message_type))
         throw new Error("SCHEMA_INVALID");
-    validateAdmissionSchema("urn:agent-life:protocol:v1:envelope:enrollment_bridge_to_app", wire);
+    validateAdmissionSchema("urn:open-android-intelligence:protocol:v1:envelope:enrollment_bridge_to_app", wire);
     if (wire.header.message_type === "enrollment_complete") {
         const scopes = wire.payload.enrollment_scope_ceiling;
         if (!Array.isArray(scopes) || !scopes.every((scope) => typeof scope === "string") || !isSorted(scopes)) {
@@ -155,7 +155,7 @@ export async function verifyConnectMessage(rawWire, expectedType, context) {
     const wire = parseWire(rawWire);
     if (wire.header.message_type !== expectedType)
         throw new Error("SCHEMA_INVALID");
-    validateAdmissionSchema(`urn:agent-life:protocol:v1:envelope:${expectedType}`, wire);
+    validateAdmissionSchema(`urn:open-android-intelligence:protocol:v1:envelope:${expectedType}`, wire);
     const entry = registryEntry(expectedType);
     assertRegistryTuple(wire, entry);
     const requiredRole = expectedType === "connect_hello" ? "device" : "bridge-command";

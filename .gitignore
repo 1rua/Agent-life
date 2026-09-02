@@ -58,7 +58,7 @@ Thumbs.db
 /.toolchains
 /node_modules
 /bridge-runtime/dist/
-/bridge-runtime/ingress/agent-life-tsnet
+/bridge-runtime/ingress/open-android-intelligence-tsnet
 /bridge-runtime/node_modules
 
 /bridge-runtime/deploy/secrets/
@@ -77,5 +77,5 @@ plugins/target/
 plugins/dist/
 
 # 本地测试账号与凭据
-.agent-life-hermes/
+.open-android-intelligence-hermes/
 

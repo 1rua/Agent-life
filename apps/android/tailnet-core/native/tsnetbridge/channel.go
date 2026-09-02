@@ -16,7 +16,7 @@ import (
 const maxFrameBytes = 262_144
 
 // Channel is the only wire surface exposed to Kotlin. Each binary WSS message
-// carries exactly one canonical Agent Life envelope; no application payload is
+// carries exactly one canonical Open Android Intelligence envelope; no application payload is
 // interpreted, re-signed, retried, or reordered here.
 type Channel struct {
 	mu     sync.Mutex

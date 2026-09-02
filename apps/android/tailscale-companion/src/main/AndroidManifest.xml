@@ -7,7 +7,7 @@
             android:exported="true"
             android:enabled="true">
             <intent-filter>
-                <action android:name="com.agentlife.companion.TAILSCALE_TRANSPORT" />
+                <action android:name="com.openandroidintelligence.companion.TAILSCALE_TRANSPORT" />
             </intent-filter>
         </service>
     </application>

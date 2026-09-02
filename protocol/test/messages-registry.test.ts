@@ -48,36 +48,36 @@ const payloadFixtures = {
 type MessageType = keyof typeof payloadFixtures;
 const expectedByTask = {
   task4: [
-    ["enrollment_challenge", "bridge-to-app", "enrollment/bridge-to-app", "urn:agent-life:protocol:v1:message:enrollment_challenge", "bridge-command"],
-    ["enrollment_response", "app-to-bridge", "enrollment/app-to-bridge", "urn:agent-life:protocol:v1:message:enrollment_response", "device"],
-    ["enrollment_complete", "bridge-to-app", "enrollment/bridge-to-app", "urn:agent-life:protocol:v1:message:enrollment_complete", "bridge-command"],
-    ["enrollment_error", "bridge-to-app", "enrollment/bridge-to-app", "urn:agent-life:protocol:v1:message:enrollment_error", "bridge-command"],
-    ["connect_hello", "app-to-bridge", "control/app-to-bridge", "urn:agent-life:protocol:v1:message:connect_hello", "device"],
-    ["connect_welcome", "bridge-to-app", "control/bridge-to-app", "urn:agent-life:protocol:v1:message:connect_welcome", "bridge-command"],
-    ["device_ping", "app-to-bridge", "control/app-to-bridge", "urn:agent-life:protocol:v1:message:device_ping", "device"],
-    ["bridge_ping", "bridge-to-app", "control/bridge-to-app", "urn:agent-life:protocol:v1:message:bridge_ping", "bridge-command"],
-    ["device_presence", "app-to-bridge", "control/app-to-bridge", "urn:agent-life:protocol:v1:message:device_presence", "device"],
-    ["device_key_rotation", "app-to-bridge", "key-rotation/app-to-bridge", "urn:agent-life:protocol:v1:message:device_key_rotation", "device"],
-    ["device_key_rotation_ack", "bridge-to-app", "key-rotation/bridge-to-app", "urn:agent-life:protocol:v1:message:device_key_rotation_ack", "bridge-command"],
-    ["bridge_key_rotation", "bridge-to-app", "key-rotation/bridge-to-app", "urn:agent-life:protocol:v1:message:bridge_key_rotation", "bridge-command"],
-    ["bridge_key_rotation_ack", "app-to-bridge", "key-rotation/app-to-bridge", "urn:agent-life:protocol:v1:message:bridge_key_rotation_ack", "device"],
-    ["adapter_key_rotation", "adapter-to-bridge", "key-rotation/adapter-to-bridge", "urn:agent-life:protocol:v1:message:adapter_key_rotation", "adapter"],
-    ["adapter_key_rotation_ack", "bridge-to-adapter", "key-rotation/bridge-to-adapter", "urn:agent-life:protocol:v1:message:adapter_key_rotation_ack", "bridge-command"],
+    ["enrollment_challenge", "bridge-to-app", "enrollment/bridge-to-app", "urn:open-android-intelligence:protocol:v1:message:enrollment_challenge", "bridge-command"],
+    ["enrollment_response", "app-to-bridge", "enrollment/app-to-bridge", "urn:open-android-intelligence:protocol:v1:message:enrollment_response", "device"],
+    ["enrollment_complete", "bridge-to-app", "enrollment/bridge-to-app", "urn:open-android-intelligence:protocol:v1:message:enrollment_complete", "bridge-command"],
+    ["enrollment_error", "bridge-to-app", "enrollment/bridge-to-app", "urn:open-android-intelligence:protocol:v1:message:enrollment_error", "bridge-command"],
+    ["connect_hello", "app-to-bridge", "control/app-to-bridge", "urn:open-android-intelligence:protocol:v1:message:connect_hello", "device"],
+    ["connect_welcome", "bridge-to-app", "control/bridge-to-app", "urn:open-android-intelligence:protocol:v1:message:connect_welcome", "bridge-command"],
+    ["device_ping", "app-to-bridge", "control/app-to-bridge", "urn:open-android-intelligence:protocol:v1:message:device_ping", "device"],
+    ["bridge_ping", "bridge-to-app", "control/bridge-to-app", "urn:open-android-intelligence:protocol:v1:message:bridge_ping", "bridge-command"],
+    ["device_presence", "app-to-bridge", "control/app-to-bridge", "urn:open-android-intelligence:protocol:v1:message:device_presence", "device"],
+    ["device_key_rotation", "app-to-bridge", "key-rotation/app-to-bridge", "urn:open-android-intelligence:protocol:v1:message:device_key_rotation", "device"],
+    ["device_key_rotation_ack", "bridge-to-app", "key-rotation/bridge-to-app", "urn:open-android-intelligence:protocol:v1:message:device_key_rotation_ack", "bridge-command"],
+    ["bridge_key_rotation", "bridge-to-app", "key-rotation/bridge-to-app", "urn:open-android-intelligence:protocol:v1:message:bridge_key_rotation", "bridge-command"],
+    ["bridge_key_rotation_ack", "app-to-bridge", "key-rotation/app-to-bridge", "urn:open-android-intelligence:protocol:v1:message:bridge_key_rotation_ack", "device"],
+    ["adapter_key_rotation", "adapter-to-bridge", "key-rotation/adapter-to-bridge", "urn:open-android-intelligence:protocol:v1:message:adapter_key_rotation", "adapter"],
+    ["adapter_key_rotation_ack", "bridge-to-adapter", "key-rotation/bridge-to-adapter", "urn:open-android-intelligence:protocol:v1:message:adapter_key_rotation_ack", "bridge-command"],
   ],
   task7: [
-    ["operation_submit", "adapter-to-bridge", "adapter/adapter-to-bridge", "urn:agent-life:protocol:v1:message:operation_submit", "adapter"],
-    ["operation_get", "adapter-to-bridge", "adapter/adapter-to-bridge", "urn:agent-life:protocol:v1:message:operation_get", "adapter"],
-    ["operation_wait", "adapter-to-bridge", "adapter/adapter-to-bridge", "urn:agent-life:protocol:v1:message:operation_wait", "adapter"],
-    ["operation_cancel", "adapter-to-bridge", "adapter/adapter-to-bridge", "urn:agent-life:protocol:v1:message:operation_cancel", "adapter"],
-    ["operation_reconcile", "adapter-to-bridge", "adapter/adapter-to-bridge", "urn:agent-life:protocol:v1:message:operation_reconcile", "adapter"],
-    ["operation_command", "bridge-to-app", "control/bridge-to-app", "urn:agent-life:protocol:v1:message:operation_command", "bridge-command"],
-    ["operation_receipt", "app-to-bridge", "receipt/device", "urn:agent-life:protocol:v1:message:operation_receipt", "device"],
-    ["operation_receipt_ack", "bridge-to-app", "control/bridge-to-app", "urn:agent-life:protocol:v1:message:operation_receipt_ack", "bridge-command"],
-    ["receipt_replay", "app-to-bridge", "control/app-to-bridge", "urn:agent-life:protocol:v1:message:receipt_replay", "device"],
-    ["operation_snapshot", "bridge-to-adapter", "adapter/bridge-to-adapter", "urn:agent-life:protocol:v1:message:operation_snapshot", "bridge-command"],
-    ["device_protocol_error", "app-to-bridge", "control/app-to-bridge", "urn:agent-life:protocol:v1:message:device_protocol_error", "device"],
-    ["bridge_protocol_error", "bridge-to-app", "control/bridge-to-app", "urn:agent-life:protocol:v1:message:bridge_protocol_error", "bridge-command"],
-    ["adapter_protocol_error", "bridge-to-adapter", "adapter/bridge-to-adapter", "urn:agent-life:protocol:v1:message:adapter_protocol_error", "bridge-command"],
+    ["operation_submit", "adapter-to-bridge", "adapter/adapter-to-bridge", "urn:open-android-intelligence:protocol:v1:message:operation_submit", "adapter"],
+    ["operation_get", "adapter-to-bridge", "adapter/adapter-to-bridge", "urn:open-android-intelligence:protocol:v1:message:operation_get", "adapter"],
+    ["operation_wait", "adapter-to-bridge", "adapter/adapter-to-bridge", "urn:open-android-intelligence:protocol:v1:message:operation_wait", "adapter"],
+    ["operation_cancel", "adapter-to-bridge", "adapter/adapter-to-bridge", "urn:open-android-intelligence:protocol:v1:message:operation_cancel", "adapter"],
+    ["operation_reconcile", "adapter-to-bridge", "adapter/adapter-to-bridge", "urn:open-android-intelligence:protocol:v1:message:operation_reconcile", "adapter"],
+    ["operation_command", "bridge-to-app", "control/bridge-to-app", "urn:open-android-intelligence:protocol:v1:message:operation_command", "bridge-command"],
+    ["operation_receipt", "app-to-bridge", "receipt/device", "urn:open-android-intelligence:protocol:v1:message:operation_receipt", "device"],
+    ["operation_receipt_ack", "bridge-to-app", "control/bridge-to-app", "urn:open-android-intelligence:protocol:v1:message:operation_receipt_ack", "bridge-command"],
+    ["receipt_replay", "app-to-bridge", "control/app-to-bridge", "urn:open-android-intelligence:protocol:v1:message:receipt_replay", "device"],
+    ["operation_snapshot", "bridge-to-adapter", "adapter/bridge-to-adapter", "urn:open-android-intelligence:protocol:v1:message:operation_snapshot", "bridge-command"],
+    ["device_protocol_error", "app-to-bridge", "control/app-to-bridge", "urn:open-android-intelligence:protocol:v1:message:device_protocol_error", "device"],
+    ["bridge_protocol_error", "bridge-to-app", "control/bridge-to-app", "urn:open-android-intelligence:protocol:v1:message:bridge_protocol_error", "bridge-command"],
+    ["adapter_protocol_error", "bridge-to-adapter", "adapter/bridge-to-adapter", "urn:open-android-intelligence:protocol:v1:message:adapter_protocol_error", "bridge-command"],
   ],
 } as const;
 
@@ -171,7 +171,7 @@ const collectIds = (value: unknown, ids: string[] = []): string[] => {
 describe("locked message registry", () => {
   it("freezes the exact cumulative Task 9 direction/domain/signer-role matrix", () => {
     const registry = loadMessageRegistry();
-    validateSchema("urn:agent-life:protocol:v1:messages-registry", registry);
+    validateSchema("urn:open-android-intelligence:protocol:v1:messages-registry", registry);
     const actual = registry.messages.map((entry) => [
       entry.message_type, entry.direction, entry.signature_domain, entry.schema_id,
       entry.direction === "app-to-bridge" ? "device"
@@ -180,8 +180,8 @@ describe("locked message registry", () => {
     expect(actual.slice(0, expectedByTask.task4.length)).toEqual(expectedByTask.task4);
     expect(actual.slice(expectedByTask.task4.length)).toEqual([
       ...expectedByTask.task7,
-      ["device_event", "app-to-bridge", "control/app-to-bridge", "urn:agent-life:protocol:v1:message:device_event", "device"],
-      ["event_ack", "bridge-to-app", "control/bridge-to-app", "urn:agent-life:protocol:v1:message:event_ack", "bridge-command"],
+      ["device_event", "app-to-bridge", "control/app-to-bridge", "urn:open-android-intelligence:protocol:v1:message:device_event", "device"],
+      ["event_ack", "bridge-to-app", "control/bridge-to-app", "urn:open-android-intelligence:protocol:v1:message:event_ack", "bridge-command"],
     ]);
   });
 
@@ -191,7 +191,7 @@ describe("locked message registry", () => {
     const domains = new Set(loadProtocolProfile().signature_domains);
     expect(registry.messages.every((entry) => domains.has(entry.signature_domain))).toBe(true);
     const productionPayloadIds = PROTOCOL_SCHEMA_DOCUMENTS.flatMap((document) => collectIds(document))
-      .filter((id) => id.startsWith("urn:agent-life:protocol:v1:message:"))
+      .filter((id) => id.startsWith("urn:open-android-intelligence:protocol:v1:message:"))
       .sort();
     expect([...new Set(productionPayloadIds)]).toEqual(registry.messages.map((entry) => entry.schema_id).sort());
     expect(productionPayloadIds).toHaveLength(new Set(productionPayloadIds).size);
@@ -212,7 +212,7 @@ describe("locked message registry", () => {
 
 describe("closed cumulative Task 5 payload matrix", () => {
   for (const type of Object.keys(payloadFixtures) as MessageType[]) {
-    const schemaId = `urn:agent-life:protocol:v1:message:${type}`;
+    const schemaId = `urn:open-android-intelligence:protocol:v1:message:${type}`;
     it(`${type} accepts only its complete closed fixture`, () => {
       expect(() => validateSchema(schemaId, payloadFixtures[type])).not.toThrow();
       for (const field of payloadRequired[type]) expect(() => validateSchema(schemaId, remove(payloadFixtures[type] as unknown as Record<string, unknown>, field))).toThrowError("SCHEMA_INVALID");
@@ -238,8 +238,8 @@ describe("closed cumulative Task 5 payload matrix", () => {
 
 describe("closed cumulative Task 5 header and envelope matrix", () => {
   for (const [family, type] of familyCases) {
-    const headerSchema = `urn:agent-life:protocol:v1:header:${family}`;
-    const envelopeSchema = `urn:agent-life:protocol:v1:envelope:${family}`;
+    const headerSchema = `urn:open-android-intelligence:protocol:v1:header:${family}`;
+    const envelopeSchema = `urn:open-android-intelligence:protocol:v1:envelope:${family}`;
     it(`${type} requires every ${family} header/envelope leaf and rejects unknown fields`, () => {
       const header = headerFor(type);
       const envelope = envelopeFor(type);
@@ -289,13 +289,13 @@ describe("exact Task 5 envelope reference ownership", () => {
     const definitions = PROTOCOL_SCHEMA_DOCUMENTS.flatMap((document) =>
       Object.values((document as { $defs?: Record<string, unknown> }).$defs ?? {}));
     for (const type of task5) {
-      const id = `urn:agent-life:protocol:v1:envelope:${type}`;
+      const id = `urn:open-android-intelligence:protocol:v1:envelope:${type}`;
       const definition = definitions.find((candidate) =>
         typeof candidate === "object" && candidate !== null && (candidate as { $id?: string }).$id === id) as {
           properties?: { header?: { $ref?: string }; payload?: { $ref?: string } };
         } | undefined;
-      expect(definition?.properties?.header?.$ref).toBe(`urn:agent-life:protocol:v1:header:${type}`);
-      expect(definition?.properties?.payload?.$ref).toBe(`urn:agent-life:protocol:v1:message:${type}`);
+      expect(definition?.properties?.header?.$ref).toBe(`urn:open-android-intelligence:protocol:v1:header:${type}`);
+      expect(definition?.properties?.payload?.$ref).toBe(`urn:open-android-intelligence:protocol:v1:message:${type}`);
     }
   });
 });

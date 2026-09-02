@@ -31,14 +31,14 @@ class TransportBoundaryTest(unittest.TestCase):
             ROOT / "assistant-holder" / "build.gradle.kts",
             ROOT / "gradle" / "mvp-forbidden-surfaces.gradle.kts",
             ROOT / "artifact-ports" / "build.gradle.kts",
-            ROOT / "artifact-ports" / "src" / "main" / "kotlin" / "com" / "agentlife" / "artifact" / "ArtifactSelectionPorts.kt",
-            ROOT / "core-model" / "src" / "main" / "kotlin" / "com" / "agentlife" / "core" / "model" / "TransportContracts.kt",
-            ROOT / "tailnet-core" / "src" / "main" / "kotlin" / "com" / "agentlife" / "tailnet" / "core" / "VerifiedPairingTransportBinding.kt",
-            ROOT / "tailnet-core" / "src" / "main" / "kotlin" / "com" / "agentlife" / "tailnet" / "core" / "TailscaleUserspaceCore.kt",
-            ROOT / "tailnet-core" / "src" / "main" / "kotlin" / "com" / "agentlife" / "tailnet" / "core" / "PairingReconnectState.kt",
-            ROOT / "transport" / "src" / "testFixtures" / "kotlin" / "com" / "agentlife" / "transport" / "FakeUserspaceTransport.kt",
-            ROOT / "transport" / "src" / "main" / "kotlin" / "com" / "agentlife" / "transport" / "TsnetPairedBridgeTransport.kt",
-            ROOT / "transport" / "src" / "main" / "kotlin" / "com" / "agentlife" / "transport" / "PairedBridgeSessionCoordinator.kt",
+            ROOT / "artifact-ports" / "src" / "main" / "kotlin" / "com" / "openandroidintelligence" / "artifact" / "ArtifactSelectionPorts.kt",
+            ROOT / "core-model" / "src" / "main" / "kotlin" / "com" / "openandroidintelligence" / "core" / "model" / "TransportContracts.kt",
+            ROOT / "tailnet-core" / "src" / "main" / "kotlin" / "com" / "openandroidintelligence" / "tailnet" / "core" / "VerifiedPairingTransportBinding.kt",
+            ROOT / "tailnet-core" / "src" / "main" / "kotlin" / "com" / "openandroidintelligence" / "tailnet" / "core" / "TailscaleUserspaceCore.kt",
+            ROOT / "tailnet-core" / "src" / "main" / "kotlin" / "com" / "openandroidintelligence" / "tailnet" / "core" / "PairingReconnectState.kt",
+            ROOT / "transport" / "src" / "testFixtures" / "kotlin" / "com" / "openandroidintelligence" / "transport" / "FakeUserspaceTransport.kt",
+            ROOT / "transport" / "src" / "main" / "kotlin" / "com" / "openandroidintelligence" / "transport" / "TsnetPairedBridgeTransport.kt",
+            ROOT / "transport" / "src" / "main" / "kotlin" / "com" / "openandroidintelligence" / "transport" / "PairedBridgeSessionCoordinator.kt",
         )
         missing = [str(path.relative_to(ROOT)) for path in expected if not path.is_file()]
         self.assertEqual([], missing)
@@ -85,7 +85,7 @@ class TransportBoundaryTest(unittest.TestCase):
             self.assertIn(token, gate)
 
     def test_transport_interfaces_do_not_accept_endpoints(self):
-        source = (ROOT / "core-model" / "src" / "main" / "kotlin" / "com" / "agentlife" / "core" / "model" / "TransportContracts.kt").read_text(encoding="utf-8")
+        source = (ROOT / "core-model" / "src" / "main" / "kotlin" / "com" / "openandroidintelligence" / "core" / "model" / "TransportContracts.kt").read_text(encoding="utf-8")
         interface_block = re.search(r"interface PairedBridgeTransport.*?^}\s*$", source, re.MULTILINE | re.DOTALL)
         self.assertIsNotNone(interface_block)
         block = interface_block.group(0)
@@ -93,8 +93,8 @@ class TransportBoundaryTest(unittest.TestCase):
         self.assertNotRegex(block, r"\b(host|port|url|socket|route|dns|endpoint)\b")
 
     def test_fake_and_real_adapter_share_pairing_binding_and_generation(self):
-        fake = (ROOT / "transport" / "src" / "testFixtures" / "kotlin" / "com" / "agentlife" / "transport" / "FakeUserspaceTransport.kt").read_text(encoding="utf-8")
-        real = (ROOT / "transport" / "src" / "main" / "kotlin" / "com" / "agentlife" / "transport" / "TsnetPairedBridgeTransport.kt").read_text(encoding="utf-8")
+        fake = (ROOT / "transport" / "src" / "testFixtures" / "kotlin" / "com" / "openandroidintelligence" / "transport" / "FakeUserspaceTransport.kt").read_text(encoding="utf-8")
+        real = (ROOT / "transport" / "src" / "main" / "kotlin" / "com" / "openandroidintelligence" / "transport" / "TsnetPairedBridgeTransport.kt").read_text(encoding="utf-8")
         for source in (fake, real):
             self.assertIn("PairedBridgeTransport", source)
             self.assertIn("VerifiedPairingTransportBinding", source)
@@ -109,10 +109,10 @@ class TransportBoundaryTest(unittest.TestCase):
         holder_namespaces = re.findall(r'namespace\s*=\s*"([^"]+)"', holder_build)
         app_ids = re.findall(r'applicationId\s*=\s*"([^"]+)"', app_build)
         holder_ids = re.findall(r'applicationId\s*=\s*"([^"]+)"', holder_build)
-        self.assertEqual(["com.agentlife.mobile"], app_namespaces)
-        self.assertEqual(["com.agentlife.assistant"], holder_namespaces)
-        self.assertEqual(["com.agentlife.mobile"], app_ids)
-        self.assertEqual(["com.agentlife.assistant"], holder_ids)
+        self.assertEqual(["com.openandroidintelligence.mobile"], app_namespaces)
+        self.assertEqual(["com.openandroidintelligence.assistant"], holder_namespaces)
+        self.assertEqual(["com.openandroidintelligence.mobile"], app_ids)
+        self.assertEqual(["com.openandroidintelligence.assistant"], holder_ids)
         self.assertNotEqual(app_namespaces[0], holder_namespaces[0])
         self.assertNotEqual(app_ids[0], holder_ids[0])
         self.assertNotRegex(app_manifest, r"\bpackage\s*=")
@@ -124,7 +124,7 @@ class TransportBoundaryTest(unittest.TestCase):
 
     def test_assistant_holder_exposes_only_the_default_assistant_entry_seam(self):
         holder_manifest = (ROOT / "assistant-holder" / "src" / "main" / "AndroidManifest.xml").read_text(encoding="utf-8")
-        holder_source = "\n".join(path.read_text(encoding="utf-8") for path in (ROOT / "assistant-holder" / "src" / "main" / "kotlin" / "com" / "agentlife" / "assistant").glob("*.kt"))
+        holder_source = "\n".join(path.read_text(encoding="utf-8") for path in (ROOT / "assistant-holder" / "src" / "main" / "kotlin" / "com" / "openandroidintelligence" / "assistant").glob("*.kt"))
         self.assertIn("VoiceInteractionService", holder_manifest)
         self.assertIn('android:name=".AssistantSessionService"', holder_manifest)
         self.assertIn("android.permission.BIND_VOICE_INTERACTION", holder_manifest)
@@ -152,13 +152,13 @@ class TransportBoundaryTest(unittest.TestCase):
 
 class ProductionBoundaryTest(unittest.TestCase):
     def test_fake_is_never_in_production_sources(self):
-        main_fake = ROOT / "transport" / "src" / "main" / "kotlin" / "com" / "agentlife" / "transport" / "FakeUserspaceTransport.kt"
+        main_fake = ROOT / "transport" / "src" / "main" / "kotlin" / "com" / "openandroidintelligence" / "transport" / "FakeUserspaceTransport.kt"
         self.assertFalse(main_fake.exists())
-        fixture = ROOT / "transport" / "src" / "testFixtures" / "kotlin" / "com" / "agentlife" / "transport" / "FakeUserspaceTransport.kt"
+        fixture = ROOT / "transport" / "src" / "testFixtures" / "kotlin" / "com" / "openandroidintelligence" / "transport" / "FakeUserspaceTransport.kt"
         self.assertTrue(fixture.is_file())
 
     def test_sealed_production_factory_exists(self):
-        factory = ROOT / "transport" / "src" / "main" / "kotlin" / "com" / "agentlife" / "transport" / "ProductionTailnetTransportFactory.kt"
+        factory = ROOT / "transport" / "src" / "main" / "kotlin" / "com" / "openandroidintelligence" / "transport" / "ProductionTailnetTransportFactory.kt"
         self.assertTrue(factory.is_file())
         text = factory.read_text(encoding="utf-8")
         self.assertIn("sealed interface ProductionPairedBridgeTransport", text)
@@ -172,7 +172,7 @@ class ProductionBoundaryTest(unittest.TestCase):
             if "import tsnetbridge." in text:
                 generated.append(path.relative_to(ROOT).as_posix())
         self.assertEqual(
-            ["tailnet-core/src/main/kotlin/com/agentlife/tailnet/core/AndroidTsnetBinding.kt"],
+            ["tailnet-core/src/main/kotlin/com/openandroidintelligence/tailnet/core/AndroidTsnetBinding.kt"],
             generated,
         )
 

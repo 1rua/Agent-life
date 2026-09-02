@@ -31,7 +31,7 @@ capture vpn dumpsys vpn
 capture route cat /proc/net/route
 capture route6 cat /proc/net/ipv6_route
 capture props getprop
-capture package dumpsys package com.agentlife.mobile
+capture package dumpsys package com.openandroidintelligence.mobile
 
 # Summaries derived from the raw connectivity dump.
 python3 - "$tmpdir" "$dest_dir" "$label" <<'PY'

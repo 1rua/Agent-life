@@ -20,7 +20,7 @@ if (output === null || process.argv.some((value) => value === "--help" || value 
   console.error(usage);
   process.exitCode = 1;
 } else {
-  const workDir = await mkdtemp(join(tmpdir(), "agent-life-bridge-drill-"));
+  const workDir = await mkdtemp(join(tmpdir(), "open-android-intelligence-bridge-drill-"));
   try {
     const result = await runRealBridgeBackupRestoreDrill({ workDir });
     const removedPaths = await cleanupRealBridgeBackupRestoreDrill(result);

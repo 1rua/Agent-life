@@ -53,7 +53,7 @@ Both sides independently canonicalize:
   bridge_nonce, device_jwk_thumbprint, selected_protocol }
 ```
 
-They hash the `agent-life/v1/pairing-short-code` NUL-terminated, four-byte-big-endian-length-prefixed JCS preimage with SHA-256, take the first 50 bits, and render ten uppercase Crockford Base32 characters as `XXXXX-XXXXX`. The alphabet excludes `I`, `L`, `O`, and `U`. Enrollment completes only after the user confirms that both displays match.
+They hash the `open-android-intelligence/v1/pairing-short-code` NUL-terminated, four-byte-big-endian-length-prefixed JCS preimage with SHA-256, take the first 50 bits, and render ten uppercase Crockford Base32 characters as `XXXXX-XXXXX`. The alphabet excludes `I`, `L`, `O`, and `U`. Enrollment completes only after the user confirms that both displays match.
 
 ## Public errors
 

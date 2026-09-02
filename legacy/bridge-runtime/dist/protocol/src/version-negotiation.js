@@ -29,7 +29,7 @@ const deepFreeze = (value) => {
     }
     return value;
 };
-validateSchema("urn:agent-life:protocol:v1:versions-registry", versionsFixture);
+validateSchema("urn:open-android-intelligence:protocol:v1:versions-registry", versionsFixture);
 const lockedRegistry = deepFreeze(versionsFixture);
 export function loadVersionRegistry() {
     return lockedRegistry;

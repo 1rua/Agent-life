@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://agent-life.dev/schemas/gateway/v2/vector-set-1.0.0.schema.json",
+  "$id": "https://open-android-intelligence.dev/schemas/gateway/v2/vector-set-1.0.0.schema.json",
   "type": "object",
   "additionalProperties": false,
   "required": ["formatVersion", "protocolVersion", "vectorSet", "cases"],

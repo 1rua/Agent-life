@@ -7,11 +7,11 @@ supersedes:
   - 2026-08-17-bridge-runtime-production-design.md
 ---
 
-# Agent-life 模块化插件架构规格
+# Open Android Intelligence 模块化插件架构规格
 
 ## 1. 权威范围
 
-本文是 Agent-life 新架构的总规格，规定 Android 宿主、设备插件、Gateway Protocol v2、Hermes/OpenClaw Gateway 适配器及迁移边界。
+本文是 Open Android Intelligence 新架构的总规格，规定 Android 宿主、设备插件、Gateway Protocol v2、Hermes/OpenClaw Gateway 适配器及迁移边界。
 
 规范细节分别由以下文件唯一负责：
 
@@ -25,7 +25,7 @@ supersedes:
 
 ## 2. 产品目标
 
-Agent-life 让一个 Android 安装实例连接多个用户拥有的 Agent Gateway，通过对话与附件完成核心交互，并由用户按需安装设备能力。
+Open Android Intelligence 让一个 Android 安装实例连接多个用户拥有的 Agent Gateway，通过对话与附件完成核心交互，并由用户按需安装设备能力。
 
 架构必须同时满足：
 
@@ -87,7 +87,7 @@ Gateway Core 负责账号认证、设备配对、协议可靠性、附件暂存�
 
 ### 3.3 中央服务边界
 
-V1 不引入 Agent-life 中央账号、Relay、Bridge、证书颁发或遥测服务。插件索引可以存在，但它只是可选发现入口，不是信任根或运行依赖。
+V1 不引入 Open Android Intelligence 中央账号、Relay、Bridge、证书颁发或遥测服务。插件索引可以存在，但它只是可选发现入口，不是信任根或运行依赖。
 
 ## 4. Android 宿主
 
@@ -192,10 +192,10 @@ Companion 缺失、证书或版本不符、崩溃、超时或权限被撤销时�
 
 首批插件分别发布、签名、安装和授权：
 
-- `org.agentlife.notifications`：受保护插件，使用通知安全原语；
-- `org.agentlife.sms`：受保护插件，使用短信读取与调度安全原语；
-- `org.agentlife.call-log`：受保护插件，使用通话记录安全原语；
-- `org.agentlife.transport.tailscale`：Companion 插件，承载现有 tsnet 原生网络栈。
+- `org.openandroidintelligence.notifications`：受保护插件，使用通知安全原语；
+- `org.openandroidintelligence.sms`：受保护插件，使用短信读取与调度安全原语；
+- `org.openandroidintelligence.call-log`：受保护插件，使用通话记录安全原语；
+- `org.openandroidintelligence.transport.tailscale`：Companion 插件，承载现有 tsnet 原生网络栈。
 
 它们不成为 Android 可见核心，不随新安装自动启用。其他旧设计能力仅在拥有独立契约、风险模型和验收测试后新增，不创建空插件占位。
 
@@ -305,7 +305,7 @@ Android 对本机插件执行、权限裁决、用户确认和 Companion 调用�
 
 ## 14. 明确非目标
 
-- 建立 Agent-life 中央云、中央账号或强制插件商店；
+- 建立 Open Android Intelligence 中央云、中央账号或强制插件商店；
 - 让插件动态增加任意 Android Manifest 权限或组件；
 - 在受保护模式运行任意 Kotlin、DEX、`.so` 或 WebView JS bridge；
 - 为 Bridge Protocol v1 提供网络兼容层；

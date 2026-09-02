@@ -3,7 +3,7 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
-android { namespace = "com.agentlife.platform.kernel" }
+android { namespace = "com.openandroidintelligence.platform.kernel" }
 
 dependencies {
     // The kernel orchestrates verified packages, so it reuses the packaging

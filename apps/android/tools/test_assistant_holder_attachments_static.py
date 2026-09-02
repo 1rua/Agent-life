@@ -13,8 +13,8 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 HOLDER = ROOT / "assistant-holder"
-SOURCE = HOLDER / "src/main/kotlin/com/agentlife/assistant/AssistantActivity.kt"
-CONTRACT = HOLDER / "src/main/kotlin/com/agentlife/assistant/AssistantAttachmentContract.kt"
+SOURCE = HOLDER / "src/main/kotlin/com/openandroidintelligence/assistant/AssistantActivity.kt"
+CONTRACT = HOLDER / "src/main/kotlin/com/openandroidintelligence/assistant/AssistantAttachmentContract.kt"
 
 
 class AssistantHolderAttachmentStaticTest(unittest.TestCase):

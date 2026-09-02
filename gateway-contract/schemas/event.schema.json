@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://agent-life.dev/schemas/gateway/v2/event.schema.json",
+  "$id": "https://open-android-intelligence.dev/schemas/gateway/v2/event.schema.json",
   "$defs": {
     "event": {
       "type": "object",
@@ -8,10 +8,10 @@
       "required": ["correlationId", "occurredAt", "type", "payload"],
       "properties": {
         "correlationId": {
-          "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
+          "$ref": "https://open-android-intelligence.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
         },
         "occurredAt": {
-          "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/utcMillis"
+          "$ref": "https://open-android-intelligence.dev/schemas/gateway/v2/envelope.schema.json#/$defs/utcMillis"
         },
         "type": {
           "type": "string",

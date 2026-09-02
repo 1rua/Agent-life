@@ -29,8 +29,8 @@ import {
 const SQLITE_VERSION = "3.53.1";
 const NODE_VERSION = "24.18.0";
 const SCHEMA_VERSION = 1;
-const BIGINT_TAG = "$agentLife.bigint";
-const NODE_SQLITE_LEASE_COORDINATOR = Symbol("agent-life.node-sqlite-lease-coordinator");
+const BIGINT_TAG = "$openAndroidIntelligence.bigint";
+const NODE_SQLITE_LEASE_COORDINATOR = Symbol("open-android-intelligence.node-sqlite-lease-coordinator");
 
 export type NodeSqliteBridgeAdapterOptions = Readonly<{
   databasePath: string;

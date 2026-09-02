@@ -20,7 +20,7 @@ SOURCE = (
     / "main"
     / "kotlin"
     / "com"
-    / "agentlife"
+    / "openandroidintelligence"
     / "artifact"
     / "ArtifactSelectionPorts.kt"
 )
@@ -34,7 +34,7 @@ class ArtifactPortsStaticTest(unittest.TestCase):
     def test_module_is_source_only_and_documented(self):
         self.assertTrue((MODULE / "build.gradle.kts").is_file())
         build = (MODULE / "build.gradle.kts").read_text(encoding="utf-8")
-        self.assertIn('namespace = "com.agentlife.artifact"', build)
+        self.assertIn('namespace = "com.openandroidintelligence.artifact"', build)
         self.assertNotIn("implementation(project", build)
         readme = (MODULE / "README.md").read_text(encoding="utf-8")
         self.assertIn("source-only", readme)

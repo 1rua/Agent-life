@@ -10,8 +10,8 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from agent_life_gateway.account_paths import account_paths
-from agent_life_gateway.core import (
+from open_android_intelligence_gateway.account_paths import account_paths
+from open_android_intelligence_gateway.core import (
     GatewayError,
     GatewayResponse,
     ContractRegistry,
@@ -19,9 +19,9 @@ from agent_life_gateway.core import (
     VerifiedRequestContext,
     create_gateway_core,
 )
-from agent_life_gateway.audit import AuditStore
-from agent_life_gateway.http import DEFAULT_MAX_BODY_BYTES
-from agent_life_gateway.plugin import register
+from open_android_intelligence_gateway.audit import AuditStore
+from open_android_intelligence_gateway.http import DEFAULT_MAX_BODY_BYTES
+from open_android_intelligence_gateway.plugin import register
 from test_support import make_secret_store, trust_core
 
 
@@ -52,7 +52,7 @@ def test_registers_gateway_platform(tmp_path):
 
     register(context)
 
-    assert context.platform_ids == ["agent-life-gateway"]
+    assert context.platform_ids == ["open-android-intelligence-gateway"]
 
 
 def test_accounts_never_share_database(tmp_path):
@@ -131,7 +131,7 @@ def test_handle_enforces_identity_idempotency_and_sse_cursor_binding(tmp_path):
         {
             "context": _context(requestId="req_identity"),
             "method": "POST",
-            "target": "/agent-life/v2/conversations",
+            "target": "/open-android-intelligence/v2/conversations",
             "idempotencyKey": "req_identity",
             "body": {"clientConversationId": "conv_identity", "accountId": "acct_bob"},
         }
@@ -141,7 +141,7 @@ def test_handle_enforces_identity_idempotency_and_sse_cursor_binding(tmp_path):
     request = {
         "context": _context(requestId="req_create", correlationId="cor_create"),
         "method": "POST",
-        "target": "/agent-life/v2/conversations",
+        "target": "/open-android-intelligence/v2/conversations",
         "idempotencyKey": "req_create",
         "body": {"clientConversationId": "conv_create", "title": "A"},
     }
@@ -155,7 +155,7 @@ def test_handle_enforces_identity_idempotency_and_sse_cursor_binding(tmp_path):
         {
             "context": _context(requestId="req_cursor"),
             "method": "GET",
-            "target": f"/agent-life/v2/events?cursor={old_event['eventId']}",
+            "target": f"/open-android-intelligence/v2/events?cursor={old_event['eventId']}",
             "lastEventId": "evt_other",
         }
     )
@@ -423,9 +423,9 @@ def _device_input(request_id, risk="read", now="2026-08-24T12:00:00.000Z"):
         "pairing_generation": 4,
         "grant_revision": 7,
         "risk": risk,
-        "capability": {"id": "org.agentlife.sms.query", "version": "1.0.0"},
+        "capability": {"id": "org.openandroidintelligence.sms.query", "version": "1.0.0"},
         "provider": {
-            "pluginId": "org.agentlife.sms",
+            "pluginId": "org.openandroidintelligence.sms",
             "authorKeyId": "sha256:" + "a" * 64,
         },
         "parameters": {"query": "from:alice"},
@@ -533,7 +533,7 @@ def test_gateway_core_handle_routes_attachment_and_device_claim_result(tmp_path)
     create = core.handle({
         "context": _context(requestId="req_attachment_create", correlationId="cor_attachment_create"),
         "method": "POST",
-        "target": "/agent-life/v2/attachments",
+        "target": "/open-android-intelligence/v2/attachments",
         "idempotencyKey": "req_attachment_create",
         "body": {
             "clientAttachmentId": "att_client_handle",
@@ -548,7 +548,7 @@ def test_gateway_core_handle_routes_attachment_and_device_claim_result(tmp_path)
     uploaded = core.handle({
         "context": _context(requestId="req_attachment_upload", correlationId="cor_attachment_upload"),
         "method": "PUT",
-        "target": f"/agent-life/v2/attachments/{attachment_id}/content",
+        "target": f"/open-android-intelligence/v2/attachments/{attachment_id}/content",
         "idempotencyKey": "req_attachment_upload",
         "body": body,
     })
@@ -556,7 +556,7 @@ def test_gateway_core_handle_routes_attachment_and_device_claim_result(tmp_path)
     committed = core.handle({
         "context": _context(requestId="req_attachment_commit", correlationId="cor_attachment_commit"),
         "method": "POST",
-        "target": f"/agent-life/v2/attachments/{attachment_id}/commit",
+        "target": f"/open-android-intelligence/v2/attachments/{attachment_id}/commit",
         "idempotencyKey": "req_attachment_commit",
     })
     assert committed["data"]["attachment"]["state"] == "verified"
@@ -567,7 +567,7 @@ def test_gateway_core_handle_routes_attachment_and_device_claim_result(tmp_path)
     claim = core.handle({
         "context": _context(requestId="req_claim_handle", correlationId="cor_claim_handle", pairingGeneration=4, grantRevision=7),
         "method": "POST",
-        "target": "/agent-life/v2/device-requests/device_req_handle/claim",
+        "target": "/open-android-intelligence/v2/device-requests/device_req_handle/claim",
         "idempotencyKey": "req_claim_handle",
         "now": "2026-08-27T00:01:00.000Z",
     })
@@ -576,7 +576,7 @@ def test_gateway_core_handle_routes_attachment_and_device_claim_result(tmp_path)
     stale = core.handle({
         "context": _context(requestId="req_result_stale", correlationId="cor_result_stale", pairingGeneration=4, grantRevision=8),
         "method": "POST",
-        "target": "/agent-life/v2/device-requests/device_req_handle/result",
+        "target": "/open-android-intelligence/v2/device-requests/device_req_handle/result",
         "idempotencyKey": "req_result_stale",
         "body": {
             "claimId": receipt["claimId"],
@@ -589,7 +589,7 @@ def test_gateway_core_handle_routes_attachment_and_device_claim_result(tmp_path)
     result = core.handle({
         "context": _context(requestId="req_result_handle", correlationId="cor_result_handle", pairingGeneration=4, grantRevision=7),
         "method": "POST",
-        "target": "/agent-life/v2/device-requests/device_req_handle/result",
+        "target": "/open-android-intelligence/v2/device-requests/device_req_handle/result",
         "idempotencyKey": "req_result_handle",
         "body": {
             "claimId": receipt["claimId"],
@@ -606,7 +606,7 @@ def test_invalid_state_transition_is_not_exposed_or_persisted_as_wire_error(tmp_
     body = b"invalid state boundary"
     create = core.handle({
         "context": _context(requestId="req_invalid_state_create", correlationId="cor_invalid_state_create"),
-        "method": "POST", "target": "/agent-life/v2/attachments",
+        "method": "POST", "target": "/open-android-intelligence/v2/attachments",
         "idempotencyKey": "req_invalid_state_create",
         "body": {
             "clientAttachmentId": "att_invalid_state",
@@ -617,19 +617,19 @@ def test_invalid_state_transition_is_not_exposed_or_persisted_as_wire_error(tmp_
     attachment_id = create["data"]["attachment"]["attachmentId"]
     core.handle({
         "context": _context(requestId="req_invalid_state_upload", correlationId="cor_invalid_state_upload"),
-        "method": "PUT", "target": f"/agent-life/v2/attachments/{attachment_id}/content",
+        "method": "PUT", "target": f"/open-android-intelligence/v2/attachments/{attachment_id}/content",
         "idempotencyKey": "req_invalid_state_upload", "body": body,
     })
     first_commit = core.handle({
         "context": _context(requestId="req_invalid_state_commit", correlationId="cor_invalid_state_commit"),
-        "method": "POST", "target": f"/agent-life/v2/attachments/{attachment_id}/commit",
+        "method": "POST", "target": f"/open-android-intelligence/v2/attachments/{attachment_id}/commit",
         "idempotencyKey": "req_invalid_state_commit",
     })
     assert first_commit["data"]["attachment"]["state"] == "verified"
 
     repeated_commit = core.handle({
         "context": _context(requestId="req_invalid_state_repeat", correlationId="cor_invalid_state_repeat"),
-        "method": "POST", "target": f"/agent-life/v2/attachments/{attachment_id}/commit",
+        "method": "POST", "target": f"/open-android-intelligence/v2/attachments/{attachment_id}/commit",
         "idempotencyKey": "req_invalid_state_repeat",
     })
     assert repeated_commit["error"]["code"] == "SCHEMA_INVALID"
@@ -645,7 +645,7 @@ def test_core_rejects_untrusted_mapping_and_missing_verified_binding_fields(tmp_
     core = _real_create_gateway_core(storage_root=tmp_path, secret_store=make_secret_store())
     request = {
         "context": _context(requestId="req_untrusted_mapping"),
-        "method": "POST", "target": "/agent-life/v2/conversations",
+        "method": "POST", "target": "/open-android-intelligence/v2/conversations",
         "idempotencyKey": "req_untrusted_mapping",
         "body": {"clientConversationId": "conv_untrusted_mapping"},
     }
@@ -671,7 +671,7 @@ def test_typed_verified_request_and_response_surfaces_keep_camel_case_protocol_n
         pairingGeneration=1, grantRevision=1,
     )
     request = VerifiedGatewayRequest(
-        context=context, method="POST", target="/agent-life/v2/conversations",
+        context=context, method="POST", target="/open-android-intelligence/v2/conversations",
         idempotencyKey="req_typed", body={"clientConversationId": "conv_typed"},
     )
     response = create_gateway_core(storage_root=tmp_path).handle(request)
@@ -687,7 +687,7 @@ def test_gateway_response_and_nested_data_are_immutable_across_idempotent_replay
     core = create_gateway_core(storage_root=tmp_path)
     request = {
         "context": _context(requestId="req_immutable_response"),
-        "method": "POST", "target": "/agent-life/v2/conversations",
+        "method": "POST", "target": "/open-android-intelligence/v2/conversations",
         "idempotencyKey": "req_immutable_response",
         "body": {"clientConversationId": "conv_immutable_response", "title": "stable"},
     }
@@ -706,7 +706,7 @@ def test_gateway_core_negotiates_the_shared_protocol_schema_and_feature_intersec
     response = core.handle({
         "context": _context(requestId="req_negotiate", correlationId="cor_negotiate"),
         "method": "POST",
-        "target": "/agent-life/v2/negotiate",
+        "target": "/open-android-intelligence/v2/negotiate",
         "idempotencyKey": "req_negotiate",
         "body": {
             "negotiationId": "neg_1",
@@ -732,18 +732,18 @@ def test_gateway_core_serves_account_local_conversation_reads(tmp_path):
     core = create_gateway_core(storage_root=tmp_path)
     created = core.handle({
         "context": _context(requestId="req_read_create"),
-        "method": "POST", "target": "/agent-life/v2/conversations",
+        "method": "POST", "target": "/open-android-intelligence/v2/conversations",
         "idempotencyKey": "req_read_create",
         "body": {"clientConversationId": "conv_read"},
     })
     conversation_id = created["data"]["conversation"]["conversationId"]
     listed = core.handle({
         "context": _context(requestId="req_read_list"),
-        "method": "GET", "target": "/agent-life/v2/conversations",
+        "method": "GET", "target": "/open-android-intelligence/v2/conversations",
     })
     fetched = core.handle({
         "context": _context(requestId="req_read_fetch"),
-        "method": "GET", "target": f"/agent-life/v2/conversations/{conversation_id}",
+        "method": "GET", "target": f"/open-android-intelligence/v2/conversations/{conversation_id}",
     })
 
     assert listed["data"]["conversations"][0]["conversationId"] == conversation_id
@@ -754,7 +754,7 @@ def test_idempotency_expiry_and_replay_binding_fail_closed(tmp_path):
     core = create_gateway_core(storage_root=tmp_path)
     request = {
         "context": _context(requestId="req_expiring", correlationId="cor_expiring"),
-        "method": "POST", "target": "/agent-life/v2/conversations",
+        "method": "POST", "target": "/open-android-intelligence/v2/conversations",
         "idempotencyKey": "req_expiring",
         "body": {"clientConversationId": "conv_expiring"},
         "now": "2026-08-27T00:00:00.000Z",
@@ -775,13 +775,13 @@ def test_idempotency_expiry_and_replay_binding_fail_closed(tmp_path):
     account.close()
     claim = core.handle({
         "context": _context(requestId="req_claim_replay", correlationId="cor_claim_replay", pairingGeneration=4, grantRevision=7),
-        "method": "POST", "target": "/agent-life/v2/device-requests/device_req_replay/claim",
+        "method": "POST", "target": "/open-android-intelligence/v2/device-requests/device_req_replay/claim",
         "idempotencyKey": "req_claim_replay", "now": "2026-08-27T00:01:00.000Z",
     })
     assert claim["data"]["receipt"]
     stale_replay = core.handle({
         "context": _context(requestId="req_claim_replay", correlationId="cor_claim_replay", pairingGeneration=5, grantRevision=7),
-        "method": "POST", "target": "/agent-life/v2/device-requests/device_req_replay/claim",
+        "method": "POST", "target": "/open-android-intelligence/v2/device-requests/device_req_replay/claim",
         "idempotencyKey": "req_claim_replay", "now": "2026-08-27T00:01:01.000Z",
     })
     assert stale_replay["error"]["code"] == "PAIRING_GENERATION_STALE"
@@ -791,7 +791,7 @@ def test_idempotency_expiry_and_replay_binding_fail_closed(tmp_path):
     old.close()
     cursor_expired = core.handle({
         "context": _context(accountId="acct_bob", requestId="req_cursor_expired"),
-        "method": "GET", "target": f"/agent-life/v2/events?cursor={event['eventId']}",
+        "method": "GET", "target": f"/open-android-intelligence/v2/events?cursor={event['eventId']}",
         "lastEventId": event["eventId"], "now": "2026-08-25T00:00:01.000Z",
     })
     assert cursor_expired["error"]["code"] == "CURSOR_EXPIRED"
@@ -881,12 +881,12 @@ def test_pre_auth_negotiate_does_not_require_account_context_and_rejects_unknown
     core = create_gateway_core(storage_root=tmp_path)
     valid = core.handle({
         "requestId": "req_pre_auth", "correlationId": "cor_pre_auth",
-        "method": "POST", "target": "/agent-life/v2/negotiate",
+        "method": "POST", "target": "/open-android-intelligence/v2/negotiate",
         "body": _negotiate_body(core),
     })
     invalid = core.handle({
         "requestId": "req_pre_auth_bad", "correlationId": "cor_pre_auth_bad",
-        "method": "POST", "target": "/agent-life/v2/negotiate",
+        "method": "POST", "target": "/open-android-intelligence/v2/negotiate",
         "body": _negotiate_body(core, "sha256:" + "f" * 64),
     })
 
@@ -898,13 +898,13 @@ def test_authenticated_request_with_unbound_negotiation_fails_closed(tmp_path):
     core = create_gateway_core(storage_root=tmp_path)
     negotiation = core.handle({
         "requestId": "req_pre_auth", "correlationId": "cor_pre_auth",
-        "method": "POST", "target": "/agent-life/v2/negotiate",
+        "method": "POST", "target": "/open-android-intelligence/v2/negotiate",
         "body": _negotiate_body(core),
     })
     assert negotiation["data"]
     unbound = core.handle({
         "context": {**_context(requestId="req_unbound"), "negotiationId": "neg_pre_auth", "installationId": "install_pre"},
-        "method": "POST", "target": "/agent-life/v2/conversations",
+        "method": "POST", "target": "/open-android-intelligence/v2/conversations",
         "idempotencyKey": "req_unbound",
         "body": {"clientConversationId": "conv_unbound"},
     })
@@ -913,7 +913,7 @@ def test_authenticated_request_with_unbound_negotiation_fails_closed(tmp_path):
     core.bind_negotiation("neg_pre_auth", "acct_alice", "install_pre")
     bound = core.handle({
         "context": {**_context(requestId="req_bound"), "negotiationId": "neg_pre_auth", "installationId": "install_pre"},
-        "method": "POST", "target": "/agent-life/v2/conversations",
+        "method": "POST", "target": "/open-android-intelligence/v2/conversations",
         "idempotencyKey": "req_bound",
         "body": {"clientConversationId": "conv_bound"},
     })
@@ -928,8 +928,8 @@ def test_device_request_event_get_and_list_preserve_full_contract_metadata(tmp_p
     request = account.device_requests.enqueue(
         request_id="device_req_metadata", device_id="dev_1", pairing_generation=4,
         grant_revision=7, risk="read",
-        capability={"id": "org.agentlife.sms.query", "version": "1.0.0"},
-        provider={"pluginId": "org.agentlife.sms", "authorKeyId": "sha256:" + "a" * 64},
+        capability={"id": "org.openandroidintelligence.sms.query", "version": "1.0.0"},
+        provider={"pluginId": "org.openandroidintelligence.sms", "authorKeyId": "sha256:" + "a" * 64},
         parameters={"query": "from:alice", "senders": ["alice"]},
         requires_foreground_confirmation=True,
         correlation_id="cor_metadata", now="2026-08-27T00:00:00.000Z",
@@ -937,8 +937,8 @@ def test_device_request_event_get_and_list_preserve_full_contract_metadata(tmp_p
     event = account.events.read_after(None, "2026-08-27T00:00:01.000Z")[0]
     listed = account.device_requests.list()
 
-    assert request["capability"] == {"id": "org.agentlife.sms.query", "version": "1.0.0"}
-    assert request["provider"]["pluginId"] == "org.agentlife.sms"
+    assert request["capability"] == {"id": "org.openandroidintelligence.sms.query", "version": "1.0.0"}
+    assert request["provider"]["pluginId"] == "org.openandroidintelligence.sms"
     assert request["parameters"]["senders"] == ["alice"]
     assert request["createdAt"] == "2026-08-27T00:00:00.000Z"
     assert request["requiresForegroundConfirmation"] is True
@@ -956,8 +956,8 @@ def test_device_enqueue_rejects_parameters_without_the_trusted_dispatched_bindin
         account.device_requests.enqueue(
             request_id="device_req_untrusted", device_id="dev_1", pairing_generation=1,
             grant_revision=1, risk="read",
-            capability={"id": "org.agentlife.sms.query", "version": "1.0.0"},
-            provider={"pluginId": "org.agentlife.sms", "authorKeyId": "sha256:" + "a" * 64},
+            capability={"id": "org.openandroidintelligence.sms.query", "version": "1.0.0"},
+            provider={"pluginId": "org.openandroidintelligence.sms", "authorKeyId": "sha256:" + "a" * 64},
             parameters={"unexpected": True}, correlation_id="cor_untrusted",
         )
 
@@ -1080,7 +1080,7 @@ def test_commit_unknown_marks_idempotent_request_and_blocks_duplicate_side_effec
     core = create_gateway_core(storage_root=tmp_path, commit_hook=fail_commit_once)
     request = {
         "context": _context(requestId="req_commit_unknown", correlationId="cor_commit_unknown"),
-        "method": "POST", "target": "/agent-life/v2/conversations",
+        "method": "POST", "target": "/open-android-intelligence/v2/conversations",
         "idempotencyKey": "req_commit_unknown",
         "body": {"clientConversationId": "conv_commit_unknown"},
     }
@@ -1112,7 +1112,7 @@ def test_ledger_persistence_failure_returns_unknown_marker_instead_of_internal_e
     account.close()
     request = {
         "context": _context(requestId="req_ledger_unknown", correlationId="cor_ledger_unknown"),
-        "method": "POST", "target": "/agent-life/v2/conversations",
+        "method": "POST", "target": "/open-android-intelligence/v2/conversations",
         "idempotencyKey": "req_ledger_unknown",
         "body": {"clientConversationId": "conv_ledger_unknown"},
     }

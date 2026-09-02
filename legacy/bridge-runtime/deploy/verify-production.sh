@@ -24,13 +24,13 @@ EVIDENCE_PATH=${BRIDGE_DRILL_EVIDENCE:-$ROOT_DIR/docs/mvp/evidence/bridge/latest
 
 (
   cd "$ROOT_DIR/bridge-runtime/ingress"
-  export GOCACHE=${GOCACHE:-/tmp/agent-life-go-build-cache}
+  export GOCACHE=${GOCACHE:-/tmp/open-android-intelligence-go-build-cache}
   mkdir -p "$GOCACHE"
   GOPROXY=${GOPROXY:-off} "$GO_BIN" mod verify
   GOPROXY=${GOPROXY:-off} "$GO_BIN" test ./...
-  INGRESS_BINARY=$(mktemp /tmp/agent-life-tsnet-verify.XXXXXX)
+  INGRESS_BINARY=$(mktemp /tmp/open-android-intelligence-tsnet-verify.XXXXXX)
   trap 'rm -f "$INGRESS_BINARY"' EXIT
-  CGO_ENABLED=0 GOPROXY=${GOPROXY:-off} "$GO_BIN" build -trimpath -ldflags='-s -w' -o "$INGRESS_BINARY" ./cmd/agent-life-tsnet
+  CGO_ENABLED=0 GOPROXY=${GOPROXY:-off} "$GO_BIN" build -trimpath -ldflags='-s -w' -o "$INGRESS_BINARY" ./cmd/open-android-intelligence-tsnet
   INGRESS_BINARY="$INGRESS_BINARY" "$ROOT_DIR/bridge-runtime/deploy/verify-systemd.sh"
 )
 
@@ -38,25 +38,25 @@ EVIDENCE_PATH=${BRIDGE_DRILL_EVIDENCE:-$ROOT_DIR/docs/mvp/evidence/bridge/latest
 
 # Exercise the installer itself against a disposable root without mutating host
 # users, credentials, units, or service state.
-DRY_ROOT=$(mktemp -d /tmp/agent-life-install-verify.XXXXXX)
-DRY_INPUT=$(mktemp -d /tmp/agent-life-install-input.XXXXXX)
+DRY_ROOT=$(mktemp -d /tmp/open-android-intelligence-install-verify.XXXXXX)
+DRY_INPUT=$(mktemp -d /tmp/open-android-intelligence-install-input.XXXXXX)
 trap 'rm -rf "$DRY_ROOT" "$DRY_INPUT"' EXIT
 printf '%s\n' verify-public-key > "$DRY_INPUT/public.pem"
 INSTALL_ROOT="$DRY_ROOT" \
-  AGENT_LIFE_PAIRING_PUBLIC_KEY="$DRY_INPUT/public.pem" \
+  OPEN_ANDROID_INTELLIGENCE_PAIRING_PUBLIC_KEY="$DRY_INPUT/public.pem" \
   "$ROOT_DIR/bridge-runtime/deploy/install-systemd.sh"
 
-export DOCKER_TEST_HOSTNAME=${AGENT_LIFE_TSNET_HOSTNAME:-agent-life-verify}
-export DOCKER_TEST_CONTROL_URL=${AGENT_LIFE_TSNET_CONTROL_URL:-https://control.invalid}
+export DOCKER_TEST_HOSTNAME=${OPEN_ANDROID_INTELLIGENCE_TSNET_HOSTNAME:-open-android-intelligence-verify}
+export DOCKER_TEST_CONTROL_URL=${OPEN_ANDROID_INTELLIGENCE_TSNET_CONTROL_URL:-https://control.invalid}
 
 if ! command -v docker >/dev/null 2>&1; then
   echo 'BRIDGE_PRODUCTION_VERIFY_BLOCKED Docker CLI/daemon unavailable; image config/build not executed' >&2
   exit 1
 fi
-AGENT_LIFE_TSNET_HOSTNAME="$DOCKER_TEST_HOSTNAME" \
-  AGENT_LIFE_TSNET_CONTROL_URL="$DOCKER_TEST_CONTROL_URL" \
+OPEN_ANDROID_INTELLIGENCE_TSNET_HOSTNAME="$DOCKER_TEST_HOSTNAME" \
+  OPEN_ANDROID_INTELLIGENCE_TSNET_CONTROL_URL="$DOCKER_TEST_CONTROL_URL" \
   docker compose -f "$ROOT_DIR/bridge-runtime/deploy/docker-compose.yml" config --quiet
-AGENT_LIFE_TSNET_HOSTNAME="$DOCKER_TEST_HOSTNAME" \
-  AGENT_LIFE_TSNET_CONTROL_URL="$DOCKER_TEST_CONTROL_URL" \
+OPEN_ANDROID_INTELLIGENCE_TSNET_HOSTNAME="$DOCKER_TEST_HOSTNAME" \
+  OPEN_ANDROID_INTELLIGENCE_TSNET_CONTROL_URL="$DOCKER_TEST_CONTROL_URL" \
   docker compose -f "$ROOT_DIR/bridge-runtime/deploy/docker-compose.yml" build --pull
 echo 'BRIDGE_PRODUCTION_VERIFY_PASS'

@@ -64,10 +64,10 @@ const contractRootDirectory = dirname(toolsDirectory);
 export const conformanceContractRoot = (): string => contractRootDirectory;
 
 export const conformanceArtifactDirectory = (): string =>
-  process.env["AGENT_LIFE_CONFORMANCE_DIR"] === undefined ||
-  process.env["AGENT_LIFE_CONFORMANCE_DIR"] === ""
+  process.env["OPEN_ANDROID_INTELLIGENCE_CONFORMANCE_DIR"] === undefined ||
+  process.env["OPEN_ANDROID_INTELLIGENCE_CONFORMANCE_DIR"] === ""
     ? join(contractRootDirectory, ".artifacts", "conformance")
-    : resolve(process.env["AGENT_LIFE_CONFORMANCE_DIR"]!);
+    : resolve(process.env["OPEN_ANDROID_INTELLIGENCE_CONFORMANCE_DIR"]!);
 
 const sha256OfFile = (path: string): string =>
   `sha256:${createHash("sha256").update(readFileSync(path)).digest("hex")}`;
@@ -192,7 +192,7 @@ export const readConformanceArtifacts = (
 };
 
 const pythonCommand = (): string => {
-  const configured = process.env["AGENT_LIFE_PYTHON"];
+  const configured = process.env["OPEN_ANDROID_INTELLIGENCE_PYTHON"];
   if (configured !== undefined && configured !== "") return configured;
   return process.platform === "win32" ? "python" : "python3";
 };
@@ -200,7 +200,7 @@ const pythonCommand = (): string => {
 const tsxCliPath = (): string => {
   const localPath = join(dirname(contractRootDirectory), "node_modules", "tsx", "dist", "cli.mjs");
   if (existsSync(localPath)) return localPath;
-  return join("/mnt/数据/项目/Agent-life", "node_modules", "tsx", "dist", "cli.mjs");
+  return join("/mnt/数据/项目/open-android-intelligence", "node_modules", "tsx", "dist", "cli.mjs");
 };
 
 const runnerCommand = (
@@ -222,7 +222,7 @@ export const generateConformanceArtifacts = (
   const result = spawnSync(command!, args, {
     cwd: dirname(contractRootDirectory),
     encoding: "utf8",
-    env: { ...process.env, AGENT_LIFE_CONFORMANCE_DIR: directory },
+    env: { ...process.env, OPEN_ANDROID_INTELLIGENCE_CONFORMANCE_DIR: directory },
   });
   if (result.error !== undefined || result.status !== 0) {
     const detail = result.stderr?.trim() || result.stdout?.trim() || String(result.error);

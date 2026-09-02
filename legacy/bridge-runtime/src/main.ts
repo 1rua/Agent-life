@@ -25,7 +25,7 @@ const json = (statusCode: number, value: unknown, statusMessage?: string): Runti
   headers: Object.freeze({
     "content-type": "application/json; charset=utf-8",
     "cache-control": "no-store",
-    ...(statusMessage === undefined ? {} : { "x-agent-life-error": statusMessage }),
+    ...(statusMessage === undefined ? {} : { "x-open-android-intelligence-error": statusMessage }),
   }),
   body: JSON.stringify(value),
 });
@@ -52,10 +52,10 @@ const runtimeMain = async (): Promise<void> => {
   if (process.versions.node !== NODE_VERSION || process.versions.sqlite !== SQLITE_VERSION) {
     throw new Error("SQLITE_DRIVER_LOCK_MISMATCH");
   }
-  const databasePath = requiredAbsolute("AGENT_LIFE_DATABASE");
-  const publicPath = requiredAbsolute("AGENT_LIFE_PAIRING_PUBLIC_KEY");
-  const socketPath = requiredAbsolute("AGENT_LIFE_RUNTIME_SOCKET");
-  const leaseTtlMs = Number(process.env.AGENT_LIFE_LEASE_TTL_MS ?? "30000");
+  const databasePath = requiredAbsolute("OPEN_ANDROID_INTELLIGENCE_DATABASE");
+  const publicPath = requiredAbsolute("OPEN_ANDROID_INTELLIGENCE_PAIRING_PUBLIC_KEY");
+  const socketPath = requiredAbsolute("OPEN_ANDROID_INTELLIGENCE_RUNTIME_SOCKET");
+  const leaseTtlMs = Number(process.env.OPEN_ANDROID_INTELLIGENCE_LEASE_TTL_MS ?? "30000");
   if (!Number.isSafeInteger(leaseTtlMs) || leaseTtlMs < 1_000) throw new Error("LEASE_TTL_INVALID");
 
   await mkdir(dirname(databasePath), { recursive: true, mode: 0o750 });

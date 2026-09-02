@@ -23,14 +23,14 @@
 ## File Map
 
 - Modify: `apps/android/transport/build.gradle.kts` — declare the explicit coroutines implementation needed by the coordinator mutex.
-- Modify: `apps/android/transport/src/main/kotlin/com/agentlife/transport/TsnetPairedBridgeTransport.kt` — add reconnect fencing while preserving the existing `PairedBridgeTransport` API.
-- Create: `apps/android/transport/src/main/kotlin/com/agentlife/transport/PairedBridgeSessionCoordinator.kt` — add `PairingMaterial`, high-level connect/reconnect, core lifecycle and cleanup.
-- Modify: `apps/android/transport/src/test/kotlin/com/agentlife/transport/TransportBoundaryTest.kt` — add failing tests and recording fakes for coordinator behavior.
+- Modify: `apps/android/transport/src/main/kotlin/com/openandroidintelligence/transport/TsnetPairedBridgeTransport.kt` — add reconnect fencing while preserving the existing `PairedBridgeTransport` API.
+- Create: `apps/android/transport/src/main/kotlin/com/openandroidintelligence/transport/PairedBridgeSessionCoordinator.kt` — add `PairingMaterial`, high-level connect/reconnect, core lifecycle and cleanup.
+- Modify: `apps/android/transport/src/test/kotlin/com/openandroidintelligence/transport/TransportBoundaryTest.kt` — add failing tests and recording fakes for coordinator behavior.
 
 ## Task 1: Add the failing coordinator and reconnect tests
 
 **Files:**
-- Modify: `apps/android/transport/src/test/kotlin/com/agentlife/transport/TransportBoundaryTest.kt`
+- Modify: `apps/android/transport/src/test/kotlin/com/openandroidintelligence/transport/TransportBoundaryTest.kt`
 
 **Interfaces:**
 - Consumes existing `TailscaleUserspaceCore`, `NoBackupTailnetStateStore`, `PersistentConnectionGenerationStore`, `VerifiedPairingTransportBindingFactory`, and `TsnetPairedBridgeTransport` seams.
@@ -67,7 +67,7 @@ fun coordinator_rejects_invalid_material_before_starting_core() {
 
 - [ ] **Step 3: Run the focused test and verify it fails for the missing production API.**
 
-Run: `cd apps/android && ./gradlew --no-daemon :transport:testDebugUnitTest --tests com.agentlife.transport.TransportBoundaryTest.coordinator_rejects_invalid_material_before_starting_core`
+Run: `cd apps/android && ./gradlew --no-daemon :transport:testDebugUnitTest --tests com.openandroidintelligence.transport.TransportBoundaryTest.coordinator_rejects_invalid_material_before_starting_core`
 
 Expected: compilation failure because `PairingMaterial`, `PairedBridgeSessionCoordinator`, and the coordinator test helper do not yet exist. In this environment the run was blocked earlier by the missing pinned Kotlin compiler artifact; the test source was still kept red-first and was not treated as passing.
 
@@ -99,14 +99,14 @@ The reconnect test must send through the first session before reconnect, assert 
 
 - [ ] **Step 5: Run the complete focused test class and confirm it is red for missing implementation.**
 
-Run: `cd apps/android && ./gradlew --no-daemon :transport:testDebugUnitTest --tests com.agentlife.transport.TransportBoundaryTest`
+Run: `cd apps/android && ./gradlew --no-daemon :transport:testDebugUnitTest --tests com.openandroidintelligence.transport.TransportBoundaryTest`
 
 Expected: the test task fails because the new coordinator/reconnect APIs are absent, not because existing tests regress.
 
 ## Task 2: Implement reconnect fencing in the low-level transport
 
 **Files:**
-- Modify: `apps/android/transport/src/main/kotlin/com/agentlife/transport/TsnetPairedBridgeTransport.kt`
+- Modify: `apps/android/transport/src/main/kotlin/com/openandroidintelligence/transport/TsnetPairedBridgeTransport.kt`
 
 **Interfaces:**
 - Consumes existing `PairingReconnectStateMachine` and `UserspaceBridgeChannel`.
@@ -122,14 +122,14 @@ If closing the old channel throws, retain the old session as fenced and continue
 
 - [ ] **Step 3: Run the existing transport tests plus the reconnect-focused test.**
 
-Run: `cd apps/android && ./gradlew --no-daemon :transport:testDebugUnitTest --tests com.agentlife.transport.TransportBoundaryTest`
+Run: `cd apps/android && ./gradlew --no-daemon :transport:testDebugUnitTest --tests com.openandroidintelligence.transport.TransportBoundaryTest`
 
 Expected: the low-level reconnect behavior is implemented, but coordinator tests still fail because the coordinator does not yet exist. Existing fake transport, binding, state, and current tsnet adapter tests must remain passing.
 
 ## Task 3: Implement the lifecycle coordinator minimally
 
 **Files:**
-- Create: `apps/android/transport/src/main/kotlin/com/agentlife/transport/PairedBridgeSessionCoordinator.kt`
+- Create: `apps/android/transport/src/main/kotlin/com/openandroidintelligence/transport/PairedBridgeSessionCoordinator.kt`
 - Modify: `apps/android/transport/build.gradle.kts`
 
 **Interfaces:**
@@ -180,7 +180,7 @@ Inside the mutex, start the core if needed, delegate to `TsnetPairedBridgeTransp
 
 - [ ] **Step 7: Run focused tests and make them green.**
 
-Run: `cd apps/android && ./gradlew --no-daemon :transport:test --tests com.agentlife.transport.TransportBoundaryTest`
+Run: `cd apps/android && ./gradlew --no-daemon :transport:test --tests com.openandroidintelligence.transport.TransportBoundaryTest`
 
 Expected: all transport tests pass, including the new coordinator tests. The implementation is complete, but the current environment cannot execute this task because `kotlin-compiler-embeddable:2.1.20` is not cached and Maven access is too slow to complete.
 

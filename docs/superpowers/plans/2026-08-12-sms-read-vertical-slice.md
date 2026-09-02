@@ -20,39 +20,39 @@
 - Every remote read/subscription is policy-revision fenced and must pass `READ_SMS`, local grant, mode, and `agentMayRequest` checks.
 - The Android feature receives only typed binding/session seams; it cannot accept an endpoint, URL, IP, port, generic socket, VPN, proxy, shell, or arbitrary command.
 - New behavior follows TDD: write one focused failing test, run it and observe the intended failure, implement the smallest change, rerun focused tests, then run the module suite.
-- Existing user work, including the untracked `apps/android/core-model/src/test/kotlin/com/agentlife/core/model/NotificationCollectionSettingsTest.kt`, is outside this plan and must not be staged or modified accidentally.
+- Existing user work, including the untracked `apps/android/core-model/src/test/kotlin/com/openandroidintelligence/core/model/NotificationCollectionSettingsTest.kt`, is outside this plan and must not be staged or modified accidentally.
 - A real Tailscale AAR, physical device, and locked external releases are not fabricated; final reporting separates host/JVM evidence from unavailable device/AAR evidence.
 
 ## File Map
 
-- `apps/android/capability-ports/src/main/kotlin/com/agentlife/capability/CapabilityProviderContracts.kt` — complete SMS metadata and body-release semantics.
-- `apps/android/capability-ports/src/main/kotlin/com/agentlife/capability/SmsCapabilityContracts.kt` — SMS history policy, interval, cursor-independent local policy value types.
-- `apps/android/capability-ports/src/test/kotlin/com/agentlife/capability/CapabilityProviderContractsTest.kt` — SMS authorization and normalization tests.
-- `apps/android/capability-ports/src/test/kotlin/com/agentlife/capability/SmsCapabilityContractsTest.kt` — policy and interval validation tests.
+- `apps/android/capability-ports/src/main/kotlin/com/openandroidintelligence/capability/CapabilityProviderContracts.kt` — complete SMS metadata and body-release semantics.
+- `apps/android/capability-ports/src/main/kotlin/com/openandroidintelligence/capability/SmsCapabilityContracts.kt` — SMS history policy, interval, cursor-independent local policy value types.
+- `apps/android/capability-ports/src/test/kotlin/com/openandroidintelligence/capability/CapabilityProviderContractsTest.kt` — SMS authorization and normalization tests.
+- `apps/android/capability-ports/src/test/kotlin/com/openandroidintelligence/capability/SmsCapabilityContractsTest.kt` — policy and interval validation tests.
 - `apps/android/sms-collector/build.gradle.kts` — new Android library dependencies.
-- `apps/android/sms-collector/src/main/kotlin/com/agentlife/sms/SmsInboxReader.kt` — platform-neutral row/query seam.
-- `apps/android/sms-collector/src/main/kotlin/com/agentlife/sms/AndroidSmsInboxReader.kt` — `ContentResolver` adapter limited to the inbox URI.
-- `apps/android/sms-collector/src/main/kotlin/com/agentlife/sms/SmsCursor.kt` — monotonic `(date,id)` cursor and persistence seam.
-- `apps/android/sms-collector/src/main/kotlin/com/agentlife/sms/SmsSettingsAuthority.kt` — fail-closed local settings persistence and controller.
-- `apps/android/sms-collector/src/main/kotlin/com/agentlife/sms/AndroidSmsCapabilityProvider.kt` — typed on-demand and finite auto-send batch provider.
-- `apps/android/sms-collector/src/main/kotlin/com/agentlife/sms/SmsAutoSyncCoordinator.kt` — durable enqueue, cursor advancement, and dispatch orchestration.
-- `apps/android/sms-collector/src/main/kotlin/com/agentlife/sms/SmsSyncScheduler.kt` — interval mapping and `JobScheduler` adapter.
-- `apps/android/sms-collector/src/main/kotlin/com/agentlife/sms/SmsWireCodec.kt` — deterministic Kotlin SMS event bytes for the Android queue.
-- `apps/android/sms-collector/src/test/kotlin/com/agentlife/sms/AndroidSmsCapabilityProviderTest.kt` — provider mapping and failure tests.
-- `apps/android/sms-collector/src/test/kotlin/com/agentlife/sms/AndroidSmsInboxReaderTest.kt` — inbox URI, projection, selection, and limit tests.
-- `apps/android/sms-collector/src/test/kotlin/com/agentlife/sms/SmsCursorTest.kt` — cursor ordering and restart tests.
-- `apps/android/sms-collector/src/test/kotlin/com/agentlife/sms/SmsSettingsAuthorityTest.kt` — local settings persistence and fail-closed tests.
-- `apps/android/sms-collector/src/test/kotlin/com/agentlife/sms/SmsAutoSyncCoordinatorTest.kt` — durable enqueue, cursor, egress, and retry tests.
-- `apps/android/sms-collector/src/test/kotlin/com/agentlife/sms/SmsSyncSchedulerTest.kt` — interval mapping tests.
-- `apps/android/sms-collector/src/test/kotlin/com/agentlife/sms/SmsSyncJobServiceTest.kt` — permission and job result tests.
-- `apps/android/sms-collector/src/test/kotlin/com/agentlife/sms/SmsWireCodecTest.kt` — deterministic JSON byte tests.
-- `apps/android/core-model/src/main/kotlin/com/agentlife/core/model/CapabilityOutboxContracts.kt` — generic encrypted capability event contract.
-- `apps/android/encrypted-store/src/main/kotlin/com/agentlife/encrypted/store/CapabilityOutboxStore.kt` — AES-GCM capability outbox implementation.
-- `apps/android/encrypted-store/src/test/kotlin/com/agentlife/encrypted/store/CapabilityOutboxStoreTest.kt` — ciphertext, restart, ACK, and idempotency tests.
+- `apps/android/sms-collector/src/main/kotlin/com/openandroidintelligence/sms/SmsInboxReader.kt` — platform-neutral row/query seam.
+- `apps/android/sms-collector/src/main/kotlin/com/openandroidintelligence/sms/AndroidSmsInboxReader.kt` — `ContentResolver` adapter limited to the inbox URI.
+- `apps/android/sms-collector/src/main/kotlin/com/openandroidintelligence/sms/SmsCursor.kt` — monotonic `(date,id)` cursor and persistence seam.
+- `apps/android/sms-collector/src/main/kotlin/com/openandroidintelligence/sms/SmsSettingsAuthority.kt` — fail-closed local settings persistence and controller.
+- `apps/android/sms-collector/src/main/kotlin/com/openandroidintelligence/sms/AndroidSmsCapabilityProvider.kt` — typed on-demand and finite auto-send batch provider.
+- `apps/android/sms-collector/src/main/kotlin/com/openandroidintelligence/sms/SmsAutoSyncCoordinator.kt` — durable enqueue, cursor advancement, and dispatch orchestration.
+- `apps/android/sms-collector/src/main/kotlin/com/openandroidintelligence/sms/SmsSyncScheduler.kt` — interval mapping and `JobScheduler` adapter.
+- `apps/android/sms-collector/src/main/kotlin/com/openandroidintelligence/sms/SmsWireCodec.kt` — deterministic Kotlin SMS event bytes for the Android queue.
+- `apps/android/sms-collector/src/test/kotlin/com/openandroidintelligence/sms/AndroidSmsCapabilityProviderTest.kt` — provider mapping and failure tests.
+- `apps/android/sms-collector/src/test/kotlin/com/openandroidintelligence/sms/AndroidSmsInboxReaderTest.kt` — inbox URI, projection, selection, and limit tests.
+- `apps/android/sms-collector/src/test/kotlin/com/openandroidintelligence/sms/SmsCursorTest.kt` — cursor ordering and restart tests.
+- `apps/android/sms-collector/src/test/kotlin/com/openandroidintelligence/sms/SmsSettingsAuthorityTest.kt` — local settings persistence and fail-closed tests.
+- `apps/android/sms-collector/src/test/kotlin/com/openandroidintelligence/sms/SmsAutoSyncCoordinatorTest.kt` — durable enqueue, cursor, egress, and retry tests.
+- `apps/android/sms-collector/src/test/kotlin/com/openandroidintelligence/sms/SmsSyncSchedulerTest.kt` — interval mapping tests.
+- `apps/android/sms-collector/src/test/kotlin/com/openandroidintelligence/sms/SmsSyncJobServiceTest.kt` — permission and job result tests.
+- `apps/android/sms-collector/src/test/kotlin/com/openandroidintelligence/sms/SmsWireCodecTest.kt` — deterministic JSON byte tests.
+- `apps/android/core-model/src/main/kotlin/com/openandroidintelligence/core/model/CapabilityOutboxContracts.kt` — generic encrypted capability event contract.
+- `apps/android/encrypted-store/src/main/kotlin/com/openandroidintelligence/encrypted/store/CapabilityOutboxStore.kt` — AES-GCM capability outbox implementation.
+- `apps/android/encrypted-store/src/test/kotlin/com/openandroidintelligence/encrypted/store/CapabilityOutboxStoreTest.kt` — ciphertext, restart, ACK, and idempotency tests.
 - `apps/android/settings.gradle.kts` and `apps/android/app/build.gradle.kts` — register and consume `:sms-collector`.
 - `apps/android/app/src/main/AndroidManifest.xml` — declare `READ_SMS` and the non-exported sync job service.
-- `apps/android/app/src/main/kotlin/com/agentlife/mobile/AgentLifeApplication.kt` — compose SMS settings, provider, outbox, scheduler, and paired transport.
-- `apps/android/app/src/main/kotlin/com/agentlife/mobile/MainActivity.kt` — local SMS settings controls and permission request only.
+- `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/OpenAndroidIntelligenceApplication.kt` — compose SMS settings, provider, outbox, scheduler, and paired transport.
+- `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/MainActivity.kt` — local SMS settings controls and permission request only.
 - `mvp-contract/schemas/v1/sms-record.schema.json` and `mvp-contract/schemas/v1/sms-api.schema.json` — closed SMS records and operations.
 - `mvp-contract/src/wire-codec.ts` and `mvp-contract/test/sms-contract.test.ts` — TypeScript SMS encode/validate boundary.
 - `bridge-contract/src/sms-store.ts`, `bridge-contract/src/sms-subscription-store.ts`, and `bridge-contract/src/sms-service.ts` — Bridge query/subscription/ACK contract.
@@ -66,10 +66,10 @@
 ### Task 1: Close the Android SMS capability contract
 
 **Files:**
-- Create: `apps/android/capability-ports/src/main/kotlin/com/agentlife/capability/SmsCapabilityContracts.kt`
-- Modify: `apps/android/capability-ports/src/main/kotlin/com/agentlife/capability/CapabilityProviderContracts.kt`
-- Create: `apps/android/capability-ports/src/test/kotlin/com/agentlife/capability/CapabilityProviderContractsTest.kt`
-- Create: `apps/android/capability-ports/src/test/kotlin/com/agentlife/capability/SmsCapabilityContractsTest.kt`
+- Create: `apps/android/capability-ports/src/main/kotlin/com/openandroidintelligence/capability/SmsCapabilityContracts.kt`
+- Modify: `apps/android/capability-ports/src/main/kotlin/com/openandroidintelligence/capability/CapabilityProviderContracts.kt`
+- Create: `apps/android/capability-ports/src/test/kotlin/com/openandroidintelligence/capability/CapabilityProviderContractsTest.kt`
+- Create: `apps/android/capability-ports/src/test/kotlin/com/openandroidintelligence/capability/SmsCapabilityContractsTest.kt`
 
 **Interfaces:**
 - Consumes: `CapabilityFilter.Sms`, `AuthorizedReadScope`, `AuthorizedAutoSendScope`, `CapabilityPayload`, and existing provider interfaces.
@@ -87,7 +87,7 @@
 
   ```sh
   cd apps/android
-  ./gradlew --no-daemon :capability-ports:test --tests 'com.agentlife.capability.CapabilityProviderContractsTest' --tests 'com.agentlife.capability.SmsCapabilityContractsTest'
+  ./gradlew --no-daemon :capability-ports:test --tests 'com.openandroidintelligence.capability.CapabilityProviderContractsTest' --tests 'com.openandroidintelligence.capability.SmsCapabilityContractsTest'
   ```
 
   Expected: compilation/test failure because the SMS metadata fields, policy type, interval type, and SMS disclosure rule do not yet exist.
@@ -111,7 +111,7 @@
 - [ ] **Step 5: Commit the contract slice.**
 
   ```sh
-  git add apps/android/capability-ports/src/main/kotlin/com/agentlife/capability/CapabilityProviderContracts.kt apps/android/capability-ports/src/main/kotlin/com/agentlife/capability/SmsCapabilityContracts.kt apps/android/capability-ports/src/test/kotlin/com/agentlife/capability/CapabilityProviderContractsTest.kt apps/android/capability-ports/src/test/kotlin/com/agentlife/capability/SmsCapabilityContractsTest.kt
+  git add apps/android/capability-ports/src/main/kotlin/com/openandroidintelligence/capability/CapabilityProviderContracts.kt apps/android/capability-ports/src/main/kotlin/com/openandroidintelligence/capability/SmsCapabilityContracts.kt apps/android/capability-ports/src/test/kotlin/com/openandroidintelligence/capability/CapabilityProviderContractsTest.kt apps/android/capability-ports/src/test/kotlin/com/openandroidintelligence/capability/SmsCapabilityContractsTest.kt
   git commit -m "feat(android): close SMS capability contract"
   ```
 
@@ -119,12 +119,12 @@
 
 **Files:**
 - Create: `apps/android/sms-collector/build.gradle.kts`
-- Create: `apps/android/sms-collector/src/main/kotlin/com/agentlife/sms/SmsInboxReader.kt`
-- Create: `apps/android/sms-collector/src/main/kotlin/com/agentlife/sms/AndroidSmsInboxReader.kt`
-- Create: `apps/android/sms-collector/src/main/kotlin/com/agentlife/sms/SmsCursor.kt`
-- Create: `apps/android/sms-collector/src/main/kotlin/com/agentlife/sms/AndroidSmsCapabilityProvider.kt`
-- Create: `apps/android/sms-collector/src/test/kotlin/com/agentlife/sms/AndroidSmsCapabilityProviderTest.kt`
-- Create: `apps/android/sms-collector/src/test/kotlin/com/agentlife/sms/AndroidSmsInboxReaderTest.kt`
+- Create: `apps/android/sms-collector/src/main/kotlin/com/openandroidintelligence/sms/SmsInboxReader.kt`
+- Create: `apps/android/sms-collector/src/main/kotlin/com/openandroidintelligence/sms/AndroidSmsInboxReader.kt`
+- Create: `apps/android/sms-collector/src/main/kotlin/com/openandroidintelligence/sms/SmsCursor.kt`
+- Create: `apps/android/sms-collector/src/main/kotlin/com/openandroidintelligence/sms/AndroidSmsCapabilityProvider.kt`
+- Create: `apps/android/sms-collector/src/test/kotlin/com/openandroidintelligence/sms/AndroidSmsCapabilityProviderTest.kt`
+- Create: `apps/android/sms-collector/src/test/kotlin/com/openandroidintelligence/sms/AndroidSmsInboxReaderTest.kt`
 - Modify: `apps/android/settings.gradle.kts`
 
 **Interfaces:**
@@ -209,10 +209,10 @@
 ### Task 3: Persist SMS settings and the monotonic cursor
 
 **Files:**
-- Modify: `apps/android/sms-collector/src/main/kotlin/com/agentlife/sms/SmsCursor.kt`
-- Create: `apps/android/sms-collector/src/main/kotlin/com/agentlife/sms/SmsSettingsAuthority.kt`
-- Create: `apps/android/sms-collector/src/test/kotlin/com/agentlife/sms/SmsCursorTest.kt`
-- Create: `apps/android/sms-collector/src/test/kotlin/com/agentlife/sms/SmsSettingsAuthorityTest.kt`
+- Modify: `apps/android/sms-collector/src/main/kotlin/com/openandroidintelligence/sms/SmsCursor.kt`
+- Create: `apps/android/sms-collector/src/main/kotlin/com/openandroidintelligence/sms/SmsSettingsAuthority.kt`
+- Create: `apps/android/sms-collector/src/test/kotlin/com/openandroidintelligence/sms/SmsCursorTest.kt`
+- Create: `apps/android/sms-collector/src/test/kotlin/com/openandroidintelligence/sms/SmsSettingsAuthorityTest.kt`
 
 **Interfaces:**
 - Consumes: `SmsHistoryPolicy`, `SmsSyncInterval`, `SmsCursor`, `SmsHistoryPolicySource`, `SmsCursorSource`, `CapabilityGrant`, and app-private byte persistence.
@@ -227,7 +227,7 @@
 - [ ] **Step 2: Run the focused tests to verify RED.**
 
   ```sh
-  ./gradlew --no-daemon :sms-collector:test --tests 'com.agentlife.sms.SmsCursorTest' --tests 'com.agentlife.sms.SmsSettingsAuthorityTest'
+  ./gradlew --no-daemon :sms-collector:test --tests 'com.openandroidintelligence.sms.SmsCursorTest' --tests 'com.openandroidintelligence.sms.SmsSettingsAuthorityTest'
   ```
 
   Expected: unresolved-symbol or missing-behavior failures.
@@ -251,18 +251,18 @@
 - [ ] **Step 6: Commit settings/cursor persistence.**
 
   ```sh
-  git add apps/android/sms-collector/src/main/kotlin/com/agentlife/sms/SmsCursor.kt apps/android/sms-collector/src/main/kotlin/com/agentlife/sms/SmsSettingsAuthority.kt apps/android/sms-collector/src/test/kotlin/com/agentlife/sms/SmsCursorTest.kt apps/android/sms-collector/src/test/kotlin/com/agentlife/sms/SmsSettingsAuthorityTest.kt
+  git add apps/android/sms-collector/src/main/kotlin/com/openandroidintelligence/sms/SmsCursor.kt apps/android/sms-collector/src/main/kotlin/com/openandroidintelligence/sms/SmsSettingsAuthority.kt apps/android/sms-collector/src/test/kotlin/com/openandroidintelligence/sms/SmsCursorTest.kt apps/android/sms-collector/src/test/kotlin/com/openandroidintelligence/sms/SmsSettingsAuthorityTest.kt
   git commit -m "feat(android): persist SMS policy and cursor"
   ```
 
 ### Task 4: Add the encrypted capability outbox and auto-send coordinator
 
 **Files:**
-- Create: `apps/android/core-model/src/main/kotlin/com/agentlife/core/model/CapabilityOutboxContracts.kt`
-- Create: `apps/android/encrypted-store/src/main/kotlin/com/agentlife/encrypted/store/CapabilityOutboxStore.kt`
-- Create: `apps/android/encrypted-store/src/test/kotlin/com/agentlife/encrypted/store/CapabilityOutboxStoreTest.kt`
-- Create: `apps/android/sms-collector/src/main/kotlin/com/agentlife/sms/SmsAutoSyncCoordinator.kt`
-- Create: `apps/android/sms-collector/src/test/kotlin/com/agentlife/sms/SmsAutoSyncCoordinatorTest.kt`
+- Create: `apps/android/core-model/src/main/kotlin/com/openandroidintelligence/core/model/CapabilityOutboxContracts.kt`
+- Create: `apps/android/encrypted-store/src/main/kotlin/com/openandroidintelligence/encrypted/store/CapabilityOutboxStore.kt`
+- Create: `apps/android/encrypted-store/src/test/kotlin/com/openandroidintelligence/encrypted/store/CapabilityOutboxStoreTest.kt`
+- Create: `apps/android/sms-collector/src/main/kotlin/com/openandroidintelligence/sms/SmsAutoSyncCoordinator.kt`
+- Create: `apps/android/sms-collector/src/test/kotlin/com/openandroidintelligence/sms/SmsAutoSyncCoordinatorTest.kt`
 - Modify: `apps/android/encrypted-store/build.gradle.kts`
 - Modify: `apps/android/sms-collector/build.gradle.kts`
 
@@ -300,12 +300,12 @@
 
   ```sh
   cd apps/android
-  ./gradlew --no-daemon :encrypted-store:test --tests 'com.agentlife.encrypted.store.CapabilityOutboxStoreTest'
+  ./gradlew --no-daemon :encrypted-store:test --tests 'com.openandroidintelligence.encrypted.store.CapabilityOutboxStoreTest'
   ```
 
 - [ ] **Step 3: Implement the generic encrypted capability outbox.**
 
-  Use the existing `EncryptedOutboxPersistence` and AES-GCM pattern, but use a separate magic/version (`AGENT_LIFE_CAPABILITY_OUTBOX_V1`) and serialize only event ID, capability, record ID, policy revision, and wire bytes inside the encrypted envelope. Use deterministic event IDs supplied by the caller, make enqueue idempotent for byte-identical existing IDs, and throw `CapabilityOutboxConflict` for a same ID with different metadata or bytes. Keep a bounded capacity of 10,000 and throw `CapabilityOutboxFull` instead of evicting SMS events.
+  Use the existing `EncryptedOutboxPersistence` and AES-GCM pattern, but use a separate magic/version (`OPEN_ANDROID_INTELLIGENCE_CAPABILITY_OUTBOX_V1`) and serialize only event ID, capability, record ID, policy revision, and wire bytes inside the encrypted envelope. Use deterministic event IDs supplied by the caller, make enqueue idempotent for byte-identical existing IDs, and throw `CapabilityOutboxConflict` for a same ID with different metadata or bytes. Keep a bounded capacity of 10,000 and throw `CapabilityOutboxFull` instead of evicting SMS events.
 
 - [ ] **Step 4: Write the failing auto-sync ordering test.**
 
@@ -324,15 +324,15 @@
 - [ ] **Step 7: Commit the encrypted auto-send slice.**
 
   ```sh
-  git add apps/android/core-model/src/main/kotlin/com/agentlife/core/model/CapabilityOutboxContracts.kt apps/android/encrypted-store apps/android/sms-collector/src/main/kotlin/com/agentlife/sms/SmsAutoSyncCoordinator.kt apps/android/sms-collector/src/test/kotlin/com/agentlife/sms/SmsAutoSyncCoordinatorTest.kt
+  git add apps/android/core-model/src/main/kotlin/com/openandroidintelligence/core/model/CapabilityOutboxContracts.kt apps/android/encrypted-store apps/android/sms-collector/src/main/kotlin/com/openandroidintelligence/sms/SmsAutoSyncCoordinator.kt apps/android/sms-collector/src/test/kotlin/com/openandroidintelligence/sms/SmsAutoSyncCoordinatorTest.kt
   git commit -m "feat(android): add encrypted SMS auto-send outbox"
   ```
 
 ### Task 5: Add deterministic SMS wire encoding and the protocol schemas
 
 **Files:**
-- Create: `apps/android/sms-collector/src/main/kotlin/com/agentlife/sms/SmsWireCodec.kt`
-- Create: `apps/android/sms-collector/src/test/kotlin/com/agentlife/sms/SmsWireCodecTest.kt`
+- Create: `apps/android/sms-collector/src/main/kotlin/com/openandroidintelligence/sms/SmsWireCodec.kt`
+- Create: `apps/android/sms-collector/src/test/kotlin/com/openandroidintelligence/sms/SmsWireCodecTest.kt`
 - Create: `mvp-contract/schemas/v1/sms-record.schema.json`
 - Create: `mvp-contract/schemas/v1/sms-api.schema.json`
 - Modify: `mvp-contract/src/wire-codec.ts`
@@ -379,7 +379,7 @@
   ```sh
   ./tools/run-node24 npm test -- mvp-contract/test/sms-contract.test.ts
   cd apps/android
-  ./gradlew --no-daemon :sms-collector:test --tests 'com.agentlife.sms.SmsWireCodecTest'
+  ./gradlew --no-daemon :sms-collector:test --tests 'com.openandroidintelligence.sms.SmsWireCodecTest'
   ```
 
   Expected: missing schema/encoder/validator failures.
@@ -402,22 +402,22 @@
 - [ ] **Step 5: Commit the wire slice.**
 
   ```sh
-  git add apps/android/sms-collector/src/main/kotlin/com/agentlife/sms/SmsWireCodec.kt apps/android/sms-collector/src/test/kotlin/com/agentlife/sms/SmsWireCodecTest.kt mvp-contract/schemas/v1/sms-record.schema.json mvp-contract/schemas/v1/sms-api.schema.json mvp-contract/src/wire-codec.ts mvp-contract/test/sms-contract.test.ts mvp-contract/test/mvp-contract.test.ts
+  git add apps/android/sms-collector/src/main/kotlin/com/openandroidintelligence/sms/SmsWireCodec.kt apps/android/sms-collector/src/test/kotlin/com/openandroidintelligence/sms/SmsWireCodecTest.kt mvp-contract/schemas/v1/sms-record.schema.json mvp-contract/schemas/v1/sms-api.schema.json mvp-contract/src/wire-codec.ts mvp-contract/test/sms-contract.test.ts mvp-contract/test/mvp-contract.test.ts
   git commit -m "feat(protocol): add closed SMS wire contract"
   ```
 
 ### Task 6: Compose the Android permission, settings UI, and scheduler
 
 **Files:**
-- Create: `apps/android/sms-collector/src/main/kotlin/com/agentlife/sms/SmsSyncScheduler.kt`
-- Create: `apps/android/sms-collector/src/main/kotlin/com/agentlife/sms/SmsSyncJobService.kt`
-- Create: `apps/android/sms-collector/src/test/kotlin/com/agentlife/sms/SmsSyncSchedulerTest.kt`
-- Create: `apps/android/sms-collector/src/test/kotlin/com/agentlife/sms/SmsSyncJobServiceTest.kt`
+- Create: `apps/android/sms-collector/src/main/kotlin/com/openandroidintelligence/sms/SmsSyncScheduler.kt`
+- Create: `apps/android/sms-collector/src/main/kotlin/com/openandroidintelligence/sms/SmsSyncJobService.kt`
+- Create: `apps/android/sms-collector/src/test/kotlin/com/openandroidintelligence/sms/SmsSyncSchedulerTest.kt`
+- Create: `apps/android/sms-collector/src/test/kotlin/com/openandroidintelligence/sms/SmsSyncJobServiceTest.kt`
 - Modify: `apps/android/app/build.gradle.kts`
 - Modify: `apps/android/app/src/main/AndroidManifest.xml`
-- Modify: `apps/android/app/src/main/kotlin/com/agentlife/mobile/AgentLifeApplication.kt`
-- Modify: `apps/android/app/src/main/kotlin/com/agentlife/mobile/MainActivity.kt`
-- Create: `apps/android/app/src/test/kotlin/com/agentlife/mobile/SmsSettingsPresenterTest.kt`
+- Modify: `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/OpenAndroidIntelligenceApplication.kt`
+- Modify: `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/MainActivity.kt`
+- Create: `apps/android/app/src/test/kotlin/com/openandroidintelligence/mobile/SmsSettingsPresenterTest.kt`
 
 **Interfaces:**
 - Consumes: `PersistentSmsSettingsAuthority`, `LocalSmsSettingsController`, `AndroidSmsCapabilityProvider`, `SmsAutoSyncCoordinator`, `CapabilityAvailability`, Android runtime permission APIs, and `JobScheduler`.
@@ -431,7 +431,7 @@
 
   ```sh
   cd apps/android
-  ./gradlew --no-daemon :sms-collector:test :app:test --tests 'com.agentlife.sms.SmsSyncSchedulerTest' --tests 'com.agentlife.mobile.SmsSettingsPresenterTest'
+  ./gradlew --no-daemon :sms-collector:test :app:test --tests 'com.openandroidintelligence.sms.SmsSyncSchedulerTest' --tests 'com.openandroidintelligence.mobile.SmsSettingsPresenterTest'
   ```
 
 - [ ] **Step 3: Implement scheduler seams and job service.**
@@ -444,7 +444,7 @@
 
   Add `testImplementation("junit:junit:4.13.2")` to the app module so the pure presenter test can run without introducing a UI test framework.
 
-  In `AgentLifeApplication`, create app-private files `sms-settings-v1.bin`, `sms-cursor-v1.bin`, and `sms-outbox-v1.aesgcm`; create an Android Keystore AES key with a distinct SMS capability alias; compose the inbox reader, settings authority, cursor store, `AndroidSmsCapabilityProvider`, capability outbox, `SmsAutoSyncCoordinator`, and scheduler. Register them through `SmsRuntimeFactoryRegistry` with a deny-first fallback when key creation or state recovery fails.
+  In `OpenAndroidIntelligenceApplication`, create app-private files `sms-settings-v1.bin`, `sms-cursor-v1.bin`, and `sms-outbox-v1.aesgcm`; create an Android Keystore AES key with a distinct SMS capability alias; compose the inbox reader, settings authority, cursor store, `AndroidSmsCapabilityProvider`, capability outbox, `SmsAutoSyncCoordinator`, and scheduler. Register them through `SmsRuntimeFactoryRegistry` with a deny-first fallback when key creation or state recovery fails.
 
   In `MainActivity`, use platform views only. Render the SMS controls described in the design, request `Manifest.permission.READ_SMS` only from a local click handler, save settings through `LocalSmsSettingsController`, and update/cancel the scheduler after a successful local save. Display `PERMISSION_REQUIRED`, corrupted-state, and disabled-state messages without showing SMS body text. No exported Activity or IPC endpoint may mutate SMS settings.
 
@@ -458,7 +458,7 @@
 - [ ] **Step 6: Commit Android composition.**
 
   ```sh
-  git add apps/android/app/build.gradle.kts apps/android/app/src/main/AndroidManifest.xml apps/android/app/src/main/kotlin/com/agentlife/mobile/AgentLifeApplication.kt apps/android/app/src/main/kotlin/com/agentlife/mobile/MainActivity.kt apps/android/app/src/test/kotlin/com/agentlife/mobile apps/android/sms-collector/src/main/kotlin/com/agentlife/sms/SmsSyncScheduler.kt apps/android/sms-collector/src/main/kotlin/com/agentlife/sms/SmsSyncJobService.kt apps/android/sms-collector/src/test/kotlin/com/agentlife/sms/SmsSyncSchedulerTest.kt apps/android/sms-collector/src/test/kotlin/com/agentlife/sms/SmsSyncJobServiceTest.kt
+  git add apps/android/app/build.gradle.kts apps/android/app/src/main/AndroidManifest.xml apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/OpenAndroidIntelligenceApplication.kt apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/MainActivity.kt apps/android/app/src/test/kotlin/com/openandroidintelligence/mobile apps/android/sms-collector/src/main/kotlin/com/openandroidintelligence/sms/SmsSyncScheduler.kt apps/android/sms-collector/src/main/kotlin/com/openandroidintelligence/sms/SmsSyncJobService.kt apps/android/sms-collector/src/test/kotlin/com/openandroidintelligence/sms/SmsSyncSchedulerTest.kt apps/android/sms-collector/src/test/kotlin/com/openandroidintelligence/sms/SmsSyncJobServiceTest.kt
   git commit -m "feat(android): compose SMS permission and auto-sync"
   ```
 

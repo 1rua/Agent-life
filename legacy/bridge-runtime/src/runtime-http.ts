@@ -41,7 +41,7 @@ const header = (request: RuntimeHttpRequest, name: string): string | readonly st
   Object.entries(request.headers).find(([key]) => key.toLowerCase() === name.toLowerCase())?.[1];
 
 const peerFingerprint = (request: RuntimeHttpRequest): string | "missing" | "invalid" => {
-  const value = header(request, "x-agent-life-peer-fingerprint");
+  const value = header(request, "x-open-android-intelligence-peer-fingerprint");
   if (value === undefined) return "missing";
   if (typeof value === "string") return value;
   if (value.length === 1 && typeof value[0] === "string") return value[0];

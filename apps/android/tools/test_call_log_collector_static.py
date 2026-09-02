@@ -15,10 +15,10 @@ APP_MANIFEST = ROOT / "app" / "src" / "main" / "AndroidManifest.xml"
 ASSISTANT_HOLDER_BUILD_GRADLE = ROOT / "assistant-holder" / "build.gradle.kts"
 ASSISTANT_HOLDER_MANIFEST = ROOT / "assistant-holder" / "src" / "main" / "AndroidManifest.xml"
 FORBIDDEN_SURFACES = ROOT / "gradle" / "mvp-forbidden-surfaces.gradle.kts"
-CALL_LOG_READER = CALL_LOG_ROOT / "src" / "main" / "kotlin" / "com" / "agentlife" / "calls" / "AndroidCallLogReader.kt"
-CALL_LOG_CAPABILITY_PROVIDER = CALL_LOG_ROOT / "src" / "main" / "kotlin" / "com" / "agentlife" / "calls" / "AndroidCallLogCapabilityProvider.kt"
-CALL_LOG_SCHEDULER = CALL_LOG_ROOT / "src" / "main" / "kotlin" / "com" / "agentlife" / "calls" / "CallLogSyncScheduler.kt"
-CALL_LOG_JOB_SERVICE = CALL_LOG_ROOT / "src" / "main" / "kotlin" / "com" / "agentlife" / "calls" / "CallLogSyncJobService.kt"
+CALL_LOG_READER = CALL_LOG_ROOT / "src" / "main" / "kotlin" / "com" / "openandroidintelligence" / "calls" / "AndroidCallLogReader.kt"
+CALL_LOG_CAPABILITY_PROVIDER = CALL_LOG_ROOT / "src" / "main" / "kotlin" / "com" / "openandroidintelligence" / "calls" / "AndroidCallLogCapabilityProvider.kt"
+CALL_LOG_SCHEDULER = CALL_LOG_ROOT / "src" / "main" / "kotlin" / "com" / "openandroidintelligence" / "calls" / "CallLogSyncScheduler.kt"
+CALL_LOG_JOB_SERVICE = CALL_LOG_ROOT / "src" / "main" / "kotlin" / "com" / "openandroidintelligence" / "calls" / "CallLogSyncJobService.kt"
 ANDROID_NS = "{http://schemas.android.com/apk/res/android}"
 ALLOWED_PRODUCTION_DEPENDENCIES = {
     ("implementation", 'project(":capability-ports")'),
@@ -483,7 +483,7 @@ class CallLogCollectorStaticTest(unittest.TestCase):
         )
 
         build = (CALL_LOG_ROOT / "build.gradle.kts").read_text(encoding="utf-8")
-        self.assertIn('namespace = "com.agentlife.calls"', build)
+        self.assertIn('namespace = "com.openandroidintelligence.calls"', build)
         assert_production_dependencies_allowed(build)
 
     def test_production_dependency_allowlist_rejects_other_scopes_and_targets(self):
@@ -631,7 +631,7 @@ class CallLogCollectorStaticTest(unittest.TestCase):
         services = [
             service
             for service in application.findall("service")
-            if service.get(f"{ANDROID_NS}name") == "com.agentlife.calls.CallLogSyncJobService"
+            if service.get(f"{ANDROID_NS}name") == "com.openandroidintelligence.calls.CallLogSyncJobService"
         ]
         self.assertEqual(1, len(services))
         self.assertEqual("false", services[0].get(f"{ANDROID_NS}exported"))

@@ -7,12 +7,12 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-COLLECTOR = ROOT / "notification-collector/src/main/kotlin/com/agentlife/notifications"
+COLLECTOR = ROOT / "notification-collector/src/main/kotlin/com/openandroidintelligence/notifications"
 RUNTIME = COLLECTOR / "NotificationRuntime.kt"
 SERVICE = COLLECTOR / "AndroidNotificationCollector.kt"
-APPLICATION = ROOT / "app/src/main/kotlin/com/agentlife/mobile/AgentLifeApplication.kt"
+APPLICATION = ROOT / "app/src/main/kotlin/com/openandroidintelligence/mobile/OpenAndroidIntelligenceApplication.kt"
 MANIFEST = ROOT / "app/src/main/AndroidManifest.xml"
-KEY_PROVIDER = ROOT / "encrypted-store/src/main/kotlin/com/agentlife/encrypted/store/AndroidKeystoreOutboxKeyProvider.kt"
+KEY_PROVIDER = ROOT / "encrypted-store/src/main/kotlin/com/openandroidintelligence/encrypted/store/AndroidKeystoreOutboxKeyProvider.kt"
 
 
 class NotificationRuntimeStaticTest(unittest.TestCase):
@@ -53,7 +53,7 @@ class NotificationRuntimeStaticTest(unittest.TestCase):
         application = self.read(APPLICATION)
         manifest = self.read(MANIFEST)
         key_provider = self.read(KEY_PROVIDER)
-        self.assertIn('android:name=".AgentLifeApplication"', manifest)
+        self.assertIn('android:name=".OpenAndroidIntelligenceApplication"', manifest)
         self.assertIn('android:allowBackup="false"', manifest)
         self.assertIn("noBackupFilesDir", application)
         self.assertIn("FileNotificationPolicyPersistence", application)

@@ -6,8 +6,8 @@ import { isLowS, verifyEs256 } from "./crypto.js";
 import { validateSchema } from "./schema-validator.js";
 import { parseSignatureDomain } from "./profile.js";
 
-const LEGACY_SCHEMA_ID = "urn:agent-life:protocol:v0.9:pending-operation" as const;
-const TARGET_SCHEMA_ID = "urn:agent-life:protocol:v1:operation" as const;
+const LEGACY_SCHEMA_ID = "urn:open-android-intelligence:protocol:v0.9:pending-operation" as const;
+const TARGET_SCHEMA_ID = "urn:open-android-intelligence:protocol:v1:operation" as const;
 const DIGEST = /^[A-Za-z0-9_-]{43}$/;
 const ID = /^[A-Za-z0-9._~-]{1,128}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -177,7 +177,7 @@ export function migrateSignedRecord(input: MigrationInput, targetVersion: string
     migrated_at: input.migratedAt,
   };
   try {
-    validateSchema("urn:agent-life:protocol:v1:migration-receipt", receipt);
+    validateSchema("urn:open-android-intelligence:protocol:v1:migration-receipt", receipt);
   } catch {
     failIntegrity();
   }

@@ -23,7 +23,7 @@ import v1BootstrapExportSchema from "../../../gateway-contract/schemas/v1-bootst
  */
 
 export const V1_BOOTSTRAP_EXPORT_SCHEMA_VERSION = "1.0" as const;
-export const V1_BOOTSTRAP_SOURCE_PORT = "agent-life.v1-bootstrap-source.v1" as const;
+export const V1_BOOTSTRAP_SOURCE_PORT = "open-android-intelligence.v1-bootstrap-source.v1" as const;
 
 const GATEWAY_INDEX_FILE = "gateways.json" as const;
 const PLUGIN_INDEX_FILE = "plugins.json" as const;

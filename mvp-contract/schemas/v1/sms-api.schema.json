@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:agent-life:mvp:sms-api:v1",
-  "title": "Agent Life SMS API",
+  "$id": "urn:open-android-intelligence:mvp:sms-api:v1",
+  "title": "Open Android Intelligence SMS API",
   "unevaluatedProperties": false,
   "oneOf": [
     { "$ref": "#/$defs/query" },

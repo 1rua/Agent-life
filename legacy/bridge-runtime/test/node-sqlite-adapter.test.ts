@@ -13,7 +13,7 @@ import {
 } from "../../../bridge-contract/src/persistence.js";
 import { openNodeSqliteBridgeAdapter } from "../src/node-sqlite-adapter.js";
 
-const root = await mkdtemp(join(tmpdir(), "agent-life-node-sqlite-"));
+const root = await mkdtemp(join(tmpdir(), "open-android-intelligence-node-sqlite-"));
 const databasePath = join(root, "bridge.sqlite");
 let adapter = await openNodeSqliteBridgeAdapter({
   databasePath,

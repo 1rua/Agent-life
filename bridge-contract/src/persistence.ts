@@ -6,7 +6,7 @@ import type {
 import { BridgeServiceError } from "./service-types.js";
 
 /** Stable identity for the SQLite-backed Bridge adapter boundary. */
-export const SQLITE_BRIDGE_ADAPTER_PORT = "agent-life.bridge-sqlite-adapter.v1" as const;
+export const SQLITE_BRIDGE_ADAPTER_PORT = "open-android-intelligence.bridge-sqlite-adapter.v1" as const;
 
 /** Immutable Node-built-in SQLite driver selected by MVP-DEP-BRIDGE. */
 export const NODE_SQLITE_BRIDGE_DRIVER = "node:sqlite@24.18.0/sqlite@3.53.1" as const;

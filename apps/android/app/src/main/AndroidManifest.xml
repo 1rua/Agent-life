@@ -3,9 +3,9 @@
     <uses-permission android:name="android.permission.INTERNET" />
 
     <application
-        android:name=".AgentLifeApplication"
+        android:name=".OpenAndroidIntelligenceApplication"
         android:allowBackup="false"
-        android:label="Agent Life"
+        android:label="Open Android Intelligence"
         android:supportsRtl="true"
         android:usesCleartextTraffic="true">
         <activity

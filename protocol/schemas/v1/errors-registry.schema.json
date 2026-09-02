@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:agent-life:protocol:v1:errors-registry",
+  "$id": "urn:open-android-intelligence:protocol:v1:errors-registry",
   "type": "object",
   "required": ["$schema", "registry_id", "protocol_version", "errors"],
   "properties": {
-    "$schema": { "const": "urn:agent-life:protocol:v1:errors-registry" },
-    "registry_id": { "const": "urn:agent-life:protocol:v1:registry:errors" },
+    "$schema": { "const": "urn:open-android-intelligence:protocol:v1:errors-registry" },
+    "registry_id": { "const": "urn:open-android-intelligence:protocol:v1:registry:errors" },
     "protocol_version": { "const": "1.0" },
     "errors": { "type": "array", "items": { "$ref": "#/$defs/error" }, "minItems": 1 }
   },

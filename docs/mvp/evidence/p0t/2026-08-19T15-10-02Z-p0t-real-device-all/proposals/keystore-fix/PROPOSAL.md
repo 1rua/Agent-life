@@ -1,6 +1,6 @@
 # KeystoreEncryptedNoBackupState 真机加密修复提案（未应用，待用户确认）
 
-组件：`apps/android/tailnet-core/src/main/kotlin/com/agentlife/tailnet/core/KeystoreEncryptedNoBackupState.kt`
+组件：`apps/android/tailnet-core/src/main/kotlin/com/openandroidintelligence/tailnet/core/KeystoreEncryptedNoBackupState.kt`
 
 真机现象（SM-X710 / API 36）：
 `Cipher.init(ENCRYPT_MODE, key, GCMParameterSpec(TAG_BITS, iv))` 抛

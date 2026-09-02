@@ -329,8 +329,8 @@ git diff --check
 根目录仍保留用户原有的 4 个未提交编译环境改动：
 
 - `apps/android/gradlew`；
-- `apps/android/core-model/src/main/kotlin/com/agentlife/core/model/TransportContracts.kt`；
-- `apps/android/tailnet-core/src/main/kotlin/com/agentlife/tailnet/core/TailscaleUserspaceCore.kt`；
+- `apps/android/core-model/src/main/kotlin/com/openandroidintelligence/core/model/TransportContracts.kt`；
+- `apps/android/tailnet-core/src/main/kotlin/com/openandroidintelligence/tailnet/core/TailscaleUserspaceCore.kt`；
 - `apps/android/tools/test_transport_boundary.py`。
 
 以下进度仍只存在于 worktree，未同步到根目录：

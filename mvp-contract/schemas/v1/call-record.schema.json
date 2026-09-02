@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:agent-life:mvp:call-record:v1",
-  "title": "Agent Life call record",
+  "$id": "urn:open-android-intelligence:mvp:call-record:v1",
+  "title": "Open Android Intelligence call record",
   "type": "object",
   "additionalProperties": false,
   "unevaluatedProperties": false,
@@ -38,7 +38,7 @@
     "counterparty_number": {
       "oneOf": [
         { "type": "object", "additionalProperties": false, "unevaluatedProperties": false, "required": ["state"], "properties": { "state": { "const": "withheld" } } },
-        { "type": "object", "additionalProperties": false, "unevaluatedProperties": false, "required": ["state", "value"], "properties": { "state": { "const": "released" }, "value": { "type": "string", "minLength": 1, "description": "UTF-8 byte length is constrained by the executable agent-life contract extension, not JSON Schema maxLength code points.", "x-agent-life-maxUtf8Bytes": 256 } } }
+        { "type": "object", "additionalProperties": false, "unevaluatedProperties": false, "required": ["state", "value"], "properties": { "state": { "const": "released" }, "value": { "type": "string", "minLength": 1, "description": "UTF-8 byte length is constrained by the executable open-android-intelligence contract extension, not JSON Schema maxLength code points.", "x-open-android-intelligence-maxUtf8Bytes": 256 } } }
       ]
     }
   }

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://agent-life.dev/schemas/gateway/v2/conversation.schema.json",
+  "$id": "https://open-android-intelligence.dev/schemas/gateway/v2/conversation.schema.json",
   "$defs": {
     "create": {
       "type": "object",
@@ -8,7 +8,7 @@
       "required": ["clientConversationId"],
       "properties": {
         "clientConversationId": {
-          "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
+          "$ref": "https://open-android-intelligence.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
         },
         "title": { "type": "string" }
       }
@@ -19,7 +19,7 @@
       "required": ["clientMessageId", "text", "attachments"],
       "properties": {
         "clientMessageId": {
-          "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
+          "$ref": "https://open-android-intelligence.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
         },
         "text": { "type": "string" },
         "attachments": {
@@ -30,7 +30,7 @@
             "required": ["attachmentId"],
             "properties": {
               "attachmentId": {
-                "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
+                "$ref": "https://open-android-intelligence.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
               }
             }
           }
@@ -66,7 +66,7 @@
       "required": ["clientMessageId"],
       "properties": {
         "clientMessageId": {
-          "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
+          "$ref": "https://open-android-intelligence.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
         }
       }
     },
@@ -76,7 +76,7 @@
       "required": ["conversationId", "sinceSeq"],
       "properties": {
         "conversationId": {
-          "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
+          "$ref": "https://open-android-intelligence.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
         },
         "sinceSeq": { "type": "integer", "minimum": 0 }
       }

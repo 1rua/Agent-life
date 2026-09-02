@@ -168,7 +168,7 @@ export class DeterministicOutboundEnvelopeStore {
         let reparsed;
         try {
             reparsed = parseCanonicalJson(rawWire);
-            validateSchema(`urn:agent-life:protocol:v1:envelope:${input.messageType}`, reparsed);
+            validateSchema(`urn:open-android-intelligence:protocol:v1:envelope:${input.messageType}`, reparsed);
         }
         catch {
             return { kind: "rejected", error: "INTEGRITY_FAILED" };

@@ -11,7 +11,7 @@ plugins {
 apply(from = "$rootDir/gradle/mvp-forbidden-surfaces.gradle.kts")
 
 allprojects {
-    group = "com.agentlife"
+    group = "com.openandroidintelligence"
     version = "0.1.0-mvp"
 }
 

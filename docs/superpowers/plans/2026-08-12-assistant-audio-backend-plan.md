@@ -36,11 +36,11 @@
 - `bridge-contract/src/assistant-chat-service.ts`: committed-artifact validation, audio attachment validation, and streamed reply emission.
 - `bridge-contract/src/index.ts`: exports the reply-event contract.
 - `bridge-contract/test/service-contract.test.ts`: Bridge authorization, resolver, idempotency, audio, and event tests.
-- `apps/android/artifact-ports/src/main/kotlin/com/agentlife/artifact/ArtifactSelectionPorts.kt`: Android audio media and bounded duration metadata.
-- `apps/android/artifact-ports/src/test/kotlin/com/agentlife/artifact/ArtifactSelectionPortsTest.kt`: Android artifact value validation tests.
+- `apps/android/artifact-ports/src/main/kotlin/com/openandroidintelligence/artifact/ArtifactSelectionPorts.kt`: Android audio media and bounded duration metadata.
+- `apps/android/artifact-ports/src/test/kotlin/com/openandroidintelligence/artifact/ArtifactSelectionPortsTest.kt`: Android artifact value validation tests.
 - `apps/android/artifact-ports/build.gradle.kts`: JUnit dependency for the new JVM contract tests.
-- `apps/android/core-model/src/main/kotlin/com/agentlife/core/model/AssistantAudioContracts.kt`: SDK-independent audio attachment and reply-event values.
-- `apps/android/core-model/src/test/kotlin/com/agentlife/core/model/AssistantAudioContractsTest.kt`: Kotlin audio/event validation tests.
+- `apps/android/core-model/src/main/kotlin/com/openandroidintelligence/core/model/AssistantAudioContracts.kt`: SDK-independent audio attachment and reply-event values.
+- `apps/android/core-model/src/test/kotlin/com/openandroidintelligence/core/model/AssistantAudioContractsTest.kt`: Kotlin audio/event validation tests.
 - `apps/android/tools/test_assistant_audio_backend_static.py`: SDK-free source boundary checks for the Android backend port.
 - `docs/mvp/mvp-vertical-slice-contract.md`: replace the text-only assistant description with the approved audio/event boundary.
 
@@ -406,10 +406,10 @@ git commit -m "feat(bridge): fence assistant audio and stream replies"
 
 **Files:**
 - Modify: `apps/android/artifact-ports/build.gradle.kts`
-- Modify: `apps/android/artifact-ports/src/main/kotlin/com/agentlife/artifact/ArtifactSelectionPorts.kt`
-- Create: `apps/android/artifact-ports/src/test/kotlin/com/agentlife/artifact/ArtifactSelectionPortsTest.kt`
-- Create: `apps/android/core-model/src/main/kotlin/com/agentlife/core/model/AssistantAudioContracts.kt`
-- Create: `apps/android/core-model/src/test/kotlin/com/agentlife/core/model/AssistantAudioContractsTest.kt`
+- Modify: `apps/android/artifact-ports/src/main/kotlin/com/openandroidintelligence/artifact/ArtifactSelectionPorts.kt`
+- Create: `apps/android/artifact-ports/src/test/kotlin/com/openandroidintelligence/artifact/ArtifactSelectionPortsTest.kt`
+- Create: `apps/android/core-model/src/main/kotlin/com/openandroidintelligence/core/model/AssistantAudioContracts.kt`
+- Create: `apps/android/core-model/src/test/kotlin/com/openandroidintelligence/core/model/AssistantAudioContractsTest.kt`
 - Create: `apps/android/tools/test_assistant_audio_backend_static.py`
 
 **Interfaces:**
@@ -509,7 +509,7 @@ Expected: all static and JVM tests pass; no UI, recorder, or network surface is 
 - [ ] **Step 5: Commit only the Android backend-port files.**
 
 ```sh
-git add apps/android/artifact-ports/build.gradle.kts apps/android/artifact-ports/src/main/kotlin/com/agentlife/artifact/ArtifactSelectionPorts.kt apps/android/artifact-ports/src/test/kotlin/com/agentlife/artifact/ArtifactSelectionPortsTest.kt apps/android/core-model/src/main/kotlin/com/agentlife/core/model/AssistantAudioContracts.kt apps/android/core-model/src/test/kotlin/com/agentlife/core/model/AssistantAudioContractsTest.kt apps/android/tools/test_assistant_audio_backend_static.py
+git add apps/android/artifact-ports/build.gradle.kts apps/android/artifact-ports/src/main/kotlin/com/openandroidintelligence/artifact/ArtifactSelectionPorts.kt apps/android/artifact-ports/src/test/kotlin/com/openandroidintelligence/artifact/ArtifactSelectionPortsTest.kt apps/android/core-model/src/main/kotlin/com/openandroidintelligence/core/model/AssistantAudioContracts.kt apps/android/core-model/src/test/kotlin/com/openandroidintelligence/core/model/AssistantAudioContractsTest.kt apps/android/tools/test_assistant_audio_backend_static.py
 git commit -m "feat(android): add assistant audio backend ports"
 ```
 

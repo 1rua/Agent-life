@@ -1,6 +1,6 @@
 {
-  "$schema": "urn:agent-life:protocol:v1:capability-registry",
-  "registryId": "urn:agent-life:protocol:v1:registry:capabilities",
+  "$schema": "urn:open-android-intelligence:protocol:v1:capability-registry",
+  "registryId": "urn:open-android-intelligence:protocol:v1:registry:capabilities",
   "protocolVersion": "1.0",
   "registryVersion": "1.0",
   "capabilities": [

@@ -1,10 +1,10 @@
-//! Agent-life 受保护插件 Rust SDK，对应内核 ABI `agent_life_kernel_v1`。
+//! Open Android Intelligence 受保护插件 Rust SDK，对应内核 ABI `open_android_intelligence_kernel_v1`。
 //!
 //! # 1. 隔离前提
 //!
 //! 受保护插件编译到 `wasm32-unknown-unknown`，`no_std` + `panic = "abort"`。
 //! 按 `docs/contracts/device-plugin-package-v1.md` §5.1，模块**只能导入
-//! `agent_life_kernel_v1`**，禁止 WASI 的 socket / 文件系统 / 时钟 / 随机数 /
+//! `open_android_intelligence_kernel_v1`**，禁止 WASI 的 socket / 文件系统 / 时钟 / 随机数 /
 //! 进程接口。
 //!
 //! 内核能力在 [`kernel`] 模块里声明。**未被引用的导入不会进入产物**：
@@ -14,7 +14,7 @@
 //!
 //! | 导出 | 签名 | 用途 |
 //! |---|---|---|
-//! | `agent_life_plugin_main` | `(i32, i32) -> i64` | 唯一入口，即 `.alp` manifest 的 `runtime.entrypoint` |
+//! | `open_android_intelligence_plugin_main` | `(i32, i32) -> i64` | 唯一入口，即 `.alp` manifest 的 `runtime.entrypoint` |
 //! | `memory` | — | Rust 默认导出的线性内存 |
 //!
 //! 链接器另外会导出 `__data_end` 与 `__heap_base` 两个全局，宿主可以忽略。
@@ -50,7 +50,7 @@
 //!
 //! ```text
 //! 1) 宿主写入 memory[0 .. request_len]，request_len <= 64 KiB
-//! 2) packed = agent_life_plugin_main(0, request_len)
+//! 2) packed = open_android_intelligence_plugin_main(0, request_len)
 //! 3) packed == u64::MAX → 失败；否则 (rptr, rlen) = unpack(packed)
 //! 4) 宿主立刻复制 memory[rptr .. rptr + rlen]
 //! ```
@@ -65,7 +65,7 @@
 //! # 5. 用法
 //!
 //! ```rust,ignore
-//! use agent_life_sdk::{PluginError, declare_plugin};
+//! use open_android_intelligence_sdk::{PluginError, declare_plugin};
 //! extern crate alloc;
 //! use alloc::vec::Vec;
 //!
@@ -94,10 +94,10 @@ pub use core::panic::PanicInfo;
 pub const ABI_VERSION: &str = "1.0";
 
 /// 宿主导入模块名。受保护插件只允许导入这个模块。
-pub const KERNEL_ABI_MODULE: &str = "agent_life_kernel_v1";
+pub const KERNEL_ABI_MODULE: &str = "open_android_intelligence_kernel_v1";
 
 /// `.alp` manifest 的 `runtime.entrypoint` 必须填这个名字。
-pub const ENTRYPOINT: &str = "agent_life_plugin_main";
+pub const ENTRYPOINT: &str = "open_android_intelligence_plugin_main";
 
 /// 交换区大小：宿主写请求的固定区域 `memory[0 .. 64 KiB)`。
 ///
@@ -117,7 +117,7 @@ pub const RESULT_FAILED: u64 = u64::MAX;
 /// 未被引用的函数不会进入产物的导入段，所以引用 [`kernel`] 并不会让
 /// 不需要内核能力的插件产生导入。
 pub mod kernel {
-    #[link(wasm_import_module = "agent_life_kernel_v1")]
+    #[link(wasm_import_module = "open_android_intelligence_kernel_v1")]
     extern "C" {
         /// 写一条结构化日志。参数：级别、缓冲区指针、字节数。
         /// 超过宿主上限的日志会被静默丢弃，不影响调用结果。
@@ -278,7 +278,7 @@ fn request_in_bounds(request_ptr: u32, request_len: u32) -> bool {
 
 /// 入口的真正实现：读请求 → 调插件 → 打包响应。
 ///
-/// 由 [`declare_plugin!`] 生成的 `agent_life_plugin_main` 调用。
+/// 由 [`declare_plugin!`] 生成的 `open_android_intelligence_plugin_main` 调用。
 pub fn dispatch<F>(request_ptr: u32, request_len: u32, handler: F) -> u64
 where
     F: FnOnce(&[u8]) -> Result<Vec<u8>, PluginError>,
@@ -334,7 +334,7 @@ pub fn trap() -> ! {
     core::arch::wasm32::unreachable()
 }
 
-/// 生成一个符合 `agent_life_kernel_v1` 的受保护插件模块。
+/// 生成一个符合 `open_android_intelligence_kernel_v1` 的受保护插件模块。
 ///
 /// - `handler`：`fn(&[u8]) -> Result<Vec<u8>, PluginError>`。
 /// - `arena_bytes`：响应缓冲区容量，默认 1 MiB。请求在交换区，不占它，
@@ -348,7 +348,7 @@ macro_rules! declare_plugin {
         $crate::declare_plugin!(handler = $handler, arena_bytes = 1_048_576);
     };
     (handler = $handler:path, arena_bytes = $arena:expr) => {
-        mod __agent_life_plugin {
+        mod __open_android_intelligence_plugin {
             use super::*;
 
             const ARENA_BYTES: usize = $arena;
@@ -356,7 +356,7 @@ macro_rules! declare_plugin {
             // 只在 wasm 产物里替换全局分配器：宿主单元测试要跑 std 的测试框架，
             // 用固定大小的 bump 会直接把 harness 撑爆。
             #[cfg_attr(all(target_arch = "wasm32", not(test)), global_allocator)]
-            static AGENT_LIFE_ARENA: $crate::Bump<ARENA_BYTES> = $crate::Bump::new();
+            static OPEN_ANDROID_INTELLIGENCE_ARENA: $crate::Bump<ARENA_BYTES> = $crate::Bump::new();
 
             /// 插件入口。返回 `((ptr as u64) << 32) | (len as u64)`，
             /// 或 `u64::MAX` 表示失败。见 SDK 模块文档第 3 节。
@@ -365,14 +365,14 @@ macro_rules! declare_plugin {
             /// （插件数据链接在 1 MiB 以上），所以这一步不会破坏本次请求，
             /// 而且同一个实例可以无限次调用而不累积占用。
             #[no_mangle]
-            pub extern "C" fn agent_life_plugin_main(request_ptr: u32, request_len: u32) -> u64 {
-                AGENT_LIFE_ARENA.reset();
+            pub extern "C" fn open_android_intelligence_plugin_main(request_ptr: u32, request_len: u32) -> u64 {
+                OPEN_ANDROID_INTELLIGENCE_ARENA.reset();
                 $crate::dispatch(request_ptr, request_len, $handler)
             }
 
             #[cfg(all(target_arch = "wasm32", not(test)))]
             #[panic_handler]
-            fn __agent_life_panic(_info: &$crate::PanicInfo) -> ! {
+            fn __open_android_intelligence_panic(_info: &$crate::PanicInfo) -> ! {
                 $crate::trap()
             }
         }
@@ -464,7 +464,7 @@ mod tests {
 
     #[test]
     fn dispatch_packs_handler_output_length() {
-        let request = b"hello agent-life";
+        let request = b"hello open-android-intelligence";
         let (packed, response) = dispatch_with_response(request, echo_handler);
         let (_, len) = unpack(packed).expect("成功路径必须返回可解析的 (ptr, len)");
         assert_eq!(len as usize, request.len());

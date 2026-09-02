@@ -1,0 +1,249 @@
+package com.openandroidintelligence.kernel
+
+import com.openandroidintelligence.plugin.pkg.PluginIdentity
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Semaphore
+
+/** Raised when an invocation exceeds a resource the plugin declared. */
+class BudgetExceeded(code: String) : IllegalArgumentException("BUDGET_EXCEEDED:$code")
+
+/** Raised when an operation names a plugin the kernel has not registered. */
+class PluginNotRegistered(val pluginId: String) :
+    IllegalArgumentException("PLUGIN_NOT_REGISTERED:$pluginId")
+
+data class ResourceBudget(
+    val maxInvocationMillis: Long,
+    val maxMemoryBytes: Long,
+    val maxOutputBytes: Long,
+    val maxConcurrentInvocations: Int,
+    val maxDailyNetworkBytes: Long,
+)
+
+data class PluginResult(
+    val output: ByteArray,
+    val correlationId: String,
+)
+
+/** The host side of a plugin runtime. The WASM runtime implements this. */
+interface PluginRuntime {
+    fun invoke(
+        identity: PluginIdentity,
+        budget: ResourceBudget,
+        input: ByteArray,
+    ): ByteArray
+}
+
+data class PluginRegistration(
+    val identity: PluginIdentity,
+    val runtimeType: String,
+    val declaredPrimitives: Set<String>,
+    val budget: ResourceBudget,
+    val network: NetworkAllowlist? = null,
+    val state: PluginStateMachine = PluginStateMachine(PluginState.INSTALLED_DISABLED),
+)
+
+/**
+ * The platform kernel: the only component that may run a plugin.
+ *
+ * Every invocation is resolved through the same six-term intersection, so a
+ * capability is reachable only when the host build owns it, the phone allows
+ * it, the plugin declared it, the plugin is enabled, the pairing granted it and
+ * the current session still permits it. Missing any term fails closed.
+ */
+class PluginKernel(
+    private val hostEnvelope: HostEnvelope,
+    private val phoneLimits: PhoneLimits,
+    private val runtimes: Map<String, PluginRuntime>,
+    private val audit: AndroidAuditStore,
+    private val trustMode: DeveloperTrustMode,
+    private val nativeLoader: NativePluginLoader,
+    private val providerSelector: CapabilityProviderSelector,
+    private val grants: (String) -> PairingGrant?,
+) {
+    companion object {
+        const val RUNTIME_PROTECTED_WASM = "protected-wasm"
+        const val RUNTIME_DEVELOPER_NATIVE = "developer-native"
+        const val RUNTIME_COMPANION = "companion"
+    }
+
+    private val registrations = ConcurrentHashMap<String, PluginRegistration>()
+    private val semaphores = ConcurrentHashMap<String, Semaphore>()
+
+    fun register(registration: PluginRegistration) {
+        registrations[registration.identity.pluginId] = registration
+        semaphores[registration.identity.pluginId] =
+            Semaphore(registration.budget.maxConcurrentInvocations.coerceAtLeast(1))
+    }
+
+    fun unregister(pluginId: String) {
+        registrations.remove(pluginId)
+        semaphores.remove(pluginId)
+    }
+
+    fun registrationFor(pluginId: String): PluginRegistration? = registrations[pluginId]
+
+    fun enable(pluginId: String) {
+        val registration = registrations[pluginId]
+            ?: throw PluginNotRegistered(pluginId)
+        if (registration.runtimeType == RUNTIME_DEVELOPER_NATIVE && !trustMode.isEnabled()) {
+            throw NativePluginRejected("TRUST_MODE_DISABLED")
+        }
+        registration.state.transition(PluginState.ENABLED)
+    }
+
+    fun disable(pluginId: String) {
+        val registration = registrations[pluginId] ?: return
+        if (registration.state.state == PluginState.ENABLED) {
+            registration.state.transition(PluginState.INSTALLED_DISABLED)
+        }
+    }
+
+    fun quarantine(pluginId: String) {
+        val registration = registrations[pluginId] ?: return
+        if (registration.state.state == PluginState.ENABLED) {
+            registration.state.transition(PluginState.QUARANTINED)
+        }
+    }
+
+    /**
+     * The effective capability set for one plugin under one pairing and session.
+     *
+     * Exposed so the settings surface and the kernel agree on what a plugin can
+     * do: both read the same computation instead of maintaining parallel views.
+     */
+    fun effectiveCapabilities(
+        pluginId: String,
+        pairingId: String,
+        session: SessionConstraints,
+    ): EffectiveCapabilitySet {
+        val registration = registrations[pluginId] ?: return EffectiveCapabilitySet(emptySet(), false)
+        return EffectiveCapabilities.compute(
+            CapabilityInputs(
+                hostEnvelope = hostEnvelope.primitives,
+                phoneLimits = phoneLimits.primitives,
+                manifestRequests = registration.declaredPrimitives,
+                pluginEnabled = registration.state.isExecutable(),
+                pairingGrant = grants(pairingId),
+                session = session,
+            ),
+        )
+    }
+
+    /**
+     * Runs one capability.
+     *
+     * Deviation from the plan's parameter list: [session] is passed in rather
+     * than held as ambient state, because "current session constraints" is one
+     * of the six terms in the intersection and a term that cannot be supplied
+     * cannot be intersected.
+     */
+    fun invoke(
+        identity: PluginIdentity,
+        accountId: String,
+        pairingId: String,
+        capability: String,
+        input: ByteArray,
+        session: SessionConstraints,
+    ): PluginResult {
+        val correlationId = session.correlationId
+        val registration = registrations[identity.pluginId]
+        if (registration == null) {
+            audit.record(
+                identity.pluginId, accountId, pairingId,
+                "invoke", AuditOutcome.DENIED, correlationId,
+            )
+            throw CapabilityDenied(capability)
+        }
+
+        try {
+            // "Plugin enabled" is one of the six terms in the intersection, so
+            // a plugin that is installed but not enabled is denied by the
+            // intersection rather than by a separate check. That keeps the
+            // failure mode identical to every other denial: no capability, no
+            // information about why, no separate path to reason about.
+            //
+            // A plugin may only be reached as the provider this pairing
+            // actually selected; a plugin that merely declares the capability
+            // is not thereby authorised to serve it.
+            val selected = providerSelector.select(capability, pairingId)
+            if (selected.identity.pluginId != identity.pluginId) {
+                throw ProviderRejected("NOT_PROVIDER:$capability")
+            }
+
+            EffectiveCapabilities.require(
+                CapabilityInputs(
+                    hostEnvelope = hostEnvelope.primitives,
+                    phoneLimits = phoneLimits.primitives,
+                    manifestRequests = registration.declaredPrimitives,
+                    pluginEnabled = registration.state.isExecutable(),
+                    pairingGrant = grants(pairingId),
+                    session = session,
+                    ),
+                    capability,
+                    )
+
+            val semaphore = semaphores[identity.pluginId]!!
+            if (!semaphore.tryAcquire()) throw BudgetExceeded("CONCURRENCY")
+
+            val output = try {
+                when (registration.runtimeType) {
+                    RUNTIME_PROTECTED_WASM -> runProtected(registration, identity, input)
+                    RUNTIME_DEVELOPER_NATIVE -> runNative(registration, identity, input)
+                    else -> throw ProviderRejected("UNSUPPORTED_RUNTIME:${registration.runtimeType}")
+                }
+            } finally {
+                semaphore.release()
+            }
+
+            if (output.size > registration.budget.maxOutputBytes) {
+                throw BudgetExceeded("OUTPUT")
+            }
+
+            audit.record(
+                identity.pluginId, accountId, pairingId,
+                "invoke", AuditOutcome.ALLOWED, correlationId,
+            )
+            return PluginResult(output = output, correlationId = correlationId)
+        } catch (cause: CapabilityDenied) {
+            audit.record(
+                identity.pluginId, accountId, pairingId,
+                "invoke", AuditOutcome.DENIED, correlationId,
+            )
+            throw cause
+        } catch (cause: Exception) {
+            audit.record(
+                identity.pluginId, accountId, pairingId,
+                "invoke", AuditOutcome.FAILED, correlationId,
+            )
+            throw cause
+        }
+    }
+
+    private fun runProtected(
+        registration: PluginRegistration,
+        identity: PluginIdentity,
+        input: ByteArray,
+    ): ByteArray {
+        val runtime = runtimes[RUNTIME_PROTECTED_WASM]
+            ?: throw ProviderRejected("NO_RUNTIME:protected-wasm")
+        return runtime.invoke(identity, registration.budget, input)
+    }
+
+    /**
+     * Native execution is re-checked at call time, not only at load time: trust
+     * mode can be switched off after a plugin was loaded.
+     */
+    private fun runNative(
+        registration: PluginRegistration,
+        identity: PluginIdentity,
+        input: ByteArray,
+    ): ByteArray {
+        if (!trustMode.isEnabled()) throw NativePluginRejected("TRUST_MODE_DISABLED")
+        if (!nativeLoader.isLoaded(identity.pluginId)) {
+            throw NativePluginRejected("NOT_LOADED")
+        }
+        val runtime = runtimes[RUNTIME_DEVELOPER_NATIVE]
+            ?: throw ProviderRejected("NO_RUNTIME:developer-native")
+        return runtime.invoke(identity, registration.budget, input)
+    }
+}

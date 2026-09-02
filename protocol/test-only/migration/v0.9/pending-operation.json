@@ -1,5 +1,5 @@
 {
-  "message_schema": "urn:agent-life:protocol:v0.9:pending-operation",
+  "message_schema": "urn:open-android-intelligence:protocol:v0.9:pending-operation",
   "operation_id": "legacy-operation-1",
   "parameters_digest": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
   "state": "pending",

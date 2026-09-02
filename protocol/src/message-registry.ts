@@ -28,8 +28,8 @@ export interface MessageRegistryEntry {
 }
 
 export interface MessageRegistry {
-  readonly $schema: "urn:agent-life:protocol:v1:messages-registry";
-  readonly registry_id: "urn:agent-life:protocol:v1:registry:messages";
+  readonly $schema: "urn:open-android-intelligence:protocol:v1:messages-registry";
+  readonly registry_id: "urn:open-android-intelligence:protocol:v1:registry:messages";
   readonly protocol_version: "1.0";
   readonly messages: readonly MessageRegistryEntry[];
 }
@@ -47,7 +47,7 @@ const deepFreeze = <T>(value: T): T => {
   return value;
 };
 
-validateSchema("urn:agent-life:protocol:v1:messages-registry", messagesFixture);
+validateSchema("urn:open-android-intelligence:protocol:v1:messages-registry", messagesFixture);
 const lockedRegistry = deepFreeze(messagesFixture) as unknown as LockedMessageRegistry;
 
 export function loadMessageRegistry(): LockedMessageRegistry {
@@ -262,7 +262,7 @@ export async function verifyEnrollmentBridgeMessage(
   const wire = parseWire(rawWire);
   const allowedTypes = context.phase === "challenge" ? ["enrollment_challenge"] : ["enrollment_complete", "enrollment_error"];
   if (!allowedTypes.includes(wire.header.message_type)) throw new Error("SCHEMA_INVALID");
-  validateAdmissionSchema("urn:agent-life:protocol:v1:envelope:enrollment_bridge_to_app", wire);
+  validateAdmissionSchema("urn:open-android-intelligence:protocol:v1:envelope:enrollment_bridge_to_app", wire);
   if (wire.header.message_type === "enrollment_complete") {
     const scopes = wire.payload.enrollment_scope_ceiling;
     if (!Array.isArray(scopes) || !scopes.every((scope) => typeof scope === "string") || !isSorted(scopes)) {
@@ -344,7 +344,7 @@ export async function verifyConnectMessage(
 ): Promise<VerifiedConnectHello | VerifiedConnectWelcome> {
   const wire = parseWire(rawWire);
   if (wire.header.message_type !== expectedType) throw new Error("SCHEMA_INVALID");
-  validateAdmissionSchema(`urn:agent-life:protocol:v1:envelope:${expectedType}`, wire);
+  validateAdmissionSchema(`urn:open-android-intelligence:protocol:v1:envelope:${expectedType}`, wire);
   const entry = registryEntry(expectedType);
   assertRegistryTuple(wire, entry);
   const requiredRole = expectedType === "connect_hello" ? "device" : "bridge-command";

@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { PairingTicket } from "../../../bridge-contract/src/pairing-service.js";
 import { openLocalPairingTicketVerifier } from "../src/local-pairing-ticket-verifier.js";
 
-const root = await mkdtemp(join(tmpdir(), "agent-life-pairing-verifier-"));
+const root = await mkdtemp(join(tmpdir(), "open-android-intelligence-pairing-verifier-"));
 const secretDir = join(root, "secrets");
 const publicPath = join(secretDir, "pairing-ticket-public.pem");
 const { publicKey, privateKey } = generateKeyPairSync("ed25519");
@@ -39,10 +39,10 @@ const canonical = (value: PairingTicket): string => JSON.stringify({
 const envelope = (value: PairingTicket): { envelope: string; keyId: string; payload: string; signature: string } => {
   const payload = Buffer.from(canonical(value), "utf8").toString("base64url");
   return {
-    envelope: "agent-life.pairing-ticket/v1",
+    envelope: "open-android-intelligence.pairing-ticket/v1",
     keyId: verifier.keyId,
     payload,
-    signature: sign(null, Buffer.from(`agent-life.pairing-ticket/v1\n${verifier.keyId}\n${payload}`, "utf8"), privateKey).toString("base64url"),
+    signature: sign(null, Buffer.from(`open-android-intelligence.pairing-ticket/v1\n${verifier.keyId}\n${payload}`, "utf8"), privateKey).toString("base64url"),
   };
 };
 

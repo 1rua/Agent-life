@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.agentlife.conversation.ui"
+    namespace = "com.openandroidintelligence.conversation.ui"
     buildFeatures {
         compose = true
     }

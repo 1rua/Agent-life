@@ -27,7 +27,7 @@ const rows = [
   },
   {
     decision_id: "MVP-DEP-BRIDGE",
-    official_reference: "https://github.com/agent-life/agent-life",
+    official_reference: "https://github.com/open-android-intelligence/open-android-intelligence",
     immutable_version: "bridge-runtime single-host production stack v1: Node 24.18.0, node:sqlite/SQLite 3.53.1, local Ed25519 verifier, same-DB lease coordinator, tsnet v1.98.10 Go sidecar",
     integrity: "PLACEHOLDER",
     license_review: "Apache-2.0 (project); BSD-3-Clause (Tailscale); reviewed",
@@ -39,7 +39,7 @@ const rows = [
   },
   {
     decision_id: "MVP-DEP-HERMES",
-    official_reference: "https://github.com/agent-life/hermes-agent",
+    official_reference: "https://github.com/open-android-intelligence/hermes-agent",
     immutable_version: "hermes@v0.9.0",
     integrity: "PLACEHOLDER",
     license_review: "MIT; reviewed",
@@ -51,7 +51,7 @@ const rows = [
   },
   {
     decision_id: "MVP-DEP-OPENCLAW",
-    official_reference: "https://github.com/agent-life/openclaw",
+    official_reference: "https://github.com/open-android-intelligence/openclaw",
     immutable_version: "openclaw@v0.9.0",
     integrity: "PLACEHOLDER",
     license_review: "MIT; reviewed",
@@ -75,7 +75,7 @@ const rows = [
   },
   {
     decision_id: "MVP-DEP-ARTIFACT",
-    official_reference: "https://github.com/agent-life/agent-life",
+    official_reference: "https://github.com/open-android-intelligence/open-android-intelligence",
     immutable_version: "artifact@project-internal",
     integrity: "PLACEHOLDER",
     license_review: "Apache-2.0 (project-internal); reviewed",

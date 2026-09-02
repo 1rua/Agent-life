@@ -2,12 +2,12 @@
 
 ## 目的
 
-Agent-life 的 Gateway Protocol v2 有两个**独立实现**：
+Open Android Intelligence 的 Gateway Protocol v2 有两个**独立实现**：
 
 | 宿主 | 实现语言 | 代码位置 | 声明的 implementation ID |
 | --- | --- | --- | --- |
 | OpenClaw | TypeScript | `integrations/openclaw/src/core/shared-vectors.ts` | `openclaw-typescript` |
-| Hermes | Python | `integrations/hermes/agent_life_gateway/core.py` | `hermes-python` |
+| Hermes | Python | `integrations/hermes/open_android_intelligence_gateway/core.py` | `hermes-python` |
 
 两者**不共享二进制、不互相调用**，但必须对同一份协议向量产生**完全一致的可观察结果**。本门禁就是证明这一点的自动检查。
 

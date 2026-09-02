@@ -89,7 +89,7 @@ class BarrierStore implements EnrollmentTicketStore {
 }
 const record = (): EnrollmentTicketRecord => ({ ticketDigest: TICKET_DIGEST, tenantId: "tenant-a", humanPrincipalId: "human-a", agentInstanceId: "agent-a", enrollmentScopeCeiling: ["clipboard.read"], challenge: CHALLENGE, bridgeId: "bridge-a", bridgeFingerprint: BRIDGE_FP, bridgeCommandPublicJwk: bridgePublic, bridgeNonce: BRIDGE_NONCE, expiresAt: "2026-08-08T00:05:00.000Z" });
 const signEnvelope = (type: string, payload: Record<string, unknown>, key: TestJwk, privateKey: TestJwk, direction: "app-to-bridge" | "bridge-to-app", ticketDigest = TICKET_DIGEST, headerPatch: Record<string, unknown> = {}) => {
-  const header = { protocol_version: "1.0", message_schema: `urn:agent-life:protocol:v1:message:${type}`, message_type: type, message_id: direction === "app-to-bridge" ? "018f4f9a-4444-4444-8444-444444444444" : "018f4f9a-4555-4555-8555-555555555555", key_id: key.kid, direction, issued_at: "2026-08-08T00:00:00.000Z", expires_at: "2026-08-08T00:05:00.000Z", payload_digest: sha256B64Url(canonicalBytes(payload)), enrollment_ticket_digest: ticketDigest, ...headerPatch };
+  const header = { protocol_version: "1.0", message_schema: `urn:open-android-intelligence:protocol:v1:message:${type}`, message_type: type, message_id: direction === "app-to-bridge" ? "018f4f9a-4444-4444-8444-444444444444" : "018f4f9a-4555-4555-8555-555555555555", key_id: key.kid, direction, issued_at: "2026-08-08T00:00:00.000Z", expires_at: "2026-08-08T00:05:00.000Z", payload_digest: sha256B64Url(canonicalBytes(payload)), enrollment_ticket_digest: ticketDigest, ...headerPatch };
   const unsigned = { header, payload };
   const domain = parseSignatureDomain(direction === "app-to-bridge" ? "enrollment/app-to-bridge" : "enrollment/bridge-to-app");
   return canonicalBytes({ ...unsigned, signature: signTestOnly(privateKey, signingPreimage(domain, unsigned)) });
@@ -464,7 +464,7 @@ describe("pairing transcript and Bridge enrollment admission", () => {
 
 const compileTimeEnrollmentOpacityEvidence = (): void => {
   const header = {
-    message_type: "enrollment_challenge", message_schema: "urn:agent-life:protocol:v1:message:enrollment_challenge",
+    message_type: "enrollment_challenge", message_schema: "urn:open-android-intelligence:protocol:v1:message:enrollment_challenge",
     key_id: "key", direction: "bridge-to-app", issued_at: "2026-08-08T00:00:00.000Z",
     expires_at: "2026-08-08T00:05:00.000Z", payload_digest: CLIENT_NONCE,
   } as VerifiedEnrollmentChallenge["header"];

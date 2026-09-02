@@ -21,7 +21,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "agent-life-android"
+rootProject.name = "open-android-intelligence-android"
 include(
     ":app",
     ":assistant-holder",

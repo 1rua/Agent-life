@@ -4,7 +4,7 @@
 
 **Goal:** Resolve the SMS scheduling policy conflict by accepting best-effort scheduling with app-start self-healing, and fix misleading naming.
 
-**Architecture:** `AgentLifeApplication.onCreate()` reads persisted SMS settings after authority creation and restores the periodic job if auto-send is enabled with a non-manual interval. No new permissions or Android components. The `schedulePersistedPeriodic` interface method is renamed to `schedulePeriodic` to match its actual behavior (`.setPersisted(false)`).
+**Architecture:** `OpenAndroidIntelligenceApplication.onCreate()` reads persisted SMS settings after authority creation and restores the periodic job if auto-send is enabled with a non-manual interval. No new permissions or Android components. The `schedulePersistedPeriodic` interface method is renamed to `schedulePeriodic` to match its actual behavior (`.setPersisted(false)`).
 
 **Tech Stack:** Kotlin, Android JobScheduler, JUnit 4
 
@@ -22,8 +22,8 @@
 ### Task 1: Rename `schedulePersistedPeriodic` to `schedulePeriodic`
 
 **Files:**
-- Modify: `apps/android/sms-collector/src/main/kotlin/com/agentlife/sms/SmsSyncScheduler.kt`
-- Modify: `apps/android/sms-collector/src/test/kotlin/com/agentlife/sms/SmsSyncSchedulerTest.kt`
+- Modify: `apps/android/sms-collector/src/main/kotlin/com/openandroidintelligence/sms/SmsSyncScheduler.kt`
+- Modify: `apps/android/sms-collector/src/test/kotlin/com/openandroidintelligence/sms/SmsSyncSchedulerTest.kt`
 
 **Interfaces:**
 - Consumes: (none — pure rename)
@@ -31,7 +31,7 @@
 
 - [ ] **Step 1: Rename interface method and its call site**
 
-In `apps/android/sms-collector/src/main/kotlin/com/agentlife/sms/SmsSyncScheduler.kt`, change the interface method name from `schedulePersistedPeriodic` to `schedulePeriodic` in two places:
+In `apps/android/sms-collector/src/main/kotlin/com/openandroidintelligence/sms/SmsSyncScheduler.kt`, change the interface method name from `schedulePersistedPeriodic` to `schedulePeriodic` in two places:
 
 Line 23 — interface declaration:
 ```kotlin
@@ -55,7 +55,7 @@ override fun schedule(interval: SmsSyncInterval) {
 
 - [ ] **Step 2: Update test recording adapter**
 
-In `apps/android/sms-collector/src/test/kotlin/com/agentlife/sms/SmsSyncSchedulerTest.kt`, line 56, rename the override:
+In `apps/android/sms-collector/src/test/kotlin/com/openandroidintelligence/sms/SmsSyncSchedulerTest.kt`, line 56, rename the override:
 ```kotlin
 private class RecordingAndroidSmsJobScheduler(
     private val scheduleSucceeds: Boolean = true,
@@ -78,7 +78,7 @@ private class RecordingAndroidSmsJobScheduler(
 
 ```sh
 cd apps/android
-./gradlew --no-daemon :sms-collector:test --tests 'com.agentlife.sms.SmsSyncSchedulerTest'
+./gradlew --no-daemon :sms-collector:test --tests 'com.openandroidintelligence.sms.SmsSyncSchedulerTest'
 ```
 
 Expected: all 3 tests PASS.
@@ -86,7 +86,7 @@ Expected: all 3 tests PASS.
 - [ ] **Step 4: Commit**
 
 ```sh
-git add apps/android/sms-collector/src/main/kotlin/com/agentlife/sms/SmsSyncScheduler.kt apps/android/sms-collector/src/test/kotlin/com/agentlife/sms/SmsSyncSchedulerTest.kt
+git add apps/android/sms-collector/src/main/kotlin/com/openandroidintelligence/sms/SmsSyncScheduler.kt apps/android/sms-collector/src/test/kotlin/com/openandroidintelligence/sms/SmsSyncSchedulerTest.kt
 git commit -m "refactor(sms): rename schedulePersistedPeriodic to schedulePeriodic"
 ```
 
@@ -95,7 +95,7 @@ git commit -m "refactor(sms): rename schedulePersistedPeriodic to schedulePeriod
 ### Task 2: Add startup scheduling restoration
 
 **Files:**
-- Modify: `apps/android/app/src/main/kotlin/com/agentlife/mobile/AgentLifeApplication.kt`
+- Modify: `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/OpenAndroidIntelligenceApplication.kt`
 
 **Interfaces:**
 - Consumes: `smsAuthority: PersistentSmsSettingsAuthority` (already created), `smsScheduler: SmsJobScheduler` (already created), `SmsSyncInterval.periodMs: Long?`, `SmsSettingsSnapshot.corrupted, .granted, .autoSendEnabled, .syncInterval`
@@ -103,13 +103,13 @@ git commit -m "refactor(sms): rename schedulePersistedPeriodic to schedulePeriod
 
 - [ ] **Step 1: Add restoration method**
 
-In `apps/android/app/src/main/kotlin/com/agentlife/mobile/AgentLifeApplication.kt`, after the `smsScheduler = createSmsSchedulerFailClosed()` line (line 95), add:
+In `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/OpenAndroidIntelligenceApplication.kt`, after the `smsScheduler = createSmsSchedulerFailClosed()` line (line 95), add:
 
 ```kotlin
         restoreSmsScheduling()
 ```
 
-Then add the private method anywhere in the `AgentLifeApplication` class body (e.g., before `createSmsAuthorityFailClosed`):
+Then add the private method anywhere in the `OpenAndroidIntelligenceApplication` class body (e.g., before `createSmsAuthorityFailClosed`):
 
 ```kotlin
     private fun restoreSmsScheduling() {
@@ -168,7 +168,7 @@ Expected: all tests PASS (no `RECEIVE_BOOT_COMPLETED` in manifest).
 - [ ] **Step 4: Commit**
 
 ```sh
-git add apps/android/app/src/main/kotlin/com/agentlife/mobile/AgentLifeApplication.kt
+git add apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/OpenAndroidIntelligenceApplication.kt
 git commit -m "feat(sms): restore periodic scheduling on app start"
 ```
 
@@ -201,7 +201,7 @@ called reboot-resilient.
 **New:**
 ```markdown
 Periodic work is best-effort `JobScheduler` scheduling (`.setPersisted(false)`).
-Jobs are not persisted across reboots. When the app starts, `AgentLifeApplication`
+Jobs are not persisted across reboots. When the app starts, `OpenAndroidIntelligenceApplication`
 reads the persisted SMS settings and restores the periodic job if auto-send is
 enabled with a non-manual interval. Reboot without a subsequent app launch
 results in no scheduled jobs. The app does not request `RECEIVE_BOOT_COMPLETED`

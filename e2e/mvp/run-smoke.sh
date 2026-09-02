@@ -61,11 +61,11 @@ python3 -m unittest discover -s "$ROOT_DIR/apps/android/tools" -p 'test_*.py'
   "$ROOT_DIR"/integrations/openclaw/adapter.ts \
   --types node --typeRoots "$ROOT_DIR/node_modules/@types"
 
-if "$NODE_LAUNCHER" npm --prefix "$ROOT_DIR" run mvp:lock:check >/tmp/agent-life-mvp-lock.out 2>&1; then
+if "$NODE_LAUNCHER" npm --prefix "$ROOT_DIR" run mvp:lock:check >/tmp/open-android-intelligence-mvp-lock.out 2>&1; then
   echo "LOCK_GATE_PASS"
 else
   echo "LOCK_GATE_PENDING"
-  sed -n '1,16p' /tmp/agent-life-mvp-lock.out
+  sed -n '1,16p' /tmp/open-android-intelligence-mvp-lock.out
 fi
 
 if command -v adb >/dev/null 2>&1 && adb devices 2>/dev/null | grep -q '[[:space:]]device$'; then

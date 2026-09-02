@@ -1,7 +1,7 @@
 {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "$id": "urn:agent-life:protocol:v1:profile",
-    "title": "Agent Life protocol profile v1",
+    "$id": "urn:open-android-intelligence:protocol:v1:profile",
+    "title": "Open Android Intelligence protocol profile v1",
     "type": "object",
     "additionalProperties": false,
     "required": [
@@ -37,7 +37,7 @@
         "artifact_orphan_lifetime_seconds"
     ],
     "properties": {
-        "profile_id": { "const": "agent-life-json-es256/1.0" },
+        "profile_id": { "const": "open-android-intelligence-json-es256/1.0" },
         "protocol_version": { "const": "1.0" },
         "canonicalization": { "const": "RFC8785-JCS" },
         "canonicalization_version": { "const": "RFC 8785" },

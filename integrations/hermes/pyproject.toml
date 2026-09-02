@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "agent-life-hermes-gateway"
+name = "open-android-intelligence-hermes-gateway"
 version = "2.0.0"
 description = "Native Python Gateway Protocol v2 plugin for Hermes"
 requires-python = ">=3.12"
@@ -11,5 +11,5 @@ dependencies = []
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["agent_life_gateway*"]
+include = ["open_android_intelligence_gateway*"]
 namespaces = true

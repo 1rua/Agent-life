@@ -1,4 +1,4 @@
-# Agent-life Android 对话与助理前端完全重构 Implementation Plan
+# Open Android Intelligence Android 对话与助理前端完全重构 Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -15,7 +15,7 @@
 - 权威起点：`main = 732eb88e87bb3bb30c823bcf750ea7dc54eefe27`。
 - 被审查实现：`feat/conversation-assistant-ui = a496b0d922262085b19353fbf20ffddaa3713b60`，相对固定点为 `git diff 732eb88...a496b0d`，4 个提交、24 个文件、约 5025 行新增。
 - feature worktree 的 5 个未提交文件必须原样保留；二进制 patch SHA-256 为 `4f419f7ef66f50c5fe35472edb81871d8e1f689ff9c4d2de3c3ab35077ba4715`。
-- 当前 `main` 也有用户的 Hermes、legacy test、`.agent-life-hermes/` 和 `docs/superpowers/reviews/` 改动；任何 Task 都不得 stage、stash、reset、clean、覆盖或混入这些文件。
+- 当前 `main` 也有用户的 Hermes、legacy test、`.open-android-intelligence-hermes/` 和 `docs/superpowers/reviews/` 改动；任何 Task 都不得 stage、stash、reset、clean、覆盖或混入这些文件。
 - 当前 `adb devices -l` 无设备；因此真机门禁当前是 **BLOCKED**，不能用编译、JVM 测试、模拟器或截图替代。
 - 设计 `22.1` 原本建议一次只为一个切片写计划；用户本轮明确要求完整重构计划，因此本文覆盖完整 program，但执行门仍严格一次只做一个 Task，任何 Task 失败都阻止后续 Task。
 
@@ -38,7 +38,7 @@
 - 每个 Task 都执行 RED → 验证正确失败原因 → 最小 GREEN → focused test → 回归 → 独立 review → 中文提交。不得跨 Task 混改。
 - 每个 Task 的报告必须区分 PASS、BLOCKED、SKIPPED；静态检查、APK 编译、模拟器截图不等于默认助理真机、跨 App 圈选或物理 Android↔Gateway E2E。
 - 代码、测试、文档中的项目内文件引用全部使用相对路径。
-- 严禁使用 `rm`、`rm -rf`、`unlink`。废弃文件使用 `trash-put`，或先 `mkdir -p /tmp/Agent-life-trash/android-conversation-ui/` 再 `mv`。
+- 严禁使用 `rm`、`rm -rf`、`unlink`。废弃文件使用 `trash-put`，或先 `mkdir -p /tmp/Open Android Intelligence-trash/android-conversation-ui/` 再 `mv`。
 - 所有提交说明使用中文，格式 `<类型>: <简要描述>`。
 
 ## 执行隔离
@@ -54,13 +54,13 @@ git worktree add .worktrees/android-conversation-ui-refactor \
 每个 Android 命令使用同一环境前缀：
 
 ```bash
-AGENT_LIFE_ROOT="$(git rev-parse --show-toplevel)"
-cd "$AGENT_LIFE_ROOT/apps/android"
+OPEN_ANDROID_INTELLIGENCE_ROOT="$(git rev-parse --show-toplevel)"
+cd "$OPEN_ANDROID_INTELLIGENCE_ROOT/apps/android"
 LANG=zh_CN.UTF-8 \
 LC_ALL=zh_CN.UTF-8 \
-ANDROID_HOME="$AGENT_LIFE_ROOT/.toolchains/android-sdk" \
-GRADLE_USER_HOME="$AGENT_LIFE_ROOT/.toolchains/gradle-home" \
-ANDROID_USER_HOME="$AGENT_LIFE_ROOT/.toolchains/android-user-home" \
+ANDROID_HOME="$OPEN_ANDROID_INTELLIGENCE_ROOT/.toolchains/android-sdk" \
+GRADLE_USER_HOME="$OPEN_ANDROID_INTELLIGENCE_ROOT/.toolchains/gradle-home" \
+ANDROID_USER_HOME="$OPEN_ANDROID_INTELLIGENCE_ROOT/.toolchains/android-user-home" \
 ./gradlew --no-daemon --console=plain check
 ```
 
@@ -339,8 +339,8 @@ git commit -m "契约: 扩展 Gateway v2.1 对话界面能力"
 - Modify: `integrations/openclaw/src/http/routes.ts`
 - Create: `integrations/openclaw/test/conversation-ui-v21.test.ts`
 - Create: `integrations/openclaw/test/conversation-ui-test-support.ts`
-- Modify: `integrations/hermes/agent_life_gateway/core.py`
-- Modify: `integrations/hermes/agent_life_gateway/http.py`
+- Modify: `integrations/hermes/open_android_intelligence_gateway/core.py`
+- Modify: `integrations/hermes/open_android_intelligence_gateway/http.py`
 - Create: `integrations/hermes/tests/test_conversation_ui_v21.py`
 - Modify: `gateway-contract/tools/run-openclaw-conformance.ts`
 - Modify: `gateway-contract/tools/run-hermes-conformance.py`
@@ -358,7 +358,7 @@ OpenClaw：
 it("accepts one batch, preserves members, and starts one generation", async () => {
   const response = await core.handle(verifiedRequest({
     method: "POST",
-    target: "/agent-life/v2/conversations/conv_1/message-batches",
+    target: "/open-android-intelligence/v2/conversations/conv_1/message-batches",
     requestId: "req_batch_1",
     body: {
       clientBatchId: "batch_1",
@@ -397,7 +397,7 @@ export const verifiedRequest = (
       grantRevision: 1,
     }),
     method: "GET",
-    target: "/agent-life/v2/conversations",
+    target: "/open-android-intelligence/v2/conversations",
     now: new Date("2026-09-01T00:00:00.000Z"),
     ...request,
   });
@@ -485,16 +485,16 @@ git commit -m "新增: 实现双宿主对话界面协议"
 ### Task 3: 扩展 Android Gateway typed clients
 
 **Files:**
-- Modify: `apps/android/gateway-client/src/main/kotlin/com/agentlife/gateway/conversations/ConversationClient.kt`
-- Create: `apps/android/gateway-client/src/main/kotlin/com/agentlife/gateway/conversations/ConversationWireModels.kt`
-- Create: `apps/android/gateway-client/src/main/kotlin/com/agentlife/gateway/commands/AgentCommandCatalogClient.kt`
-- Create: `apps/android/gateway-client/src/main/kotlin/com/agentlife/gateway/generation/GenerationClient.kt`
-- Create: `apps/android/gateway-client/src/main/kotlin/com/agentlife/gateway/attachments/AttachmentStatusClient.kt`
-- Create: `apps/android/gateway-client/src/main/kotlin/com/agentlife/gateway/events/ConversationEvent.kt`
-- Create: `apps/android/gateway-client/src/main/kotlin/com/agentlife/gateway/negotiation/GatewayFeatureSet.kt`
-- Create: `apps/android/gateway-client/src/test/kotlin/com/agentlife/gateway/conversations/ConversationClientV21Test.kt`
-- Create: `apps/android/gateway-client/src/test/kotlin/com/agentlife/gateway/events/ConversationEventTest.kt`
-- Create: `apps/android/gateway-client/src/test/kotlin/com/agentlife/gateway/ConversationUiVectorTest.kt`
+- Modify: `apps/android/gateway-client/src/main/kotlin/com/openandroidintelligence/gateway/conversations/ConversationClient.kt`
+- Create: `apps/android/gateway-client/src/main/kotlin/com/openandroidintelligence/gateway/conversations/ConversationWireModels.kt`
+- Create: `apps/android/gateway-client/src/main/kotlin/com/openandroidintelligence/gateway/commands/AgentCommandCatalogClient.kt`
+- Create: `apps/android/gateway-client/src/main/kotlin/com/openandroidintelligence/gateway/generation/GenerationClient.kt`
+- Create: `apps/android/gateway-client/src/main/kotlin/com/openandroidintelligence/gateway/attachments/AttachmentStatusClient.kt`
+- Create: `apps/android/gateway-client/src/main/kotlin/com/openandroidintelligence/gateway/events/ConversationEvent.kt`
+- Create: `apps/android/gateway-client/src/main/kotlin/com/openandroidintelligence/gateway/negotiation/GatewayFeatureSet.kt`
+- Create: `apps/android/gateway-client/src/test/kotlin/com/openandroidintelligence/gateway/conversations/ConversationClientV21Test.kt`
+- Create: `apps/android/gateway-client/src/test/kotlin/com/openandroidintelligence/gateway/events/ConversationEventTest.kt`
+- Create: `apps/android/gateway-client/src/test/kotlin/com/openandroidintelligence/gateway/ConversationUiVectorTest.kt`
 
 **Interfaces:**
 - Consumes: Task 1–2 v2.1 wire contract。
@@ -610,14 +610,14 @@ git commit -m "新增: 扩展 Android Gateway 对话客户端"
 **Files:**
 - Modify: `apps/android/settings.gradle.kts`
 - Create: `apps/android/conversation-domain/build.gradle.kts`
-- Create: `apps/android/conversation-domain/src/main/kotlin/com/agentlife/conversation/model/Identifiers.kt`
-- Create: `apps/android/conversation-domain/src/main/kotlin/com/agentlife/conversation/model/MessagePart.kt`
-- Create: `apps/android/conversation-domain/src/main/kotlin/com/agentlife/conversation/model/ConversationState.kt`
-- Create: `apps/android/conversation-domain/src/main/kotlin/com/agentlife/conversation/model/ConversationIntent.kt`
-- Create: `apps/android/conversation-domain/src/main/kotlin/com/agentlife/conversation/reducer/ConversationReducer.kt`
-- Create: `apps/android/conversation-domain/src/main/kotlin/com/agentlife/conversation/ports/ConversationPorts.kt`
-- Create: `apps/android/conversation-domain/src/test/kotlin/com/agentlife/conversation/reducer/ConversationReducerTest.kt`
-- Create: `apps/android/conversation-domain/src/test/kotlin/com/agentlife/conversation/model/IdentifierBoundaryTest.kt`
+- Create: `apps/android/conversation-domain/src/main/kotlin/com/openandroidintelligence/conversation/model/Identifiers.kt`
+- Create: `apps/android/conversation-domain/src/main/kotlin/com/openandroidintelligence/conversation/model/MessagePart.kt`
+- Create: `apps/android/conversation-domain/src/main/kotlin/com/openandroidintelligence/conversation/model/ConversationState.kt`
+- Create: `apps/android/conversation-domain/src/main/kotlin/com/openandroidintelligence/conversation/model/ConversationIntent.kt`
+- Create: `apps/android/conversation-domain/src/main/kotlin/com/openandroidintelligence/conversation/reducer/ConversationReducer.kt`
+- Create: `apps/android/conversation-domain/src/main/kotlin/com/openandroidintelligence/conversation/ports/ConversationPorts.kt`
+- Create: `apps/android/conversation-domain/src/test/kotlin/com/openandroidintelligence/conversation/reducer/ConversationReducerTest.kt`
+- Create: `apps/android/conversation-domain/src/test/kotlin/com/openandroidintelligence/conversation/model/IdentifierBoundaryTest.kt`
 
 **Interfaces:**
 - Consumes: Task 3 typed wire models only through ports。
@@ -737,11 +737,11 @@ git commit -m "新增: 建立共享对话领域状态机"
 ### Task 5: 实现单一 ConversationController 与共享状态源
 
 **Files:**
-- Create: `apps/android/conversation-domain/src/main/kotlin/com/agentlife/conversation/ConversationController.kt`
-- Create: `apps/android/conversation-domain/src/main/kotlin/com/agentlife/conversation/DefaultConversationController.kt`
-- Create: `apps/android/conversation-domain/src/main/kotlin/com/agentlife/conversation/internal/EventProjector.kt`
-- Create: `apps/android/conversation-domain/src/test/kotlin/com/agentlife/conversation/DefaultConversationControllerTest.kt`
-- Create: `apps/android/conversation-domain/src/test/kotlin/com/agentlife/conversation/fakes/InMemoryConversationAdapters.kt`
+- Create: `apps/android/conversation-domain/src/main/kotlin/com/openandroidintelligence/conversation/ConversationController.kt`
+- Create: `apps/android/conversation-domain/src/main/kotlin/com/openandroidintelligence/conversation/DefaultConversationController.kt`
+- Create: `apps/android/conversation-domain/src/main/kotlin/com/openandroidintelligence/conversation/internal/EventProjector.kt`
+- Create: `apps/android/conversation-domain/src/test/kotlin/com/openandroidintelligence/conversation/DefaultConversationControllerTest.kt`
+- Create: `apps/android/conversation-domain/src/test/kotlin/com/openandroidintelligence/conversation/fakes/InMemoryConversationAdapters.kt`
 
 **Interfaces:**
 - Consumes: Task 4 reducer/ports。
@@ -826,15 +826,15 @@ git commit -m "新增: 实现共享对话控制器"
 ### Task 6: 实现命令目录、防抖批次、标题、FIFO 与真实取消
 
 **Files:**
-- Create: `apps/android/conversation-domain/src/main/kotlin/com/agentlife/conversation/commands/CommandCoordinator.kt`
-- Create: `apps/android/conversation-domain/src/main/kotlin/com/agentlife/conversation/batch/DebounceBatcher.kt`
-- Create: `apps/android/conversation-domain/src/main/kotlin/com/agentlife/conversation/title/ConversationTitlePolicy.kt`
-- Create: `apps/android/conversation-domain/src/main/kotlin/com/agentlife/conversation/generation/GenerationQueue.kt`
-- Modify: `apps/android/conversation-domain/src/main/kotlin/com/agentlife/conversation/DefaultConversationController.kt`
-- Create: `apps/android/conversation-domain/src/test/kotlin/com/agentlife/conversation/commands/CommandCoordinatorTest.kt`
-- Create: `apps/android/conversation-domain/src/test/kotlin/com/agentlife/conversation/batch/DebounceBatcherTest.kt`
-- Create: `apps/android/conversation-domain/src/test/kotlin/com/agentlife/conversation/generation/GenerationQueueTest.kt`
-- Create: `apps/android/conversation-domain/src/test/kotlin/com/agentlife/conversation/title/ConversationTitlePolicyTest.kt`
+- Create: `apps/android/conversation-domain/src/main/kotlin/com/openandroidintelligence/conversation/commands/CommandCoordinator.kt`
+- Create: `apps/android/conversation-domain/src/main/kotlin/com/openandroidintelligence/conversation/batch/DebounceBatcher.kt`
+- Create: `apps/android/conversation-domain/src/main/kotlin/com/openandroidintelligence/conversation/title/ConversationTitlePolicy.kt`
+- Create: `apps/android/conversation-domain/src/main/kotlin/com/openandroidintelligence/conversation/generation/GenerationQueue.kt`
+- Modify: `apps/android/conversation-domain/src/main/kotlin/com/openandroidintelligence/conversation/DefaultConversationController.kt`
+- Create: `apps/android/conversation-domain/src/test/kotlin/com/openandroidintelligence/conversation/commands/CommandCoordinatorTest.kt`
+- Create: `apps/android/conversation-domain/src/test/kotlin/com/openandroidintelligence/conversation/batch/DebounceBatcherTest.kt`
+- Create: `apps/android/conversation-domain/src/test/kotlin/com/openandroidintelligence/conversation/generation/GenerationQueueTest.kt`
+- Create: `apps/android/conversation-domain/src/test/kotlin/com/openandroidintelligence/conversation/title/ConversationTitlePolicyTest.kt`
 
 **Interfaces:**
 - Consumes: Task 3 clients、Task 5 controller。
@@ -942,15 +942,15 @@ git commit -m "新增: 实现命令批次与生成取消"
 ### Task 7: 实现附件准备、门控与恰好一次提交
 
 **Files:**
-- Create: `apps/android/conversation-domain/src/main/kotlin/com/agentlife/conversation/attachment/SubmissionSnapshot.kt`
-- Create: `apps/android/conversation-domain/src/main/kotlin/com/agentlife/conversation/attachment/DefaultAttachmentDraftCoordinator.kt`
-- Create: `apps/android/conversation-domain/src/main/kotlin/com/agentlife/conversation/attachment/AttachmentSubmissionGate.kt`
-- Modify: `apps/android/conversation-domain/src/main/kotlin/com/agentlife/conversation/DefaultConversationController.kt`
-- Create: `apps/android/conversation-domain/src/test/kotlin/com/agentlife/conversation/attachment/AttachmentSubmissionGateTest.kt`
-- Create: `apps/android/conversation-domain/src/test/kotlin/com/agentlife/conversation/attachment/AttachmentLimitsTest.kt`
-- Modify: `apps/android/artifact-ports/src/main/kotlin/com/agentlife/artifact/ArtifactSelectionPorts.kt`
-- Modify: `apps/android/gateway-client/src/main/kotlin/com/agentlife/gateway/attachments/AttachmentUploader.kt`
-- Modify: `apps/android/gateway-client/src/test/kotlin/com/agentlife/gateway/attachments/AttachmentUploaderTest.kt`
+- Create: `apps/android/conversation-domain/src/main/kotlin/com/openandroidintelligence/conversation/attachment/SubmissionSnapshot.kt`
+- Create: `apps/android/conversation-domain/src/main/kotlin/com/openandroidintelligence/conversation/attachment/DefaultAttachmentDraftCoordinator.kt`
+- Create: `apps/android/conversation-domain/src/main/kotlin/com/openandroidintelligence/conversation/attachment/AttachmentSubmissionGate.kt`
+- Modify: `apps/android/conversation-domain/src/main/kotlin/com/openandroidintelligence/conversation/DefaultConversationController.kt`
+- Create: `apps/android/conversation-domain/src/test/kotlin/com/openandroidintelligence/conversation/attachment/AttachmentSubmissionGateTest.kt`
+- Create: `apps/android/conversation-domain/src/test/kotlin/com/openandroidintelligence/conversation/attachment/AttachmentLimitsTest.kt`
+- Modify: `apps/android/artifact-ports/src/main/kotlin/com/openandroidintelligence/artifact/ArtifactSelectionPorts.kt`
+- Modify: `apps/android/gateway-client/src/main/kotlin/com/openandroidintelligence/gateway/attachments/AttachmentUploader.kt`
+- Modify: `apps/android/gateway-client/src/test/kotlin/com/openandroidintelligence/gateway/attachments/AttachmentUploaderTest.kt`
 
 **Interfaces:**
 - Consumes: `ArtifactSelectionPort`、`ArtifactDigestPort`、Task 3 `AttachmentStatusClient`、Task 4 `AttachmentDraftCoordinator`。
@@ -1092,16 +1092,16 @@ git commit -m "新增: 实现附件门控恰好一次提交"
 ### Task 8: 实现加密对话镜像与独立媒体缓存
 
 **Files:**
-- Create: `apps/android/encrypted-store/src/main/kotlin/com/agentlife/encrypted/store/conversation/ConversationMirrorDatabase.kt`
-- Create: `apps/android/encrypted-store/src/main/kotlin/com/agentlife/encrypted/store/conversation/AndroidConversationMirrorStore.kt`
-- Create: `apps/android/encrypted-store/src/main/kotlin/com/agentlife/encrypted/store/conversation/MirrorPayloadCipher.kt`
-- Create: `apps/android/encrypted-store/src/main/kotlin/com/agentlife/encrypted/store/conversation/MirrorScopePaths.kt`
-- Create: `apps/android/encrypted-store/src/main/kotlin/com/agentlife/encrypted/store/media/LocalMediaCacheStore.kt`
-- Create: `apps/android/encrypted-store/src/main/kotlin/com/agentlife/encrypted/store/media/AndroidLocalMediaCacheStore.kt`
-- Create: `apps/android/encrypted-store/src/test/kotlin/com/agentlife/encrypted/store/conversation/MirrorScopePathsTest.kt`
-- Create: `apps/android/encrypted-store/src/androidTest/kotlin/com/agentlife/encrypted/store/conversation/AndroidConversationMirrorStoreInstrumentedTest.kt`
-- Create: `apps/android/encrypted-store/src/androidTest/kotlin/com/agentlife/encrypted/store/media/AndroidLocalMediaCacheStoreInstrumentedTest.kt`
-- Modify: `apps/android/conversation-domain/src/main/kotlin/com/agentlife/conversation/ports/ConversationPorts.kt`
+- Create: `apps/android/encrypted-store/src/main/kotlin/com/openandroidintelligence/encrypted/store/conversation/ConversationMirrorDatabase.kt`
+- Create: `apps/android/encrypted-store/src/main/kotlin/com/openandroidintelligence/encrypted/store/conversation/AndroidConversationMirrorStore.kt`
+- Create: `apps/android/encrypted-store/src/main/kotlin/com/openandroidintelligence/encrypted/store/conversation/MirrorPayloadCipher.kt`
+- Create: `apps/android/encrypted-store/src/main/kotlin/com/openandroidintelligence/encrypted/store/conversation/MirrorScopePaths.kt`
+- Create: `apps/android/encrypted-store/src/main/kotlin/com/openandroidintelligence/encrypted/store/media/LocalMediaCacheStore.kt`
+- Create: `apps/android/encrypted-store/src/main/kotlin/com/openandroidintelligence/encrypted/store/media/AndroidLocalMediaCacheStore.kt`
+- Create: `apps/android/encrypted-store/src/test/kotlin/com/openandroidintelligence/encrypted/store/conversation/MirrorScopePathsTest.kt`
+- Create: `apps/android/encrypted-store/src/androidTest/kotlin/com/openandroidintelligence/encrypted/store/conversation/AndroidConversationMirrorStoreInstrumentedTest.kt`
+- Create: `apps/android/encrypted-store/src/androidTest/kotlin/com/openandroidintelligence/encrypted/store/media/AndroidLocalMediaCacheStoreInstrumentedTest.kt`
+- Modify: `apps/android/conversation-domain/src/main/kotlin/com/openandroidintelligence/conversation/ports/ConversationPorts.kt`
 
 **Interfaces:**
 - Consumes: Task 4 `ConversationMirrorStore`。
@@ -1143,14 +1143,14 @@ data class MirrorScopeKey(val sha256: String) {
 }
 ```
 
-数据库路径为 `noBackupFilesDir/conversation-mirror/<scopeHash>/mirror-v1.db`，Keystore alias 为 `agent_life_mirror_v1_<scopeHash>`；interface 不暴露真实路径。
+数据库路径为 `noBackupFilesDir/conversation-mirror/<scopeHash>/mirror-v1.db`，Keystore alias 为 `open_android_intelligence_mirror_v1_<scopeHash>`；interface 不暴露真实路径。
 
 - [ ] **Step 4: 用平台 SQLite + AES-GCM 实现**
 
 SQLite 只保存 scope 内随机 row ID、resource type、SHA-256 lookup key、revision、sort key、tombstone flag 和密文 payload。AAD 精确为：
 
 ```text
-agent-life:mirror:v1:<scopeHash>:<resourceType>:<resourceIdHash>:<revision>
+open-android-intelligence:mirror:v1:<scopeHash>:<resourceType>:<resourceIdHash>:<revision>
 ```
 
 密文认证失败、未知 format、重复 revision 回退、trailing bytes 全部 fail closed 为 `MirrorCorrupted`。
@@ -1190,7 +1190,7 @@ Run:
 :conversation-domain:testDebugUnitTest
 ```
 
-Expected: 单测 PASS；真机无设备则保持 BLOCKED。额外检查 `run-as com.agentlife.mobile grep` 找不到明文只在 debug 测试 APK/隔离 fixture 范围执行。
+Expected: 单测 PASS；真机无设备则保持 BLOCKED。额外检查 `run-as com.openandroidintelligence.mobile grep` 找不到明文只在 debug 测试 APK/隔离 fixture 范围执行。
 
 - [ ] **Step 9: 审查并提交**
 
@@ -1203,15 +1203,15 @@ git commit -m "新增: 实现加密对话镜像与媒体缓存"
 
 **Files:**
 - Modify: `apps/android/app/build.gradle.kts`
-- Create: `apps/android/app/src/main/kotlin/com/agentlife/mobile/process/AppProcessRole.kt`
-- Create: `apps/android/app/src/main/kotlin/com/agentlife/mobile/di/AppGraph.kt`
-- Create: `apps/android/app/src/main/kotlin/com/agentlife/mobile/di/MainProcessGraph.kt`
-- Create: `apps/android/app/src/main/kotlin/com/agentlife/mobile/di/AssistantProcessGraph.kt`
-- Create: `apps/android/app/src/main/kotlin/com/agentlife/mobile/state/ConversationViewModel.kt`
-- Create: `apps/android/app/src/main/kotlin/com/agentlife/mobile/state/ConversationViewModelFactory.kt`
-- Modify: `apps/android/app/src/main/kotlin/com/agentlife/mobile/AgentLifeApplication.kt`
-- Create: `apps/android/app/src/test/kotlin/com/agentlife/mobile/process/AppProcessRoleTest.kt`
-- Create: `apps/android/app/src/androidTest/kotlin/com/agentlife/mobile/ProcessAwareApplicationInstrumentedTest.kt`
+- Create: `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/process/AppProcessRole.kt`
+- Create: `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/di/AppGraph.kt`
+- Create: `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/di/MainProcessGraph.kt`
+- Create: `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/di/AssistantProcessGraph.kt`
+- Create: `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/state/ConversationViewModel.kt`
+- Create: `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/state/ConversationViewModelFactory.kt`
+- Modify: `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/OpenAndroidIntelligenceApplication.kt`
+- Create: `apps/android/app/src/test/kotlin/com/openandroidintelligence/mobile/process/AppProcessRoleTest.kt`
+- Create: `apps/android/app/src/androidTest/kotlin/com/openandroidintelligence/mobile/ProcessAwareApplicationInstrumentedTest.kt`
 
 **Interfaces:**
 - Consumes: Tasks 3–8。
@@ -1222,9 +1222,9 @@ git commit -m "新增: 实现加密对话镜像与媒体缓存"
 ```kotlin
 @Test
 fun assistantProcessesNeverCreateKernelOrGatewayClient() {
-    assertEquals(AppProcessRole.MAIN, classify("com.agentlife.mobile"))
-    assertEquals(AppProcessRole.ASSISTANT_KEEPER, classify("com.agentlife.mobile:assistant-keeper"))
-    assertEquals(AppProcessRole.ASSISTANT_SESSION, classify("com.agentlife.mobile:assistant-session"))
+    assertEquals(AppProcessRole.MAIN, classify("com.openandroidintelligence.mobile"))
+    assertEquals(AppProcessRole.ASSISTANT_KEEPER, classify("com.openandroidintelligence.mobile:assistant-keeper"))
+    assertEquals(AppProcessRole.ASSISTANT_SESSION, classify("com.openandroidintelligence.mobile:assistant-session"))
 }
 ```
 
@@ -1297,17 +1297,17 @@ git commit -m "重构: 建立进程感知应用组合根"
 **Files:**
 - Modify: `apps/android/settings.gradle.kts`
 - Create: `apps/android/conversation-ui/build.gradle.kts`
-- Create: `apps/android/conversation-ui/src/main/kotlin/com/agentlife/ui/design/ColorTokens.kt`
-- Create: `apps/android/conversation-ui/src/main/kotlin/com/agentlife/ui/design/TypeTokens.kt`
-- Create: `apps/android/conversation-ui/src/main/kotlin/com/agentlife/ui/design/ShapeTokens.kt`
-- Create: `apps/android/conversation-ui/src/main/kotlin/com/agentlife/ui/design/SpacingTokens.kt`
-- Create: `apps/android/conversation-ui/src/main/kotlin/com/agentlife/ui/design/MotionPolicy.kt`
-- Create: `apps/android/conversation-ui/src/main/kotlin/com/agentlife/ui/design/MotionTokens.kt`
-- Create: `apps/android/conversation-ui/src/main/kotlin/com/agentlife/ui/design/PressFeedback.kt`
-- Create: `apps/android/conversation-ui/src/main/kotlin/com/agentlife/ui/design/SignalStitch.kt`
-- Create: `apps/android/conversation-ui/src/main/kotlin/com/agentlife/ui/design/AgentLifeTheme.kt`
-- Create: `apps/android/conversation-ui/src/test/kotlin/com/agentlife/ui/design/DesignTokenTest.kt`
-- Create: `apps/android/conversation-ui/src/androidTest/kotlin/com/agentlife/ui/design/ThemeSemanticsTest.kt`
+- Create: `apps/android/conversation-ui/src/main/kotlin/com/openandroidintelligence/ui/design/ColorTokens.kt`
+- Create: `apps/android/conversation-ui/src/main/kotlin/com/openandroidintelligence/ui/design/TypeTokens.kt`
+- Create: `apps/android/conversation-ui/src/main/kotlin/com/openandroidintelligence/ui/design/ShapeTokens.kt`
+- Create: `apps/android/conversation-ui/src/main/kotlin/com/openandroidintelligence/ui/design/SpacingTokens.kt`
+- Create: `apps/android/conversation-ui/src/main/kotlin/com/openandroidintelligence/ui/design/MotionPolicy.kt`
+- Create: `apps/android/conversation-ui/src/main/kotlin/com/openandroidintelligence/ui/design/MotionTokens.kt`
+- Create: `apps/android/conversation-ui/src/main/kotlin/com/openandroidintelligence/ui/design/PressFeedback.kt`
+- Create: `apps/android/conversation-ui/src/main/kotlin/com/openandroidintelligence/ui/design/SignalStitch.kt`
+- Create: `apps/android/conversation-ui/src/main/kotlin/com/openandroidintelligence/ui/design/OpenAndroidIntelligenceTheme.kt`
+- Create: `apps/android/conversation-ui/src/test/kotlin/com/openandroidintelligence/ui/design/DesignTokenTest.kt`
+- Create: `apps/android/conversation-ui/src/androidTest/kotlin/com/openandroidintelligence/ui/design/ThemeSemanticsTest.kt`
 
 **Interfaces:**
 - Consumes: Task 4 immutable domain models。
@@ -1392,24 +1392,24 @@ git commit -m "新增: 建立设计系统设计与动效系统"
 - Modify: `apps/android/build.gradle.kts`
 - Modify: `apps/android/app/build.gradle.kts`
 - Modify: `apps/android/app/src/main/AndroidManifest.xml`
-- Modify: `apps/android/app/src/main/kotlin/com/agentlife/mobile/MainActivity.kt`
-- Create: `apps/android/app/src/main/kotlin/com/agentlife/mobile/navigation/AppDestination.kt`
-- Create: `apps/android/app/src/main/kotlin/com/agentlife/mobile/navigation/AgentLifeNavHost.kt`
-- Create: `apps/android/app/src/main/kotlin/com/agentlife/mobile/ui/shell/AgentLifeApp.kt`
-- Create: `apps/android/app/src/main/kotlin/com/agentlife/mobile/ui/shell/AdaptiveConversationShell.kt`
-- Create: `apps/android/app/src/main/kotlin/com/agentlife/mobile/ui/shell/GatewayPane.kt`
-- Create: `apps/android/app/src/main/kotlin/com/agentlife/mobile/ui/shell/ConversationListPane.kt`
-- Create: `apps/android/app/src/main/kotlin/com/agentlife/mobile/ui/gateway/GatewayPicker.kt`
-- Create: `apps/android/app/src/main/kotlin/com/agentlife/mobile/ui/media/MediaCacheScreen.kt`
+- Modify: `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/MainActivity.kt`
+- Create: `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/navigation/AppDestination.kt`
+- Create: `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/navigation/OpenAndroidIntelligenceNavHost.kt`
+- Create: `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/ui/shell/OpenAndroidIntelligenceApp.kt`
+- Create: `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/ui/shell/AdaptiveConversationShell.kt`
+- Create: `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/ui/shell/GatewayPane.kt`
+- Create: `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/ui/shell/ConversationListPane.kt`
+- Create: `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/ui/gateway/GatewayPicker.kt`
+- Create: `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/ui/media/MediaCacheScreen.kt`
 - Create: `apps/android/app/src/main/res/values/themes.xml`
 - Create: `apps/android/app/src/main/res/values-night/themes.xml`
-- Create: `apps/android/app/src/androidTest/kotlin/com/agentlife/mobile/navigation/NavigationAndAdaptiveLayoutTest.kt`
-- Delete safely: `apps/android/app/src/main/kotlin/com/agentlife/mobile/GatewayScreen.kt`
-- Delete safely: `apps/android/app/src/main/kotlin/com/agentlife/mobile/ConversationScreen.kt`
-- Delete safely: `apps/android/app/src/main/kotlin/com/agentlife/mobile/AttachmentPicker.kt`
-- Delete safely: `apps/android/app/src/main/kotlin/com/agentlife/mobile/PlatformSettingsScreen.kt`
-- Replace tests: `apps/android/app/src/androidTest/kotlin/com/agentlife/mobile/CoreWithoutPluginsInstrumentedTest.kt`
-- Replace tests: `apps/android/app/src/test/kotlin/com/agentlife/mobile/ArchitectureBoundaryTest.kt`
+- Create: `apps/android/app/src/androidTest/kotlin/com/openandroidintelligence/mobile/navigation/NavigationAndAdaptiveLayoutTest.kt`
+- Delete safely: `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/GatewayScreen.kt`
+- Delete safely: `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/ConversationScreen.kt`
+- Delete safely: `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/AttachmentPicker.kt`
+- Delete safely: `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/PlatformSettingsScreen.kt`
+- Replace tests: `apps/android/app/src/androidTest/kotlin/com/openandroidintelligence/mobile/CoreWithoutPluginsInstrumentedTest.kt`
+- Replace tests: `apps/android/app/src/test/kotlin/com/openandroidintelligence/mobile/ArchitectureBoundaryTest.kt`
 
 **Interfaces:**
 - Consumes: Task 9 graph、Task 10 theme/UI。
@@ -1450,7 +1450,7 @@ Expected: pane function/navigation nodes 不存在；无设备时 instrumentatio
 
 - [ ] **Step 4: 实现 edge-to-edge 与启动主题**
 
-`MainActivity : ComponentActivity` 在 `super.onCreate` 前后按 Activity API 调用 `enableEdgeToEdge()`；Scaffold 消费 safe drawing/IME insets。Manifest application/activity 使用 `Theme.AgentLife`，window background 与 Canvas token 匹配，禁止冷启动闪白。
+`MainActivity : ComponentActivity` 在 `super.onCreate` 前后按 Activity API 调用 `enableEdgeToEdge()`；Scaffold 消费 safe drawing/IME insets。Manifest application/activity 使用 `Theme.OpenAndroidIntelligence`，window background 与 Canvas token 匹配，禁止冷启动闪白。
 
 - [ ] **Step 5: 实现 adaptive Shell**
 
@@ -1468,12 +1468,12 @@ Gateway picker 显示所有 profile，切换调用 controller scope；无 Gatewa
 - [ ] **Step 7: 原子移出旧文件**
 
 ```bash
-mkdir -p /tmp/Agent-life-trash/task-11-legacy-presenters
-mv apps/android/app/src/main/kotlin/com/agentlife/mobile/GatewayScreen.kt \
-   apps/android/app/src/main/kotlin/com/agentlife/mobile/ConversationScreen.kt \
-   apps/android/app/src/main/kotlin/com/agentlife/mobile/AttachmentPicker.kt \
-   apps/android/app/src/main/kotlin/com/agentlife/mobile/PlatformSettingsScreen.kt \
-   /tmp/Agent-life-trash/task-11-legacy-presenters/
+mkdir -p /tmp/Open Android Intelligence-trash/task-11-legacy-presenters
+mv apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/GatewayScreen.kt \
+   apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/ConversationScreen.kt \
+   apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/AttachmentPicker.kt \
+   apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/PlatformSettingsScreen.kt \
+   /tmp/Open Android Intelligence-trash/task-11-legacy-presenters/
 ```
 
 同时替换所有调用与旧 Presenter 测试；不得留下 compatibility wrapper。
@@ -1503,18 +1503,18 @@ git commit -m "重构: 建立自适应主应用导航"
 
 **Files:**
 - Modify: `apps/android/conversation-ui/build.gradle.kts`
-- Create: `apps/android/conversation-ui/src/main/kotlin/com/agentlife/ui/timeline/ConversationTimeline.kt`
-- Create: `apps/android/conversation-ui/src/main/kotlin/com/agentlife/ui/timeline/TimelineItem.kt`
-- Create: `apps/android/conversation-ui/src/main/kotlin/com/agentlife/ui/timeline/TimelineFollowPolicy.kt`
-- Create: `apps/android/conversation-ui/src/main/kotlin/com/agentlife/ui/message/AssistantMessage.kt`
-- Create: `apps/android/conversation-ui/src/main/kotlin/com/agentlife/ui/message/UserMessage.kt`
-- Create: `apps/android/conversation-ui/src/main/kotlin/com/agentlife/ui/message/MarkdownDocument.kt`
-- Create: `apps/android/conversation-ui/src/main/kotlin/com/agentlife/ui/message/CodeBlock.kt`
-- Create: `apps/android/conversation-ui/src/main/kotlin/com/agentlife/ui/tool/ToolResultCard.kt`
-- Create: `apps/android/conversation-ui/src/main/kotlin/com/agentlife/ui/tombstone/DeletedTombstone.kt`
-- Create: `apps/android/conversation-ui/src/test/kotlin/com/agentlife/ui/timeline/TimelineFollowPolicyTest.kt`
-- Create: `apps/android/conversation-ui/src/test/kotlin/com/agentlife/ui/message/MarkdownDocumentTest.kt`
-- Create: `apps/android/conversation-ui/src/androidTest/kotlin/com/agentlife/ui/timeline/ConversationTimelineTest.kt`
+- Create: `apps/android/conversation-ui/src/main/kotlin/com/openandroidintelligence/ui/timeline/ConversationTimeline.kt`
+- Create: `apps/android/conversation-ui/src/main/kotlin/com/openandroidintelligence/ui/timeline/TimelineItem.kt`
+- Create: `apps/android/conversation-ui/src/main/kotlin/com/openandroidintelligence/ui/timeline/TimelineFollowPolicy.kt`
+- Create: `apps/android/conversation-ui/src/main/kotlin/com/openandroidintelligence/ui/message/AssistantMessage.kt`
+- Create: `apps/android/conversation-ui/src/main/kotlin/com/openandroidintelligence/ui/message/UserMessage.kt`
+- Create: `apps/android/conversation-ui/src/main/kotlin/com/openandroidintelligence/ui/message/MarkdownDocument.kt`
+- Create: `apps/android/conversation-ui/src/main/kotlin/com/openandroidintelligence/ui/message/CodeBlock.kt`
+- Create: `apps/android/conversation-ui/src/main/kotlin/com/openandroidintelligence/ui/tool/ToolResultCard.kt`
+- Create: `apps/android/conversation-ui/src/main/kotlin/com/openandroidintelligence/ui/tombstone/DeletedTombstone.kt`
+- Create: `apps/android/conversation-ui/src/test/kotlin/com/openandroidintelligence/ui/timeline/TimelineFollowPolicyTest.kt`
+- Create: `apps/android/conversation-ui/src/test/kotlin/com/openandroidintelligence/ui/message/MarkdownDocumentTest.kt`
+- Create: `apps/android/conversation-ui/src/androidTest/kotlin/com/openandroidintelligence/ui/timeline/ConversationTimelineTest.kt`
 
 **Interfaces:**
 - Consumes: one immutable `ConversationSessionState`。
@@ -1594,17 +1594,17 @@ git commit -m "新增: 实现真实对话时间线"
 ### Task 13: 实现主 App/助理共用消息编辑器、命令、批次与附件状态
 
 **Files:**
-- Create: `apps/android/conversation-ui/src/main/kotlin/com/agentlife/ui/composer/SharedComposer.kt`
-- Create: `apps/android/conversation-ui/src/main/kotlin/com/agentlife/ui/composer/ComposerUiState.kt`
-- Create: `apps/android/conversation-ui/src/main/kotlin/com/agentlife/ui/composer/CommandCatalogMenu.kt`
-- Create: `apps/android/conversation-ui/src/main/kotlin/com/agentlife/ui/composer/DebounceBatchIndicator.kt`
-- Create: `apps/android/conversation-ui/src/main/kotlin/com/agentlife/ui/attachment/AttachmentDraftBar.kt`
-- Create: `apps/android/conversation-ui/src/main/kotlin/com/agentlife/ui/attachment/AttachmentDraftChip.kt`
-- Create: `apps/android/conversation-ui/src/androidTest/kotlin/com/agentlife/ui/composer/SharedComposerTest.kt`
-- Create: `apps/android/app/src/main/kotlin/com/agentlife/mobile/attachment/AndroidArtifactSelectionAdapter.kt`
-- Create: `apps/android/app/src/main/kotlin/com/agentlife/mobile/attachment/AndroidArtifactDigestAdapter.kt`
-- Create: `apps/android/app/src/androidTest/kotlin/com/agentlife/mobile/attachment/AndroidArtifactSelectionAdapterTest.kt`
-- Modify: `apps/android/app/src/main/kotlin/com/agentlife/mobile/ui/shell/AdaptiveConversationShell.kt`
+- Create: `apps/android/conversation-ui/src/main/kotlin/com/openandroidintelligence/ui/composer/SharedComposer.kt`
+- Create: `apps/android/conversation-ui/src/main/kotlin/com/openandroidintelligence/ui/composer/ComposerUiState.kt`
+- Create: `apps/android/conversation-ui/src/main/kotlin/com/openandroidintelligence/ui/composer/CommandCatalogMenu.kt`
+- Create: `apps/android/conversation-ui/src/main/kotlin/com/openandroidintelligence/ui/composer/DebounceBatchIndicator.kt`
+- Create: `apps/android/conversation-ui/src/main/kotlin/com/openandroidintelligence/ui/attachment/AttachmentDraftBar.kt`
+- Create: `apps/android/conversation-ui/src/main/kotlin/com/openandroidintelligence/ui/attachment/AttachmentDraftChip.kt`
+- Create: `apps/android/conversation-ui/src/androidTest/kotlin/com/openandroidintelligence/ui/composer/SharedComposerTest.kt`
+- Create: `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/attachment/AndroidArtifactSelectionAdapter.kt`
+- Create: `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/attachment/AndroidArtifactDigestAdapter.kt`
+- Create: `apps/android/app/src/androidTest/kotlin/com/openandroidintelligence/mobile/attachment/AndroidArtifactSelectionAdapterTest.kt`
+- Modify: `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/ui/shell/AdaptiveConversationShell.kt`
 
 **Interfaces:**
 - Consumes: Task 5–7 controller state/intents、Task 10 stateless design。
@@ -1721,21 +1721,21 @@ git commit -m "新增: 实现共享消息编辑器"
 - Modify: `apps/android/assistant-holder/build.gradle.kts`
 - Modify: `apps/android/assistant-holder/src/main/AndroidManifest.xml`
 - Modify: `apps/android/assistant-holder/src/main/res/xml/voice_interaction_service.xml`
-- Modify: `apps/android/assistant-holder/src/main/kotlin/com/agentlife/assistant/AssistantVoiceService.kt`
-- Modify: `apps/android/assistant-holder/src/main/kotlin/com/agentlife/assistant/AssistantSessionService.kt`
-- Create: `apps/android/assistant-holder/src/main/kotlin/com/agentlife/assistant/AssistantSession.kt`
-- Create: `apps/android/assistant-holder/src/main/kotlin/com/agentlife/assistant/bridge/AssistantBridgeClient.kt`
-- Create: `apps/android/core-model/src/main/kotlin/com/agentlife/core/model/AssistantBridgeProtocol.kt`
-- Create: `apps/android/app/src/main/kotlin/com/agentlife/mobile/assistant/AssistantConversationBridgeService.kt`
+- Modify: `apps/android/assistant-holder/src/main/kotlin/com/openandroidintelligence/assistant/AssistantVoiceService.kt`
+- Modify: `apps/android/assistant-holder/src/main/kotlin/com/openandroidintelligence/assistant/AssistantSessionService.kt`
+- Create: `apps/android/assistant-holder/src/main/kotlin/com/openandroidintelligence/assistant/AssistantSession.kt`
+- Create: `apps/android/assistant-holder/src/main/kotlin/com/openandroidintelligence/assistant/bridge/AssistantBridgeClient.kt`
+- Create: `apps/android/core-model/src/main/kotlin/com/openandroidintelligence/core/model/AssistantBridgeProtocol.kt`
+- Create: `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/assistant/AssistantConversationBridgeService.kt`
 - Modify: `apps/android/app/build.gradle.kts`
 - Modify: `apps/android/app/src/main/AndroidManifest.xml`
-- Create: `apps/android/assistant-holder/src/test/kotlin/com/agentlife/assistant/bridge/AssistantBridgeProtocolTest.kt`
-- Create: `apps/android/assistant-holder/src/androidTest/kotlin/com/agentlife/assistant/AssistantSessionLifecycleInstrumentedTest.kt`
-- Create: `apps/android/app/src/androidTest/kotlin/com/agentlife/mobile/assistant/AssistantBridgeIsolationInstrumentedTest.kt`
+- Create: `apps/android/assistant-holder/src/test/kotlin/com/openandroidintelligence/assistant/bridge/AssistantBridgeProtocolTest.kt`
+- Create: `apps/android/assistant-holder/src/androidTest/kotlin/com/openandroidintelligence/assistant/AssistantSessionLifecycleInstrumentedTest.kt`
+- Create: `apps/android/app/src/androidTest/kotlin/com/openandroidintelligence/mobile/assistant/AssistantBridgeIsolationInstrumentedTest.kt`
 
 **Interfaces:**
 - Consumes: Task 9 graph、Task 10/13 UI。
-- Produces: 同 `applicationId=com.agentlife.mobile`、同 UID、`:assistant-keeper` 和 `:assistant-session`；MAIN 进程 controller 仍是唯一状态权威。
+- Produces: 同 `applicationId=com.openandroidintelligence.mobile`、同 UID、`:assistant-keeper` 和 `:assistant-session`；MAIN 进程 controller 仍是唯一状态权威。
 
 - [ ] **Step 1: 写 manifest/process RED**
 
@@ -1745,14 +1745,14 @@ fun servicesAreInTheMainPackageButSeparatePrivateProcesses() {
     val manifest = mergedManifest("fullDebug")
     assertService(
         manifest,
-        "com.agentlife.assistant.AssistantVoiceService",
+        "com.openandroidintelligence.assistant.AssistantVoiceService",
         process = ":assistant-keeper",
         exported = true,
         permission = "android.permission.BIND_VOICE_INTERACTION",
     )
     assertService(
         manifest,
-        "com.agentlife.assistant.AssistantSessionService",
+        "com.openandroidintelligence.assistant.AssistantSessionService",
         process = ":assistant-session",
         exported = false,
         permission = "android.permission.BIND_VOICE_INTERACTION",
@@ -1813,8 +1813,8 @@ Run:
 设备存在时额外：
 
 ```bash
-adb shell dumpsys package com.agentlife.mobile
-adb shell ps -A | rg 'com.agentlife.mobile'
+adb shell dumpsys package com.openandroidintelligence.mobile
+adb shell ps -A | rg 'com.openandroidintelligence.mobile'
 ```
 
 Expected: 一个 package/UID、三个进程角色；无设备则系统角色/进程证据 BLOCKED。
@@ -1829,15 +1829,15 @@ git commit -m "新增: 接入系统默认助理会话"
 ### Task 15: 实现助理栏↔球连续 Morph、真实停靠物理与返回语义
 
 **Files:**
-- Create: `apps/android/assistant-holder/src/main/kotlin/com/agentlife/assistant/ui/AssistantSurface.kt`
-- Create: `apps/android/assistant-holder/src/main/kotlin/com/agentlife/assistant/ui/AssistantMorphContainer.kt`
-- Create: `apps/android/assistant-holder/src/main/kotlin/com/agentlife/assistant/ui/DockedAssistantBall.kt`
-- Create: `apps/android/assistant-holder/src/main/kotlin/com/agentlife/assistant/ui/DockPhysics.kt`
-- Create: `apps/android/assistant-holder/src/main/kotlin/com/agentlife/assistant/ui/DockSafeBounds.kt`
-- Create: `apps/android/assistant-holder/src/main/kotlin/com/agentlife/assistant/ui/DockDropTarget.kt`
-- Create: `apps/android/assistant-holder/src/test/kotlin/com/agentlife/assistant/ui/DockPhysicsTest.kt`
-- Create: `apps/android/assistant-holder/src/androidTest/kotlin/com/agentlife/assistant/ui/AssistantMorphInstrumentedTest.kt`
-- Create: `apps/android/assistant-holder/src/androidTest/kotlin/com/agentlife/assistant/ui/DockedBallGestureInstrumentedTest.kt`
+- Create: `apps/android/assistant-holder/src/main/kotlin/com/openandroidintelligence/assistant/ui/AssistantSurface.kt`
+- Create: `apps/android/assistant-holder/src/main/kotlin/com/openandroidintelligence/assistant/ui/AssistantMorphContainer.kt`
+- Create: `apps/android/assistant-holder/src/main/kotlin/com/openandroidintelligence/assistant/ui/DockedAssistantBall.kt`
+- Create: `apps/android/assistant-holder/src/main/kotlin/com/openandroidintelligence/assistant/ui/DockPhysics.kt`
+- Create: `apps/android/assistant-holder/src/main/kotlin/com/openandroidintelligence/assistant/ui/DockSafeBounds.kt`
+- Create: `apps/android/assistant-holder/src/main/kotlin/com/openandroidintelligence/assistant/ui/DockDropTarget.kt`
+- Create: `apps/android/assistant-holder/src/test/kotlin/com/openandroidintelligence/assistant/ui/DockPhysicsTest.kt`
+- Create: `apps/android/assistant-holder/src/androidTest/kotlin/com/openandroidintelligence/assistant/ui/AssistantMorphInstrumentedTest.kt`
+- Create: `apps/android/assistant-holder/src/androidTest/kotlin/com/openandroidintelligence/assistant/ui/DockedBallGestureInstrumentedTest.kt`
 
 **Interfaces:**
 - Consumes: Task 10 MotionPolicy、Task 13 SharedComposer、Task 14 session state。
@@ -1931,16 +1931,16 @@ git commit -m "新增: 实现助理连续形变与停靠物理"
 ### Task 16: 实现受限 Assist screenshot 圈选、真实 PNG 与共享元素交接
 
 **Files:**
-- Create: `apps/android/assistant-holder/src/main/kotlin/com/agentlife/assistant/selection/ScreenSelectionController.kt`
-- Create: `apps/android/assistant-holder/src/main/kotlin/com/agentlife/assistant/selection/SelectionPath.kt`
-- Create: `apps/android/assistant-holder/src/main/kotlin/com/agentlife/assistant/selection/ScreenCropEncoder.kt`
-- Create: `apps/android/assistant-holder/src/main/kotlin/com/agentlife/assistant/ui/ScreenSelectionOverlay.kt`
-- Create: `apps/android/assistant-holder/src/main/kotlin/com/agentlife/assistant/ui/AccessibleRectangleEditor.kt`
-- Create: `apps/android/assistant-holder/src/test/kotlin/com/agentlife/assistant/selection/SelectionPathTest.kt`
-- Create: `apps/android/assistant-holder/src/androidTest/kotlin/com/agentlife/assistant/selection/ScreenCropEncoderInstrumentedTest.kt`
-- Create: `apps/android/assistant-holder/src/androidTest/kotlin/com/agentlife/assistant/ui/ScreenSelectionAccessibilityTest.kt`
-- Modify: `apps/android/assistant-holder/src/main/kotlin/com/agentlife/assistant/AssistantSession.kt`
-- Modify: `apps/android/conversation-ui/src/main/kotlin/com/agentlife/ui/attachment/AttachmentDraftChip.kt`
+- Create: `apps/android/assistant-holder/src/main/kotlin/com/openandroidintelligence/assistant/selection/ScreenSelectionController.kt`
+- Create: `apps/android/assistant-holder/src/main/kotlin/com/openandroidintelligence/assistant/selection/SelectionPath.kt`
+- Create: `apps/android/assistant-holder/src/main/kotlin/com/openandroidintelligence/assistant/selection/ScreenCropEncoder.kt`
+- Create: `apps/android/assistant-holder/src/main/kotlin/com/openandroidintelligence/assistant/ui/ScreenSelectionOverlay.kt`
+- Create: `apps/android/assistant-holder/src/main/kotlin/com/openandroidintelligence/assistant/ui/AccessibleRectangleEditor.kt`
+- Create: `apps/android/assistant-holder/src/test/kotlin/com/openandroidintelligence/assistant/selection/SelectionPathTest.kt`
+- Create: `apps/android/assistant-holder/src/androidTest/kotlin/com/openandroidintelligence/assistant/selection/ScreenCropEncoderInstrumentedTest.kt`
+- Create: `apps/android/assistant-holder/src/androidTest/kotlin/com/openandroidintelligence/assistant/ui/ScreenSelectionAccessibilityTest.kt`
+- Modify: `apps/android/assistant-holder/src/main/kotlin/com/openandroidintelligence/assistant/AssistantSession.kt`
+- Modify: `apps/android/conversation-ui/src/main/kotlin/com/openandroidintelligence/ui/attachment/AttachmentDraftChip.kt`
 
 **Interfaces:**
 - Consumes: Task 7 coordinator、Task 14 screenshot callback、Task 15 shared transition scope。
@@ -2012,18 +2012,18 @@ git commit -m "新增: 实现受限屏幕选区附件"
 ### Task 17: 接入受保护插件声明式 UI 与 Developer Trust 原生接管恢复门
 
 **Files:**
-- Create: `apps/android/conversation-ui/src/main/kotlin/com/agentlife/ui/plugin/DeclarativePluginRenderer.kt`
-- Create: `apps/android/conversation-ui/src/main/kotlin/com/agentlife/ui/plugin/PluginUiAction.kt`
-- Create: `apps/android/conversation-ui/src/androidTest/kotlin/com/agentlife/ui/plugin/DeclarativePluginRendererTest.kt`
-- Create: `apps/android/app/src/main/kotlin/com/agentlife/mobile/plugin/PluginUiCoordinator.kt`
-- Create: `apps/android/app/src/main/kotlin/com/agentlife/mobile/plugin/NativeUiExtensionRegistry.kt`
-- Create: `apps/android/app/src/main/kotlin/com/agentlife/mobile/ui/plugin/PluginManagementScreen.kt`
-- Create: `apps/android/app/src/main/kotlin/com/agentlife/mobile/ui/settings/PlatformSettingsScreen.kt`
-- Create: `apps/android/app/src/main/kotlin/com/agentlife/mobile/ui/recovery/SafeModeScreen.kt`
-- Modify: `apps/android/platform-kernel/src/main/kotlin/com/agentlife/kernel/DeveloperTrustMode.kt`
-- Modify: `apps/android/platform-kernel/src/main/kotlin/com/agentlife/kernel/NativePluginLoader.kt`
-- Create: `apps/android/app/src/test/kotlin/com/agentlife/mobile/plugin/PluginUiCoordinatorTest.kt`
-- Create: `apps/android/app/src/androidTest/kotlin/com/agentlife/mobile/plugin/PluginManagementInstrumentedTest.kt`
+- Create: `apps/android/conversation-ui/src/main/kotlin/com/openandroidintelligence/ui/plugin/DeclarativePluginRenderer.kt`
+- Create: `apps/android/conversation-ui/src/main/kotlin/com/openandroidintelligence/ui/plugin/PluginUiAction.kt`
+- Create: `apps/android/conversation-ui/src/androidTest/kotlin/com/openandroidintelligence/ui/plugin/DeclarativePluginRendererTest.kt`
+- Create: `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/plugin/PluginUiCoordinator.kt`
+- Create: `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/plugin/NativeUiExtensionRegistry.kt`
+- Create: `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/ui/plugin/PluginManagementScreen.kt`
+- Create: `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/ui/settings/PlatformSettingsScreen.kt`
+- Create: `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/ui/recovery/SafeModeScreen.kt`
+- Modify: `apps/android/platform-kernel/src/main/kotlin/com/openandroidintelligence/kernel/DeveloperTrustMode.kt`
+- Modify: `apps/android/platform-kernel/src/main/kotlin/com/openandroidintelligence/kernel/NativePluginLoader.kt`
+- Create: `apps/android/app/src/test/kotlin/com/openandroidintelligence/mobile/plugin/PluginUiCoordinatorTest.kt`
+- Create: `apps/android/app/src/androidTest/kotlin/com/openandroidintelligence/mobile/plugin/PluginManagementInstrumentedTest.kt`
 
 **Interfaces:**
 - Consumes: `plugin-ui` `UiContribution/UiComponent`、Kernel grant/lifecycle、BuildConfig flavor policy。
@@ -2107,13 +2107,13 @@ git commit -m "新增: 接入受保护插件界面"
 - Modify: `apps/android/app/build.gradle.kts`
 - Create: `apps/android/macrobenchmark/build.gradle.kts`
 - Create: `apps/android/macrobenchmark/src/main/AndroidManifest.xml`
-- Create: `apps/android/macrobenchmark/src/main/kotlin/com/agentlife/benchmark/ConversationFrameBenchmark.kt`
+- Create: `apps/android/macrobenchmark/src/main/kotlin/com/openandroidintelligence/benchmark/ConversationFrameBenchmark.kt`
 - Modify: `apps/android/settings.gradle.kts`
-- Create: `apps/android/app/src/main/kotlin/com/agentlife/mobile/preview/ConversationPreviews.kt`
-- Create: `apps/android/assistant-holder/src/main/kotlin/com/agentlife/assistant/preview/AssistantPreviews.kt`
-- Create: `apps/android/app/src/androidTest/kotlin/com/agentlife/mobile/AccessibilityAndLocalizationTest.kt`
-- Create: `apps/android/app/src/androidTest/kotlin/com/agentlife/mobile/EndToEndConversationInstrumentedTest.kt`
-- Create: `apps/android/assistant-holder/src/androidTest/kotlin/com/agentlife/assistant/DefaultAssistantPhysicalE2ETest.kt`
+- Create: `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/preview/ConversationPreviews.kt`
+- Create: `apps/android/assistant-holder/src/main/kotlin/com/openandroidintelligence/assistant/preview/AssistantPreviews.kt`
+- Create: `apps/android/app/src/androidTest/kotlin/com/openandroidintelligence/mobile/AccessibilityAndLocalizationTest.kt`
+- Create: `apps/android/app/src/androidTest/kotlin/com/openandroidintelligence/mobile/EndToEndConversationInstrumentedTest.kt`
+- Create: `apps/android/assistant-holder/src/androidTest/kotlin/com/openandroidintelligence/assistant/DefaultAssistantPhysicalE2ETest.kt`
 - Create: `docs/superpowers/reviews/2026-09-01-android-conversation-assistant-ui-final-review.md`
 - Create: `docs/superpowers/handoffs/2026-09-01-android-conversation-assistant-ui-handoff.md`
 

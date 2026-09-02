@@ -49,8 +49,8 @@ val generatedDirectoryNames = setOf("build", ".gradle", ".cxx", "generated")
  * explicit, path-narrow exemption keeps every other module under the ban.
  */
 val absenceAuditFiles = setOf(
-    "app/src/androidTest/kotlin/com/agentlife/mobile/P0tAppNoVpnSurfaceInstrumentedTest.kt",
-    "tailnet-core/src/androidTest/kotlin/com/agentlife/tailnet/core/P0tVpnSurfaceInstrumentedTest.kt",
+    "app/src/androidTest/kotlin/com/openandroidintelligence/mobile/P0tAppNoVpnSurfaceInstrumentedTest.kt",
+    "tailnet-core/src/androidTest/kotlin/com/openandroidintelligence/tailnet/core/P0tVpnSurfaceInstrumentedTest.kt",
 )
 
 fun scanNoVpnSurfaces(files: Iterable<File>, banned: List<Regex>): List<String> = buildList {

@@ -20,7 +20,7 @@ class Wp03StaticBoundaryTest(unittest.TestCase):
 
     def test_contracts_define_closed_policy_and_record_unions(self):
         source = self.read(
-            "core-model/src/main/kotlin/com/agentlife/core/model/NotificationContracts.kt"
+            "core-model/src/main/kotlin/com/openandroidintelligence/core/model/NotificationContracts.kt"
         )
         self.assertIn("sealed interface NotificationRecordV1", source)
         self.assertIn("data class Upsert", source)
@@ -34,7 +34,7 @@ class Wp03StaticBoundaryTest(unittest.TestCase):
 
     def test_policy_engine_has_default_deny_and_authorization_gate(self):
         source = self.read(
-            "policy-engine/src/main/kotlin/com/agentlife/policy/NotificationPolicyEvaluator.kt"
+            "policy-engine/src/main/kotlin/com/openandroidintelligence/policy/NotificationPolicyEvaluator.kt"
         )
         self.assertIn("default", source.lower())
         self.assertIn("NotificationAuthorization", source)
@@ -43,7 +43,7 @@ class Wp03StaticBoundaryTest(unittest.TestCase):
 
     def test_collector_does_not_persist_before_policy_and_strips_content(self):
         source = self.read(
-            "notification-collector/src/main/kotlin/com/agentlife/notifications/AndroidNotificationCollector.kt"
+            "notification-collector/src/main/kotlin/com/openandroidintelligence/notifications/AndroidNotificationCollector.kt"
         )
         self.assertIn("NotificationListenerService", source)
         self.assertIn("captureOnDemand", source)
@@ -54,7 +54,7 @@ class Wp03StaticBoundaryTest(unittest.TestCase):
 
     def test_removed_notification_rechecks_current_authorization_before_tombstone(self):
         source = self.read(
-            "notification-collector/src/main/kotlin/com/agentlife/notifications/AndroidNotificationCollector.kt"
+            "notification-collector/src/main/kotlin/com/openandroidintelligence/notifications/AndroidNotificationCollector.kt"
         )
         removed = re.search(
             r"fun onRemoved\(.*?^\s*}\n\n\s*/\*\* Loss is explicit",
@@ -66,7 +66,7 @@ class Wp03StaticBoundaryTest(unittest.TestCase):
 
     def test_queue_loss_checks_package_authorization_not_notification_keys(self):
         source = self.read(
-            "notification-collector/src/main/kotlin/com/agentlife/notifications/AndroidNotificationCollector.kt"
+            "notification-collector/src/main/kotlin/com/openandroidintelligence/notifications/AndroidNotificationCollector.kt"
         )
         loss = re.search(
             r"fun onQueueLoss\(.*?^\s*}\n\n\s*private fun toUpsert",
@@ -79,7 +79,7 @@ class Wp03StaticBoundaryTest(unittest.TestCase):
 
     def test_outbox_encrypts_persisted_bytes_and_requires_ack_verifier(self):
         source = self.read(
-            "encrypted-store/src/main/kotlin/com/agentlife/encrypted/store/NotificationOutboxStore.kt"
+            "encrypted-store/src/main/kotlin/com/openandroidintelligence/encrypted/store/NotificationOutboxStore.kt"
         )
         self.assertIn("AES/GCM/NoPadding", source)
         self.assertIn("recoverUnacknowledged", source)
@@ -90,7 +90,7 @@ class Wp03StaticBoundaryTest(unittest.TestCase):
 
     def test_outbox_ack_restores_memory_when_persistence_commit_fails(self):
         source = self.read(
-            "encrypted-store/src/main/kotlin/com/agentlife/encrypted/store/NotificationOutboxStore.kt"
+            "encrypted-store/src/main/kotlin/com/openandroidintelligence/encrypted/store/NotificationOutboxStore.kt"
         )
         ack = re.search(
             r"fun acknowledgeBlocking\(.*?^\s*}\n\n\s*override suspend fun recoverUnacknowledged",

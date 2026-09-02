@@ -1,4 +1,4 @@
-//! Agent-life 短信参考插件：实现 `org.agentlife.sms.query@1.0.0`。
+//! Open Android Intelligence 短信参考插件：实现 `org.openandroidintelligence.sms.query@1.0.0`。
 //!
 //! 消费内核 primitive `kernel.sms.read`，将查询参数转换为受保护的内核调用
 //! 并整形输出数据。
@@ -8,7 +8,7 @@
 
 extern crate alloc;
 
-use agent_life_sdk::{PluginError, declare_plugin};
+use open_android_intelligence_sdk::{PluginError, declare_plugin};
 use alloc::vec::Vec;
 
 pub fn handle_sms_query(request: &[u8]) -> Result<Vec<u8>, PluginError> {

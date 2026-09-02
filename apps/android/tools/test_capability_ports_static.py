@@ -19,7 +19,7 @@ PORT_SOURCE = (
     / "main"
     / "kotlin"
     / "com"
-    / "agentlife"
+    / "openandroidintelligence"
     / "capability"
     / "CapabilityPorts.kt"
 )
@@ -29,7 +29,7 @@ PROVIDER_SOURCE = (
     / "main"
     / "kotlin"
     / "com"
-    / "agentlife"
+    / "openandroidintelligence"
     / "capability"
     / "CapabilityProviderContracts.kt"
 )
@@ -39,7 +39,7 @@ SMS_CONTRACT_SOURCE = (
     / "main"
     / "kotlin"
     / "com"
-    / "agentlife"
+    / "openandroidintelligence"
     / "capability"
     / "SmsCapabilityContracts.kt"
 )
@@ -49,7 +49,7 @@ CALL_LOG_CONTRACT_SOURCE = (
     / "main"
     / "kotlin"
     / "com"
-    / "agentlife"
+    / "openandroidintelligence"
     / "capability"
     / "CallLogCapabilityContracts.kt"
 )
@@ -64,7 +64,7 @@ class CapabilityPortsStaticTest(unittest.TestCase):
         build = (ROOT / "capability-ports" / "build.gradle.kts").read_text(
             encoding="utf-8"
         )
-        self.assertIn('namespace = "com.agentlife.capability"', build)
+        self.assertIn('namespace = "com.openandroidintelligence.capability"', build)
         self.assertIn('implementation(project(":core-model"))', build)
         self.assertNotIn("NotificationListenerService", self.read_source())
         self.assertNotIn("ContentResolver", self.read_source())

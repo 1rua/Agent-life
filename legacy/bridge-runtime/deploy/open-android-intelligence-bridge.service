@@ -1,0 +1,35 @@
+[Unit]
+Description=Open Android Intelligence durable Bridge runtime
+Requires=open-android-intelligence-ingress.service
+After=open-android-intelligence-ingress.service
+ConditionPathExists=/etc/open-android-intelligence/bridge/pairing-ticket-public.pem
+
+[Service]
+Type=simple
+User=open-android-intelligence-runtime
+Group=open-android-intelligence
+SupplementaryGroups=open-android-intelligence
+WorkingDirectory=/var/lib/open-android-intelligence-bridge
+StateDirectory=open-android-intelligence-bridge
+StateDirectoryMode=0750
+RuntimeDirectory=open-android-intelligence
+RuntimeDirectoryMode=0750
+Environment=NODE_ENV=production
+Environment=OPEN_ANDROID_INTELLIGENCE_DATABASE=/var/lib/open-android-intelligence-bridge/bridge.sqlite
+Environment=OPEN_ANDROID_INTELLIGENCE_PAIRING_PUBLIC_KEY=/etc/open-android-intelligence/bridge/pairing-ticket-public.pem
+Environment=OPEN_ANDROID_INTELLIGENCE_RUNTIME_SOCKET=/run/open-android-intelligence/runtime.sock
+Environment=OPEN_ANDROID_INTELLIGENCE_LEASE_TTL_MS=60000
+ExecStart=/usr/bin/node /opt/open-android-intelligence/bridge/dist/bridge-runtime/src/main.js
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/open-android-intelligence-bridge
+RestrictAddressFamilies=AF_UNIX
+# The runtime accepts only the authenticated ingress sidecar over this Unix
+# socket. It never opens a TCP listener or a public host port.
+
+[Install]
+WantedBy=multi-user.target

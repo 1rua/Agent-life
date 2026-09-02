@@ -22,8 +22,8 @@ export interface VersionRegistryEntry {
 
 declare const lockedVersionRegistryBrand: unique symbol;
 export type LockedVersionRegistry = Readonly<{
-  readonly $schema: "urn:agent-life:protocol:v1:versions-registry";
-  readonly registry_id: "urn:agent-life:protocol:v1:registry:versions";
+  readonly $schema: "urn:open-android-intelligence:protocol:v1:versions-registry";
+  readonly registry_id: "urn:open-android-intelligence:protocol:v1:registry:versions";
   readonly protocol_version: "1.0";
   readonly versions: readonly VersionRegistryEntry[];
   readonly [lockedVersionRegistryBrand]: true;
@@ -67,7 +67,7 @@ const deepFreeze = <T>(value: T): T => {
   return value;
 };
 
-validateSchema("urn:agent-life:protocol:v1:versions-registry", versionsFixture);
+validateSchema("urn:open-android-intelligence:protocol:v1:versions-registry", versionsFixture);
 const lockedRegistry = deepFreeze(versionsFixture) as unknown as LockedVersionRegistry;
 
 export function loadVersionRegistry(): LockedVersionRegistry {

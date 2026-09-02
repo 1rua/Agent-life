@@ -10,10 +10,10 @@ cloudflared quick tunnel（无账号、有效公网证书）解决 TLS 信任，
 ## 一、待新增测试（P0tOfflineRealBackendInstrumentedTest.kt，放 tailnet-core androidTest）
 
 ```kotlin
-package com.agentlife.tailnet.core
+package com.openandroidintelligence.tailnet.core
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.agentlife.core.model.TransportPath
+import com.openandroidintelligence.core.model.TransportPath
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -70,13 +70,13 @@ pinned IPv4）用 `VerifiedPairingTransportBindingFactory.mint` 构造与 enroll
 默认字段：hostname=p0t-offline-device、pinnedIpv4=100.96.0.1（不存在 peer）、
 generation=7、policyRevision=2、expiry=now+600、digests=确定性 sha256/base64url。
 复用 `cmd/enrollment-bundle`（固定 Go 工具链），输出推送到
-`/data/local/tmp/agentlife-p0t/offline.bundle`，校验设备端 sha 与主机一致。
+`/data/local/tmp/openandroidintelligence-p0t/offline.bundle`，校验设备端 sha 与主机一致。
 
 ## 三、headscale + 隧道 runbook（仅获批后执行）
 
 ```bash
 # 1) 拉 headscale（docker 固定镜像版本）并起在 127.0.0.1:8080
-docker run -d --name agentlife-p0t-headscale -p 127.0.0.1:8080:8080 \
+docker run -d --name openandroidintelligence-p0t-headscale -p 127.0.0.1:8080:8080 \
   headscale/headscale:v0.23.0 rc  # 版本以 httpS(github releases) 实际为准
 
 # 2) 建用户与一次性 preauth 密钥（5 分钟级）
@@ -91,9 +91,9 @@ cloudflared tunnel --url http://127.0.0.1:8080   # 打印 https://<rand>.tryclou
 
 # 5) 用 <rand>.trycloudflare.com 做 controlUrl 生成 offline.bundle 并推送
 # 6) 安装测试 APK 后：
-#    am instrument -w -r -e p0tOfflineBundle /data/local/tmp/agentlife-p0t/offline.bundle \
-#      -e class com.agentlife.tailnet.core.P0tOfflineRealBackendInstrumentedTest \
-#      com.agentlife.tailnet.core.test/androidx.test.runner.AndroidJUnitRunner
+#    am instrument -w -r -e p0tOfflineBundle /data/local/tmp/openandroidintelligence-p0t/offline.bundle \
+#      -e class com.openandroidintelligence.tailnet.core.P0tOfflineRealBackendInstrumentedTest \
+#      com.openandroidintelligence.tailnet.core.test/androidx.test.runner.AndroidJUnitRunner
 # 7) 用 run-p0t-smallstep.sh 思路做 before/after 脱敏审计（VPN/route/DNS）
 ```
 

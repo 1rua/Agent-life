@@ -20,7 +20,7 @@ HERMES_ROOT = REPO_ROOT / "integrations" / "hermes"
 
 sys.path.insert(0, str(HERMES_ROOT))
 
-from agent_life_gateway.core import create_gateway_core  # noqa: E402
+from open_android_intelligence_gateway.core import create_gateway_core  # noqa: E402
 
 HERMES_IMPLEMENTATION = "hermes-python"
 
@@ -51,7 +51,7 @@ def input_digests(contract_root: Path) -> dict[str, str]:
 
 
 def artifact_directory() -> Path:
-    configured = os.environ.get("AGENT_LIFE_CONFORMANCE_DIR")
+    configured = os.environ.get("OPEN_ANDROID_INTELLIGENCE_CONFORMANCE_DIR")
     if configured:
         return Path(configured).resolve()
     return CONTRACT_ROOT / ".artifacts" / "conformance"

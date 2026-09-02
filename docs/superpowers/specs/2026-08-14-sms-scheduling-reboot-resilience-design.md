@@ -15,7 +15,7 @@ gap is that no component re-schedules jobs after the app process restarts.
 
 **Accept best-effort scheduling with app-start self-healing.** No new
 permissions or Android components. When the app starts (user launch or system
-trigger), `AgentLifeApplication` reads the persisted SMS settings and restores
+trigger), `OpenAndroidIntelligenceApplication` reads the persisted SMS settings and restores
 the periodic job if auto-send is enabled with a non-manual interval.
 
 The user's product requirement is: "after reboot, if the app starts, sync
@@ -27,7 +27,7 @@ should resume." This design satisfies that requirement without introducing
 ### Data flow
 
 ```
-reboot → app starts → AgentLifeApplication.onCreate()
+reboot → app starts → OpenAndroidIntelligenceApplication.onCreate()
   → read sms-settings-v1.bin
   → if autoSendEnabled && interval ∈ {15, 30, 60}min
     → AndroidSmsSyncScheduler.schedule(interval)
@@ -36,7 +36,7 @@ reboot → app starts → AgentLifeApplication.onCreate()
 
 ### App-start restoration
 
-In `AgentLifeApplication.onCreate()`, after `smsAuthority` is created, add a
+In `OpenAndroidIntelligenceApplication.onCreate()`, after `smsAuthority` is created, add a
 restoration step:
 
 1. Read snapshot from `smsAuthority`.
@@ -54,7 +54,7 @@ call sites and the test recording adapter.
 
 | File | Change |
 |------|--------|
-| `AgentLifeApplication.kt` | Add startup scheduling restoration |
+| `OpenAndroidIntelligenceApplication.kt` | Add startup scheduling restoration |
 | `SmsSyncScheduler.kt` | Rename `schedulePersistedPeriodic` → `schedulePeriodic` |
 | `SmsSyncSchedulerTest.kt` | Update test adapter to match new method name |
 | `docs/mvp/sms-read-readiness.md` | Remove the "unresolved policy conflict" paragraph; document best-effort + startup self-healing |
@@ -95,5 +95,5 @@ burden.
 
 Introduces a `BroadcastReceiver` and a permission. Rejected because it adds
 more components than the chosen approach for no additional benefit — the
-`BootReceiver` would do the same restoration logic that `AgentLifeApplication`
+`BootReceiver` would do the same restoration logic that `OpenAndroidIntelligenceApplication`
 can do on start.

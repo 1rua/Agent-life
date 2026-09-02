@@ -1,5 +1,5 @@
 {
-  "model_id": "urn:agent-life:protocol:v1:model:error-precedence",
+  "model_id": "urn:open-android-intelligence:protocol:v1:model:error-precedence",
   "protocol_version": "1.0",
   "stages": ["size", "canonical_schema", "key_direction_domain_signature", "payload_digest", "expiry", "connection_fence", "authenticated_binding", "authorization_revision", "replay", "operation_transition", "execution_ledger"],
   "precedence": ["size", "canonical_schema", "key_direction_domain_signature", "payload_digest", "expiry", "connection_fence", "authenticated_binding", "authorization_revision", "replay", "operation_transition", "execution_ledger"],

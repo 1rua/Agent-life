@@ -14,7 +14,7 @@ import { FileBackedBridgeStore } from "../src/file-backed-store.js";
 const roots: string[] = [];
 
 const makeRoot = async (): Promise<string> => {
-  const root = await mkdtemp(join(tmpdir(), "agent-life-durable-operations-"));
+  const root = await mkdtemp(join(tmpdir(), "open-android-intelligence-durable-operations-"));
   roots.push(root);
   return root;
 };

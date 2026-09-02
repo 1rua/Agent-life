@@ -3,7 +3,7 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
-android { namespace = "com.agentlife.sync" }
+android { namespace = "com.openandroidintelligence.sync" }
 
 dependencies {
     implementation(project(":core-model"))

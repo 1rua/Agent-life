@@ -1,10 +1,10 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:agent-life:protocol:v0.9:pending-operation",
+  "$id": "urn:open-android-intelligence:protocol:v0.9:pending-operation",
   "type": "object",
   "required": ["message_schema", "operation_id", "parameters_digest", "state", "expires_at"],
   "properties": {
-    "message_schema": { "const": "urn:agent-life:protocol:v0.9:pending-operation" },
+    "message_schema": { "const": "urn:open-android-intelligence:protocol:v0.9:pending-operation" },
     "operation_id": { "type": "string", "pattern": "^[A-Za-z0-9._~-]{1,128}$" },
     "parameters_digest": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
     "state": { "const": "pending" },

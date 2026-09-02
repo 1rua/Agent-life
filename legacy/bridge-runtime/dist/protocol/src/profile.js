@@ -1,6 +1,6 @@
 import profileFixture from "../profile/v1.json" with { type: "json" };
 import { validateSchema } from "./schema-validator.js";
-export const PROFILE_SCHEMA_ID = "urn:agent-life:protocol:v1:profile";
+export const PROFILE_SCHEMA_ID = "urn:open-android-intelligence:protocol:v1:profile";
 validateSchema(PROFILE_SCHEMA_ID, profileFixture);
 Object.freeze(profileFixture.signature_domains);
 const profile = Object.freeze(profileFixture);

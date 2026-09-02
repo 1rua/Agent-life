@@ -305,8 +305,8 @@ const replayRegistryIdentityFor = <TMessageType extends string>(
 ): LockedReplayRegistryIdentity<TMessageType> => Object.freeze({
   messageType,
   messageSchemaId: entry.schema_id,
-  headerSchemaId: `urn:agent-life:protocol:v1:header:${messageType}`,
-  envelopeSchemaId: `urn:agent-life:protocol:v1:envelope:${messageType}`,
+  headerSchemaId: `urn:open-android-intelligence:protocol:v1:header:${messageType}`,
+  envelopeSchemaId: `urn:open-android-intelligence:protocol:v1:envelope:${messageType}`,
   direction: entry.direction,
   signatureDomain: parseSignatureDomain(entry.signature_domain),
   signerRole: signerRoleForDirection(entry.direction),
@@ -334,8 +334,8 @@ const parseFamily = (rawWire: Uint8Array, kind: AuthenticatedIngressKind): Parse
     return null;
   }
   const familySchema = kind === "device"
-    ? "urn:agent-life:protocol:v1:control-envelope#/$defs/paired_device_family_envelope"
-    : "urn:agent-life:protocol:v1:key-rotation#/$defs/adapter_family_envelope";
+    ? "urn:open-android-intelligence:protocol:v1:control-envelope#/$defs/paired_device_family_envelope"
+    : "urn:open-android-intelligence:protocol:v1:key-rotation#/$defs/adapter_family_envelope";
   if (!schemaCheck(familySchema, value) || !isRecord(value)
     || !isRecord(value.header) || !isRecord(value.payload) || typeof value.signature !== "string") return null;
   return { header: value.header, payload: value.payload, signature: value.signature };
@@ -435,7 +435,7 @@ const verifySignedInternal = async (
     : entry.direction === "adapter-to-bridge" || entry.direction === "bridge-to-adapter";
   if (!branchDirection || wire.header.message_schema !== entry.schema_id
     || wire.header.direction !== entry.direction) return { ok: false, error: "SCHEMA_INVALID" };
-  if (!schemaCheck(`urn:agent-life:protocol:v1:envelope:${messageType}`, wire)) {
+  if (!schemaCheck(`urn:open-android-intelligence:protocol:v1:envelope:${messageType}`, wire)) {
     return { ok: false, error: "SCHEMA_INVALID" };
   }
 
@@ -796,7 +796,7 @@ export class DeterministicDeviceSecurityBackend implements DeviceReplayAdmission
     }
     const entry = registry.messages.find((candidate) => candidate.message_type === pending.claim.messageType);
     if (!entry || sha256B64Url(pending.rawWire) !== pending.claim.envelopeDigest) throw new Error("INTEGRITY_FAILED");
-    validateSchema(`urn:agent-life:protocol:v1:envelope:${pending.claim.messageType}`, parsed);
+    validateSchema(`urn:open-android-intelligence:protocol:v1:envelope:${pending.claim.messageType}`, parsed);
     const lease = this.#fence.restoreCurrentLease();
     const context: Extract<AuthenticatedBindingContext, { kind: "device" }> = deepFreeze({
       kind: "device",
@@ -1277,7 +1277,7 @@ export class DeterministicAdapterSecurityBackend implements AdapterReplayAdmissi
     if (!isRecord(parsed) || !isRecord(parsed.header) || !isRecord(parsed.payload) || typeof parsed.signature !== "string") throw new Error("INTEGRITY_FAILED");
     const entry = registry.messages.find((candidate) => candidate.message_type === row.claim.messageType);
     if (!entry || sha256B64Url(row.rawWire) !== row.claim.envelopeDigest) throw new Error("INTEGRITY_FAILED");
-    validateSchema(`urn:agent-life:protocol:v1:envelope:${row.claim.messageType}`, parsed);
+    validateSchema(`urn:open-android-intelligence:protocol:v1:envelope:${row.claim.messageType}`, parsed);
     const claim = this.#ledger.findClaim(row.claim.messageId);
     if (!claim || claim.claimId !== row.claim.claimId || claim.envelopeDigest !== row.claim.envelopeDigest) throw new Error("INTEGRITY_FAILED");
     const leaseIdFromSnapshot = row.persistedMetadata.lease_ref.kind === "adapter_credential"

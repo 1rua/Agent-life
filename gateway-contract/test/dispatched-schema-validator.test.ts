@@ -51,9 +51,9 @@ const expectedFixtureLogicalKeys: GatewayLogicalSubschemaKey[] = [
   { kind: "event", eventType: "gateway.notice" },
   {
     kind: "device.request",
-    pluginId: "org.agentlife.sms",
+    pluginId: "org.openandroidintelligence.sms",
     authorKeyId: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    capabilityId: "org.agentlife.sms.query",
+    capabilityId: "org.openandroidintelligence.sms.query",
     capabilityVersion: "1.0.0",
   },
   { kind: "response.success", operation: "conversation.create", status: 201 },
@@ -133,9 +133,9 @@ const validEvent = {
 
 const validDeviceRequest = {
   requestId: "device_request_1",
-  capability: { id: "org.agentlife.sms.query", version: "1.0.0" },
+  capability: { id: "org.openandroidintelligence.sms.query", version: "1.0.0" },
   provider: {
-    pluginId: "org.agentlife.sms",
+    pluginId: "org.openandroidintelligence.sms",
     authorKeyId: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   },
   parameters: { query: "from:alice" },
@@ -214,9 +214,9 @@ describe("Gateway Protocol v2 dispatched Schema validation", () => {
       { kind: "event", eventType: "gateway.notice" },
       {
         kind: "device.request",
-        pluginId: "org.agentlife.sms",
+        pluginId: "org.openandroidintelligence.sms",
         authorKeyId: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        capabilityId: "org.agentlife.sms.query",
+        capabilityId: "org.openandroidintelligence.sms.query",
         capabilityVersion: "1.0.0",
       },
       { kind: "response.success", operation: "conversation.create", status: 201 },
@@ -351,7 +351,7 @@ describe("Gateway Protocol v2 dispatched Schema validation", () => {
     const validator = createFixtureValidator();
     const mismatch = {
       ...validDeviceRequest,
-      capability: { id: "org.agentlife.sms.query", version: "2.0.0" },
+      capability: { id: "org.openandroidintelligence.sms.query", version: "2.0.0" },
     };
 
     expect(validator.validate(deviceDispatch, mismatch)).toMatchObject({ ok: false });

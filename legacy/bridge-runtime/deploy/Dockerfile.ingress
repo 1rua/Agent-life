@@ -7,15 +7,15 @@ WORKDIR /src
 COPY bridge-runtime/ingress/go.mod bridge-runtime/ingress/go.sum ./
 RUN go mod download
 COPY bridge-runtime/ingress/cmd ./cmd
-RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/agent-life-tsnet ./cmd/agent-life-tsnet
+RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/open-android-intelligence-tsnet ./cmd/open-android-intelligence-tsnet
 
 FROM ${NODE_IMAGE} AS runtime
-RUN groupadd --system --gid 10000 agent-life \
-  && useradd --system --uid 10001 --gid 10000 --home-dir /nonexistent --shell /usr/sbin/nologin agent-life-ingress \
-  && mkdir -p /var/lib/agent-life-ingress /run/agent-life \
-  && chown -R 10001:10000 /var/lib/agent-life-ingress /run/agent-life \
-  && chmod 0750 /var/lib/agent-life-ingress /run/agent-life
-COPY --from=build --chown=10001:10000 /out/agent-life-tsnet /usr/local/bin/agent-life-tsnet
+RUN groupadd --system --gid 10000 open-android-intelligence \
+  && useradd --system --uid 10001 --gid 10000 --home-dir /nonexistent --shell /usr/sbin/nologin open-android-intelligence-ingress \
+  && mkdir -p /var/lib/open-android-intelligence-ingress /run/open-android-intelligence \
+  && chown -R 10001:10000 /var/lib/open-android-intelligence-ingress /run/open-android-intelligence \
+  && chmod 0750 /var/lib/open-android-intelligence-ingress /run/open-android-intelligence
+COPY --from=build --chown=10001:10000 /out/open-android-intelligence-tsnet /usr/local/bin/open-android-intelligence-tsnet
 USER 10001:10000
-VOLUME ["/var/lib/agent-life-ingress"]
-ENTRYPOINT ["/usr/local/bin/agent-life-tsnet"]
+VOLUME ["/var/lib/open-android-intelligence-ingress"]
+ENTRYPOINT ["/usr/local/bin/open-android-intelligence-tsnet"]

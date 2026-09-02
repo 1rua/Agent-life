@@ -1,6 +1,6 @@
 {
-  "$schema": "urn:agent-life:protocol:v1:errors-registry",
-  "registry_id": "urn:agent-life:protocol:v1:registry:errors",
+  "$schema": "urn:open-android-intelligence:protocol:v1:errors-registry",
+  "registry_id": "urn:open-android-intelligence:protocol:v1:registry:errors",
   "protocol_version": "1.0",
   "errors": [
     { "code": "SCHEMA_INVALID", "stage": "canonical_schema", "retryable": false, "operation_reason": null, "internal_reason": "NONE" },

@@ -1,8 +1,8 @@
 # open-android-intelligence v1 canonical wire format
 
-This document freezes the byte-level `agent-life-json-es256/1.0` profile. The
+This document freezes the byte-level `open-android-intelligence-json-es256/1.0` profile. The
 machine-readable authority is `protocol/profile/v1.json`, validated by
-`urn:agent-life:protocol:v1:profile`. A different canonicalization, digest,
+`urn:open-android-intelligence:protocol:v1:profile`. A different canonicalization, digest,
 curve, signature encoding, domain, or bound requires a new profile/version.
 
 ## Canonical JSON bytes
@@ -32,7 +32,7 @@ For a registered signature domain `D` and signable JSON value `V`, the exact
 preimage is:
 
 ```text
-UTF8("agent-life/v1/" || D) || 0x00 || U32BE(len(JCS_UTF8(V))) || JCS_UTF8(V)
+UTF8("open-android-intelligence/v1/" || D) || 0x00 || U32BE(len(JCS_UTF8(V))) || JCS_UTF8(V)
 ```
 
 `U32BE` is an unsigned four-byte big-endian byte length; the NUL is one literal

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-for file in Dockerfile Dockerfile.ingress docker-compose.yml agent-life-bridge.service agent-life-ingress.service; do
+for file in Dockerfile Dockerfile.ingress docker-compose.yml open-android-intelligence-bridge.service open-android-intelligence-ingress.service; do
   test -f "$SCRIPT_DIR/$file" || { echo "DEPLOYMENT_TEMPLATE_MISSING $file" >&2; exit 1; }
 done
 
@@ -28,9 +28,9 @@ require 'CGO_ENABLED=0' "$SCRIPT_DIR/Dockerfile.ingress"
 require 'network_mode: "service:ingress"' "$SCRIPT_DIR/docker-compose.yml"
 require ':ro' "$SCRIPT_DIR/docker-compose.yml"
 forbid '^[[:space:]]*ports:' "$SCRIPT_DIR/docker-compose.yml"
-forbid 'Listen(Stream|Datagram)=' "$SCRIPT_DIR/agent-life-bridge.service" "$SCRIPT_DIR/agent-life-ingress.service"
-forbid '(^|[[:space:]])(0\.0\.0\.0|::/0)|network_mode:[[:space:]]*(")?host' "$SCRIPT_DIR/docker-compose.yml" "$SCRIPT_DIR/agent-life-bridge.service" "$SCRIPT_DIR/agent-life-ingress.service"
-forbid 'AGENT_LIFE_TSNET_AUTHKEY_FILE' "$SCRIPT_DIR/docker-compose.yml" "$SCRIPT_DIR/agent-life-ingress.service"
+forbid 'Listen(Stream|Datagram)=' "$SCRIPT_DIR/open-android-intelligence-bridge.service" "$SCRIPT_DIR/open-android-intelligence-ingress.service"
+forbid '(^|[[:space:]])(0\.0\.0\.0|::/0)|network_mode:[[:space:]]*(")?host' "$SCRIPT_DIR/docker-compose.yml" "$SCRIPT_DIR/open-android-intelligence-bridge.service" "$SCRIPT_DIR/open-android-intelligence-ingress.service"
+forbid 'OPEN_ANDROID_INTELLIGENCE_TSNET_AUTHKEY_FILE' "$SCRIPT_DIR/docker-compose.yml" "$SCRIPT_DIR/open-android-intelligence-ingress.service"
 forbid 'REPLACE_WITH_LOCKED_DIGEST' "$SCRIPT_DIR/Dockerfile" "$SCRIPT_DIR/Dockerfile.ingress" "$SCRIPT_DIR/docker-compose.yml"
 forbid '^/(\.toolchains|node_modules|\.worktrees)' $SCRIPT_DIR/../../.dockerignore
 

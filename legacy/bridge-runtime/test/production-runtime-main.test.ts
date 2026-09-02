@@ -9,7 +9,7 @@ import { promisify } from "node:util";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 
 const execFileAsync = promisify(execFile);
-const root = await mkdtemp(join(tmpdir(), "agent-life-runtime-main-"));
+const root = await mkdtemp(join(tmpdir(), "open-android-intelligence-runtime-main-"));
 const databasePath = join(root, "bridge.sqlite");
 const publicPath = join(root, "pairing-public.pem");
 const socketPath = join(root, "runtime.sock");
@@ -29,8 +29,8 @@ const ticket = {
   expiresAtMs: Date.now() + 60_000,
 };
 const payload = Buffer.from(JSON.stringify(ticket)).toString("base64url");
-const signature = sign(null, Buffer.from(`agent-life.pairing-ticket/v1\n${keyId}\n${payload}`), privateKey).toString("base64url");
-const body = JSON.stringify({ envelope: "agent-life.pairing-ticket/v1", keyId, payload, signature });
+const signature = sign(null, Buffer.from(`open-android-intelligence.pairing-ticket/v1\n${keyId}\n${payload}`), privateKey).toString("base64url");
+const body = JSON.stringify({ envelope: "open-android-intelligence.pairing-ticket/v1", keyId, payload, signature });
 
 let child: ReturnType<typeof spawnMain>;
 
@@ -42,10 +42,10 @@ function spawnMain() {
   ], {
     env: {
       ...process.env,
-      AGENT_LIFE_DATABASE: databasePath,
-      AGENT_LIFE_PAIRING_PUBLIC_KEY: publicPath,
-      AGENT_LIFE_RUNTIME_SOCKET: socketPath,
-      AGENT_LIFE_LEASE_TTL_MS: "30000",
+      OPEN_ANDROID_INTELLIGENCE_DATABASE: databasePath,
+      OPEN_ANDROID_INTELLIGENCE_PAIRING_PUBLIC_KEY: publicPath,
+      OPEN_ANDROID_INTELLIGENCE_RUNTIME_SOCKET: socketPath,
+      OPEN_ANDROID_INTELLIGENCE_LEASE_TTL_MS: "30000",
     },
     stdio: ["ignore", "pipe", "pipe"],
   }));
@@ -80,7 +80,7 @@ afterAll(async () => {
 it("serves a real Node SQLite runtime and accepts only a matching authenticated peer", async () => {
   const wrong = await request({
     method: "POST", path: "/v1/control", headers: {
-      "x-agent-life-peer-fingerprint": `sha256:${"b".repeat(64)}`,
+      "x-open-android-intelligence-peer-fingerprint": `sha256:${"b".repeat(64)}`,
       "content-type": "application/json",
     },
   }, body);
@@ -89,7 +89,7 @@ it("serves a real Node SQLite runtime and accepts only a matching authenticated 
 
   const accepted = await request({
     method: "POST", path: "/v1/control", headers: {
-      "x-agent-life-peer-fingerprint": peerFingerprint,
+      "x-open-android-intelligence-peer-fingerprint": peerFingerprint,
       "content-type": "application/json",
     },
   }, body);

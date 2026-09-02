@@ -49,7 +49,7 @@
 
 ## 补充（回归：2026-08-20，全部源码改动后的 connected 套件）
 
-- 三模块源码改动（Keystore 方案②、AndroidTsnetBinding netdns、AgentLifeApplication
+- 三模块源码改动（Keystore 方案②、AndroidTsnetBinding netdns、OpenAndroidIntelligenceApplication
   HOME、p0t-device 工具）后完整回归：tailnet-core 12/12 PASS + 离线用例 Assume 跳过、
   transport 5/5、app 2/2 + 离线用例跳过。日志：`iterations/04-regress-*.log`。
 - 唯一一次红是 **fail-closed 束过期**（`INVALID_BUNDLE: attestation is expired`），

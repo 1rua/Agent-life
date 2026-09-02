@@ -58,7 +58,7 @@ export function validateSchema(schemaId: string, value: unknown): void {
   // cannot express the cross-field ordering rule for a loss range. Keep that
   // semantic rule at the same closed-schema boundary so a malformed range
   // cannot enter the event reducer through this helper.
-  if (schemaId === "urn:agent-life:protocol:v1:message:device_event"
+  if (schemaId === "urn:open-android-intelligence:protocol:v1:message:device_event"
     && typeof value === "object" && value !== null && !Array.isArray(value)) {
     const event = value as Record<string, unknown>;
     if (event.event_kind === "loss_marker" && typeof event.loss === "object" && event.loss !== null && !Array.isArray(event.loss)) {

@@ -5,7 +5,7 @@ const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 const encoder = new TextEncoder();
 export function pairingShortCode(transcript) {
     const canonical = canonicalBytes(transcript);
-    const prefix = encoder.encode("agent-life/v1/pairing-short-code\0");
+    const prefix = encoder.encode("open-android-intelligence/v1/pairing-short-code\0");
     const length = new Uint8Array(4);
     new DataView(length.buffer).setUint32(0, canonical.byteLength, false);
     const digest = createHash("sha256").update(prefix).update(length).update(canonical).digest();

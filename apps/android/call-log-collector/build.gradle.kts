@@ -3,7 +3,7 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
-android { namespace = "com.agentlife.calls" }
+android { namespace = "com.openandroidintelligence.calls" }
 
 dependencies {
     implementation(project(":capability-ports"))

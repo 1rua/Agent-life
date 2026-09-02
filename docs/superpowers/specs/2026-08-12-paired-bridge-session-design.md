@@ -171,7 +171,7 @@ successful reconnect reports `Connected(newGeneration, path)`.
 ## Test strategy
 
 Tests are added before implementation in
-`apps/android/transport/src/test/kotlin/com/agentlife/transport/TransportBoundaryTest.kt`.
+`apps/android/transport/src/test/kotlin/com/openandroidintelligence/transport/TransportBoundaryTest.kt`.
 Recording fakes will capture observable effects rather than mock assertions:
 
 - invalid material does not start the core or open a channel;
@@ -199,9 +199,9 @@ until those external inputs are supplied.
 
 Expected implementation changes are limited to:
 
-- `apps/android/transport/src/main/kotlin/com/agentlife/transport/PairedBridgeSessionCoordinator.kt`
-- `apps/android/transport/src/main/kotlin/com/agentlife/transport/TsnetPairedBridgeTransport.kt`
-- `apps/android/transport/src/test/kotlin/com/agentlife/transport/TransportBoundaryTest.kt`
+- `apps/android/transport/src/main/kotlin/com/openandroidintelligence/transport/PairedBridgeSessionCoordinator.kt`
+- `apps/android/transport/src/main/kotlin/com/openandroidintelligence/transport/TsnetPairedBridgeTransport.kt`
+- `apps/android/transport/src/test/kotlin/com/openandroidintelligence/transport/TransportBoundaryTest.kt`
 - `apps/android/transport/build.gradle.kts` only if an explicit coroutine
   synchronization dependency is required by the implementation.
 

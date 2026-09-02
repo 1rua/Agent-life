@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.agentlife.companion.bridge"
+    namespace = "com.openandroidintelligence.companion.bridge"
     buildFeatures {
         aidl = true
     }

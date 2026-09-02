@@ -1,5 +1,5 @@
 {
-  "model_id": "urn:agent-life:protocol:v1:model:operation-transitions",
+  "model_id": "urn:open-android-intelligence:protocol:v1:model:operation-transitions",
   "protocol_version": "1.0",
   "states": ["created", "waiting_device", "dispatching", "accepted_device", "awaiting_approval", "approved", "executing", "succeeded", "failed", "denied", "cancelled", "expired", "result_unknown"],
   "events": ["queue_wait_read", "dispatch", "device_accepted", "approval_required", "approval_not_required", "approval_granted", "approval_denied", "execution_claimed", "fail_before_claim", "execution_succeeded", "execution_failed", "deny", "execution_result_unknown", "cancel", "expire", "reconcile_evidence"],

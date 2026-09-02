@@ -1,12 +1,12 @@
 {
   "manifestVersion": "1.0",
   "plugin": {
-    "id": "org.agentlife.notifications",
+    "id": "org.openandroidintelligence.notifications",
     "version": "1.0.0",
     "name": "Notifications Query",
     "description": "Official reference plugin for querying notifications",
     "author": {
-      "name": "Agent-life",
+      "name": "Open Android Intelligence",
       "publicKey": "35f3b7bf83777bc35fb080ee0e94abef8e945cbb6aa82414fa9cfcb7eaee699f"
     }
   },
@@ -14,10 +14,10 @@
     "type": "wasm",
     "payload": "payload/notifications.wasm",
     "abiVersion": "1.0",
-    "entrypoint": "agent_life_plugin_main"
+    "entrypoint": "open_android_intelligence_plugin_main"
   },
   "capabilities": {
-    "provides": ["org.agentlife.notifications.query@1.0.0"],
+    "provides": ["org.openandroidintelligence.notifications.query@1.0.0"],
     "requires": []
   },
   "kernelPrimitives": ["kernel.notifications.read"]

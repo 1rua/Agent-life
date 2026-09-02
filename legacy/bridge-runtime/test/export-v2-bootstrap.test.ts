@@ -31,20 +31,20 @@ const v1GatewayRecord = (overrides: Readonly<Record<string, unknown>> = {}): V1G
     masterKey: "master-key-material",
     queue: Object.freeze({ pending: Object.freeze(["op-1", "op-2"]) }),
     pendingOperations: Object.freeze([Object.freeze({ id: "op-1", body: "send sms to +1" })]),
-    databasePath: "/var/lib/agent-life/bridge.sqlite",
+    databasePath: "/var/lib/open-android-intelligence/bridge.sqlite",
     ...overrides,
   });
 
 /** 真实的 v1 插件记录：正文、附件、签名私钥与安装路径都必须被丢弃。 */
 const v1PluginRecord = (overrides: Readonly<Record<string, unknown>> = {}): V1PluginRecord =>
   Object.freeze({
-    id: "org.agentlife.sms",
+    id: "org.openandroidintelligence.sms",
     authorKeyId: SMS_AUTHOR_KEY,
     signingPrivateKey: "plugin-signing-private-key",
     authorPrivateKey: "author-private-key-material",
-    installPath: "/var/lib/agent-life/plugins/org.agentlife.sms",
+    installPath: "/var/lib/open-android-intelligence/plugins/org.openandroidintelligence.sms",
     capabilityBodies: Object.freeze([Object.freeze({ id: "mobile.sms.query", body: "SELECT * FROM sms" })]),
-    attachments: Object.freeze([Object.freeze({ id: "att-1", path: "/var/lib/agent-life/attachments/att-1" })]),
+    attachments: Object.freeze([Object.freeze({ id: "att-1", path: "/var/lib/open-android-intelligence/attachments/att-1" })]),
     ...overrides,
   });
 
@@ -68,7 +68,7 @@ const writeDataDir = async (
 const modeOf = async (path: string): Promise<number> => (await stat(path)).mode & 0o777;
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), "agent-life-v1-bootstrap-"));
+  root = await mkdtemp(join(tmpdir(), "open-android-intelligence-v1-bootstrap-"));
   outFile = join(root, "v2-bootstrap.json");
 });
 
@@ -85,7 +85,7 @@ describe("v1 → v2 引导导出白名单", () => {
     expect(exported).toEqual({
       schemaVersion: "1.0",
       gateways: [{ displayName: "Home", baseUrl: "https://gw.example", tlsSpkiSha256: HOME_FINGERPRINT }],
-      plugins: [{ id: "org.agentlife.sms", authorKeyId: SMS_AUTHOR_KEY }],
+      plugins: [{ id: "org.openandroidintelligence.sms", authorKeyId: SMS_AUTHOR_KEY }],
     } satisfies V1BootstrapExportDocument);
   });
 
@@ -133,7 +133,7 @@ describe("引导导出 Schema 拒绝未知字段", () => {
       baseUrl: "https://gw.example",
       tlsSpkiSha256: HOME_FINGERPRINT,
     })]),
-    plugins: Object.freeze([Object.freeze({ id: "org.agentlife.sms", authorKeyId: SMS_AUTHOR_KEY })]),
+    plugins: Object.freeze([Object.freeze({ id: "org.openandroidintelligence.sms", authorKeyId: SMS_AUTHOR_KEY })]),
   });
 
   it("接受完全符合 Schema 的文档", () => {
@@ -302,7 +302,7 @@ describe("v2 导入侧只创建本地 profile 与插件发现清单", () => {
       pairingRequired: true,
     }]);
     expect(plan.pluginDiscovery).toEqual([{
-      id: "org.agentlife.sms",
+      id: "org.openandroidintelligence.sms",
       authorKeyId: SMS_AUTHOR_KEY,
       authorizationRequired: true,
     }]);

@@ -14,7 +14,7 @@ HERMES_INTEGRATION = REPO_ROOT / "integrations" / "hermes"
 if str(HERMES_INTEGRATION) not in sys.path:
     sys.path.insert(0, str(HERMES_INTEGRATION))
 
-from agent_life_gateway.admin import (
+from open_android_intelligence_gateway.admin import (
     run_admin_command,
     create_admin_service,
     HostApiCompatibility,
@@ -35,7 +35,7 @@ def main():
     # 默认存储目录（可按需通过 HERMES_STORAGE_ROOT 环境变量指定）
     storage_root = os.environ.get(
         "HERMES_STORAGE_ROOT",
-        str(Path.home() / ".hermes" / "agent_life_storage")
+        str(Path.home() / ".hermes" / "open_android_intelligence_storage")
     )
 
     admin = create_admin_service(

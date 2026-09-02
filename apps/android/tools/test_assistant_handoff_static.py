@@ -13,10 +13,10 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-CORE = ROOT / "core-model/src/main/kotlin/com/agentlife/core/model"
+CORE = ROOT / "core-model/src/main/kotlin/com/openandroidintelligence/core/model"
 CONTRACT = CORE / "AssistantHandoffContracts.kt"
-MAIN = ROOT / "app/src/main/kotlin/com/agentlife/mobile/MainActivity.kt"
-HOLDER = ROOT / "assistant-holder/src/main/kotlin/com/agentlife/assistant/AssistantActivity.kt"
+MAIN = ROOT / "app/src/main/kotlin/com/openandroidintelligence/mobile/MainActivity.kt"
+HOLDER = ROOT / "assistant-holder/src/main/kotlin/com/openandroidintelligence/assistant/AssistantActivity.kt"
 
 
 class AssistantHandoffStaticTest(unittest.TestCase):

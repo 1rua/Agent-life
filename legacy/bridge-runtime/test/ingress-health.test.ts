@@ -143,8 +143,8 @@ describe("deployment templates", () => {
   it("build pinned private ingress/runtime images without a public socket", async () => {
     const root = fileURLToPath(new URL("../deploy/", import.meta.url));
     const read = async (name: string) => readFile(join(root, name), "utf8");
-    const runtime = await read("agent-life-bridge.service");
-    const ingress = await read("agent-life-ingress.service");
+    const runtime = await read("open-android-intelligence-bridge.service");
+    const ingress = await read("open-android-intelligence-ingress.service");
     const runtimeImage = await read("Dockerfile");
     const ingressImage = await read("Dockerfile.ingress");
     const compose = await read("docker-compose.yml");
@@ -157,9 +157,9 @@ describe("deployment templates", () => {
     expect(compose).not.toContain("0.0.0.0");
     expect(compose).not.toContain("REPLACE_WITH_LOCKED_DIGEST");
     expect(compose).toContain(":ro");
-    expect(compose).not.toContain("AGENT_LIFE_TSNET_AUTHKEY_FILE");
-    expect(ingress).not.toContain("AGENT_LIFE_TSNET_AUTHKEY_FILE");
-    expect(ingress).toContain("AGENT_LIFE_TSNET_HOSTNAME=agent-life-bridge");
+    expect(compose).not.toContain("OPEN_ANDROID_INTELLIGENCE_TSNET_AUTHKEY_FILE");
+    expect(ingress).not.toContain("OPEN_ANDROID_INTELLIGENCE_TSNET_AUTHKEY_FILE");
+    expect(ingress).toContain("OPEN_ANDROID_INTELLIGENCE_TSNET_HOSTNAME=open-android-intelligence-bridge");
     expect(ingress).toContain("https://controlplane.tailscale.com");
     for (const unit of [runtime, ingress]) {
       expect(unit).not.toContain("ListenStream=");

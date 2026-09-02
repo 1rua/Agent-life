@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.agentlife.tailscale.companion"
+    namespace = "com.openandroidintelligence.tailscale.companion"
     buildFeatures {
         aidl = true
     }

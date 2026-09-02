@@ -1,11 +1,11 @@
 import { assertDurableBridgeStore, runDurableBridgeTransaction, } from "../../bridge-contract/src/durable-store.js";
 import { BridgeServiceError, } from "../../bridge-contract/src/operation-dispatch.js";
 import { sessionKey } from "../../bridge-contract/src/service-types.js";
-export const DURABLE_OPERATION_DISPATCHER_PORT = "agent-life.operation-dispatcher.v1";
+export const DURABLE_OPERATION_DISPATCHER_PORT = "open-android-intelligence.operation-dispatcher.v1";
 const OPERATION_NAMESPACE = "operation.claims";
 const REPLAY_ASSOCIATION_NAMESPACE = "operation.replay-associations";
 const OPERATION_SCOPE = "operation.claim";
-const BIGINT_TAG = "$agentLifeType";
+const BIGINT_TAG = "$openAndroidIntelligenceType";
 const BIGINT_KIND = "bigint";
 const isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 const encodeValue = (value, seen = new WeakSet()) => {

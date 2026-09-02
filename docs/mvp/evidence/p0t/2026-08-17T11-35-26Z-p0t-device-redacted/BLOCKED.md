@@ -17,7 +17,7 @@ Run ID: `2026-08-17T11-35-26Z-p0t-device-redacted`
 - `P0T_DESCRIPTOR`、`P0T_AUTH_KEY_PIPE`、`P0T_CONTROLLER_REVIEW` 均未提供；无法执行控制器一次性 5 分钟 key enrollment，更无法为每个首次 enrollment 提供独立 key 的证据。
 - 没有真实 Tailnet/Bridge controller、forced DERP、approval-required policy、validated Wi-Fi/cellular 切换、Doze entry/exit、另一个系统 VPN owner、split/full-tunnel 或 always-on+lockdown 阻断控制器。
 - 没有受控网关 egress capture，因此不能证明流量只属于 control/STUN/DERP/ticket-bound Bridge，也没有资源预算数据。
-- 本机 OEM Android 16 上 `adb shell dumpsys vpn` 返回 `Can't find service: vpn`。脱敏 `dumpsys connectivity` 基线显示当前 VPN NetworkAgent 数为 0，`com.agentlife.mobile` 没有 `BIND_VPN_SERVICE`；但这只是基线，不能替代每个用例前后的 VPN/route/DNS 审计。
+- 本机 OEM Android 16 上 `adb shell dumpsys vpn` 返回 `Can't find service: vpn`。脱敏 `dumpsys connectivity` 基线显示当前 VPN NetworkAgent 数为 0，`com.openandroidintelligence.mobile` 没有 `BIND_VPN_SERVICE`；但这只是基线，不能替代每个用例前后的 VPN/route/DNS 审计。
 - 新证据目录的秘密候选扫描为 0；但计划要求的 `p0t/device/scan-secrets.py` 不存在，因此不能宣称完整秘密扫描门禁通过。
 
 ## 矩阵结论

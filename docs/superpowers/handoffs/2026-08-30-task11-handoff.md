@@ -62,15 +62,15 @@ open-android-intelligence 让 Android 设备能够连接用户自建/托管的 A
 - 系统默认的 `ANDROID_HOME` 包含旧路径残留，每次执行 Gradle 前**必须设置环境变量**：
   ```bash
   export LANG=zh_CN.UTF-8 LC_ALL=zh_CN.UTF-8
-  export ANDROID_HOME=/mnt/数据/项目/Agent-life/.toolchains/android-sdk
-  export GRADLE_USER_HOME=/mnt/数据/项目/Agent-life/.toolchains/gradle-home
-  export ANDROID_USER_HOME=/mnt/数据/项目/Agent-life/.toolchains/android-user-home
+  export ANDROID_HOME=/mnt/数据/项目/open-android-intelligence/.toolchains/android-sdk
+  export GRADLE_USER_HOME=/mnt/数据/项目/open-android-intelligence/.toolchains/gradle-home
+  export ANDROID_USER_HOME=/mnt/数据/项目/open-android-intelligence/.toolchains/android-user-home
   ```
 
 ### 4.3 Python / Hermes 测试
-- 虚拟环境已建立在 `/tmp/agent-life-venv`：
+- 虚拟环境已建立在 `/tmp/open-android-intelligence-venv`：
   ```bash
-  /tmp/agent-life-venv/bin/python -m pytest integrations/hermes/tests -q
+  /tmp/open-android-intelligence-venv/bin/python -m pytest integrations/hermes/tests -q
   ```
 
 ### 4.4 Rust / WASM 工具链
@@ -86,9 +86,9 @@ open-android-intelligence 让 Android 设备能够连接用户自建/托管的 A
 
 ### 当前代码现状：
 1. **已建立的源码与测试**：
-   - `apps/android/platform-kernel/src/main/kotlin/com/agentlife/kernel/`：包含 `PluginKernel`、`CapabilityGrant`、`PluginStateMachine`、`CapabilityProviderSelector`、`PluginPrivateStore`、`MediatedNetworkProxy`、`AndroidAuditStore`、`DeveloperTrustMode`、`NativePluginLoader`。
-   - `apps/android/plugin-runtime-wasm/src/main/kotlin/com/agentlife/plugin/wasm/ChicoryPluginRuntime.kt`：纯 Java 解释器运行时（基于 Chicory 1.7.5，无 JNI/`.so`）。
-   - `apps/android/plugin-ui/src/main/kotlin/com/agentlife/plugin/ui/DeclarativeUiSchema.kt`：声明式 UI 白名单解析。
+   - `apps/android/platform-kernel/src/main/kotlin/com/openandroidintelligence/kernel/`：包含 `PluginKernel`、`CapabilityGrant`、`PluginStateMachine`、`CapabilityProviderSelector`、`PluginPrivateStore`、`MediatedNetworkProxy`、`AndroidAuditStore`、`DeveloperTrustMode`、`NativePluginLoader`。
+   - `apps/android/plugin-runtime-wasm/src/main/kotlin/com/openandroidintelligence/plugin/wasm/ChicoryPluginRuntime.kt`：纯 Java 解释器运行时（基于 Chicory 1.7.5，无 JNI/`.so`）。
+   - `apps/android/plugin-ui/src/main/kotlin/com/openandroidintelligence/plugin/ui/DeclarativeUiSchema.kt`：声明式 UI 白名单解析。
    - `plugins/sdk-rust/` & `plugins/fixtures/echo/`：Rust SDK 与测试夹具。
 
 2. **当前单测状态**：

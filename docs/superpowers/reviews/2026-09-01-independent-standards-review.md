@@ -18,8 +18,8 @@
 
 **证据：**
 
-- `apps/android/app/src/main/kotlin/com/agentlife/mobile/MainActivity.kt:24` 仍为 `class MainActivity : Activity()`，`MainActivity.kt:26-28` 直接持有 `GatewayPresenter()`、`ConversationPresenter()`、`AttachmentPresenter()`；`MainActivity.kt:31` 仍以 `private var currentTab: String = "gateway"` 保存当前屏幕。
-- 被替代的旧实现全部仍在：`GatewayScreen.kt`、`ConversationScreen.kt`、`AttachmentPicker.kt`、`PlatformSettingsScreen.kt` 均存在于 `apps/android/app/src/main/kotlin/com/agentlife/mobile/`。
+- `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/MainActivity.kt:24` 仍为 `class MainActivity : Activity()`，`MainActivity.kt:26-28` 直接持有 `GatewayPresenter()`、`ConversationPresenter()`、`AttachmentPresenter()`；`MainActivity.kt:31` 仍以 `private var currentTab: String = "gateway"` 保存当前屏幕。
+- 被替代的旧实现全部仍在：`GatewayScreen.kt`、`ConversationScreen.kt`、`AttachmentPicker.kt`、`PlatformSettingsScreen.kt` 均存在于 `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/`。
 - 新的 `conversation-domain` 与这些旧 Presenter 无任何调用关系，形成两套并行状态源。
 
 ### S2. 领域契约被私自退化

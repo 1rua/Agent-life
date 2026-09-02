@@ -20,7 +20,7 @@ SOURCE = (
     / "main"
     / "kotlin"
     / "com"
-    / "agentlife"
+    / "openandroidintelligence"
     / "control"
     / "ControlPorts.kt"
 )
@@ -35,7 +35,7 @@ class ControlPortsStaticTest(unittest.TestCase):
     def test_module_and_source_only_readme_exist(self):
         self.assertTrue((CONTROL_ROOT / "build.gradle.kts").is_file())
         build = (CONTROL_ROOT / "build.gradle.kts").read_text(encoding="utf-8")
-        self.assertIn('namespace = "com.agentlife.control"', build)
+        self.assertIn('namespace = "com.openandroidintelligence.control"', build)
         self.assertTrue(README.is_file())
         readme = README.read_text(encoding="utf-8")
         self.assertIn("source-only", readme)

@@ -1,4 +1,4 @@
-# Agent-life 模块化插件架构迁移实施计划
+# Open Android Intelligence 模块化插件架构迁移实施计划
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -16,11 +16,11 @@
 - `docs/contracts/device-plugin-package-v1.md` 是 `.alp` 产物唯一权威来源。
 - Android 主导航只包含账号/Gateway、对话和附件；平台内核管理入口位于设置。
 - 直接 HTTPS + SSE 是默认路径；Tailscale 默认不安装、不启用。
-- 受保护插件只能使用 `agent_life_kernel_v1`，不得获得 WASI、原始 socket 或真实文件路径。
+- 受保护插件只能使用 `open_android_intelligence_kernel_v1`，不得获得 WASI、原始 socket 或真实文件路径。
 - 一个 Gateway 账号使用独立 SQLite、主密钥、附件、队列和审计目录。
 - Bridge Protocol v1 的密钥、队列和数据库身份不迁移，设备必须重新配对。
 - 保留当前未提交 tsnet/P0t 文件和证据；执行时使用独立 worktree，不在当前脏工作树直接开发。
-- 每个任务只提交自身文件，提交信息使用中文；任何文件移除都移入 `/tmp/Agent-life-trash/` 或仓库 `legacy/`，不得永久删除。
+- 每个任务只提交自身文件，提交信息使用中文；任何文件移除都移入 `/tmp/Open Android Intelligence-trash/` 或仓库 `legacy/`，不得永久删除。
 
 ---
 
@@ -160,7 +160,7 @@ export const canonicalRequestSignatureInput = (v: SignedRequestInput): Uint8Arra
   const target = canonicalRequestTarget(v.target);
   if (target !== v.target) throw new Error("NON_CANONICAL_TARGET");
   return textEncoder.encode([
-    "AGENT-LIFE-REQUEST-V2", v.method, target, v.accountId, v.deviceId,
+    "OPEN-ANDROID-INTELLIGENCE-REQUEST-V2", v.method, target, v.accountId, v.deviceId,
     v.sessionId, v.requestId, v.timestamp, v.nonce, sha256Hex(v.body),
   ].join("\n"));
 };
@@ -272,16 +272,16 @@ git commit -m "新增: 实现 OpenClaw 账号隔离 Gateway Core"
 
 **Interfaces:**
 - Consumes: `GatewayCore.handle`
-- Produces: `registerAgentLifeGateway(api: OpenClawPluginApi): void`
+- Produces: `registerOpenAndroidIntelligenceGateway(api: OpenClawPluginApi): void`
 - Produces: `runAdminCommand(args: readonly string[]): Promise<AdminResult>`
 
 - [ ] **Step 1: 写真实注册形状和 UI/CLI 等价测试**
 
 ```ts
 const api = fakeOpenClawApi();
-registerAgentLifeGateway(api);
-expect(api.channels).toContain("agent-life-gateway");
-expect(api.httpRoutes).toContain("/agent-life/v2/negotiate");
+registerOpenAndroidIntelligenceGateway(api);
+expect(api.channels).toContain("open-android-intelligence-gateway");
+expect(api.httpRoutes).toContain("/open-android-intelligence/v2/negotiate");
 expect(await ui.createAccount(input)).toEqual(await cli.createAccount(input));
 ```
 
@@ -294,7 +294,7 @@ Expected: FAIL，当前 `createFakeAdapter` 未注册真实 channel/HTTP 路由�
 - [ ] **Step 3: 以薄适配器连接同一 Core/AdminService**
 
 ```ts
-export const registerAgentLifeGateway = (api: OpenClawPluginApi): void => {
+export const registerOpenAndroidIntelligenceGateway = (api: OpenClawPluginApi): void => {
   const services = composeGatewayServices(api.secretStore, api.dataDir);
   api.registerChannel(createGatewayChannel(services));
   for (const route of gatewayRoutes(services)) api.registerHttpRoute(route);
@@ -314,21 +314,21 @@ Expected: PASS；宿主路由、loopback + 反向代理、直接 TLS 三种模�
 
 ```bash
 git add integrations/openclaw
-git commit -m "新增: 注册 OpenClaw Agent-life Gateway"
+git commit -m "新增: 注册 OpenClaw Open Android Intelligence Gateway"
 ```
 
 ### Task 5: 实现 Hermes Python Gateway Core 与宿主适配器
 
 **Files:**
 - Create: `integrations/hermes/pyproject.toml`
-- Create: `integrations/hermes/agent_life_gateway/account_paths.py`
-- Create: `integrations/hermes/agent_life_gateway/core.py`
-- Create: `integrations/hermes/agent_life_gateway/http.py`
-- Create: `integrations/hermes/agent_life_gateway/admin.py`
-- Create: `integrations/hermes/agent_life_gateway/audit.py`
-- Create: `integrations/hermes/agent_life_gateway/backup.py`
-- Create: `integrations/hermes/agent_life_gateway/identity_rotation.py`
-- Create: `integrations/hermes/agent_life_gateway/plugin.py`
+- Create: `integrations/hermes/open_android_intelligence_gateway/account_paths.py`
+- Create: `integrations/hermes/open_android_intelligence_gateway/core.py`
+- Create: `integrations/hermes/open_android_intelligence_gateway/http.py`
+- Create: `integrations/hermes/open_android_intelligence_gateway/admin.py`
+- Create: `integrations/hermes/open_android_intelligence_gateway/audit.py`
+- Create: `integrations/hermes/open_android_intelligence_gateway/backup.py`
+- Create: `integrations/hermes/open_android_intelligence_gateway/identity_rotation.py`
+- Create: `integrations/hermes/open_android_intelligence_gateway/plugin.py`
 - Create: `integrations/hermes/tests/test_account_isolation.py`
 - Create: `integrations/hermes/tests/test_host_registration.py`
 - Create: `integrations/hermes/tests/test_admin_parity.py`
@@ -348,7 +348,7 @@ git commit -m "新增: 注册 OpenClaw Agent-life Gateway"
 ```py
 def test_registers_gateway_platform(fake_ctx):
     register(fake_ctx)
-    assert fake_ctx.platform_ids == ["agent-life-gateway"]
+    assert fake_ctx.platform_ids == ["open-android-intelligence-gateway"]
 
 def test_accounts_never_share_database(tmp_path):
     assert account_paths(tmp_path, "alice").database != account_paths(tmp_path, "bob").database
@@ -443,7 +443,7 @@ RED 取证（2026-08-29）：初始红灯来自 runner 与产物均不存在，�
 
 实现说明（2026-08-29）：
 
-- 根脚本使用 `python3` 而非 `python`：本仓库的 `tools/run-node24` 仅支持 Linux，且多数 Linux 发行版只提供 `python3`。需要覆盖时可用 `AGENT_LIFE_PYTHON` 指定解释器。
+- 根脚本使用 `python3` 而非 `python`：本仓库的 `tools/run-node24` 仅支持 Linux，且多数 Linux 发行版只提供 `python3`。需要覆盖时可用 `OPEN_ANDROID_INTELLIGENCE_PYTHON` 指定解释器。
 - 新增 `gateway-contract/tools/conformance-artifacts.ts` 作为两个 runner 共享的产物读写层，保证 JSONL 与 manifest 形状不会在两个宿主间漂移；它同时负责在产物缺失或过期时重新拉起 runner 进程。
 - OpenClaw 侧新增共享向量消费入口 `integrations/openclaw/src/core/shared-vectors.ts`，并挂到 `GatewayCore.runSharedVectors(contractRoot?)`，与 Hermes `GatewayCore.run_shared_vectors()` 对称。
 - 产物写入 `gateway-contract/.artifacts/conformance/`（已加入 `.gitignore`，可重新生成）。manifest 的 `recordsDigest` 绑定 JSONL 字节，因此手工改写结果会被判过期并触发重跑，产物无法固化错误结果。
@@ -485,7 +485,7 @@ git commit -m "新增: 建立双宿主 Gateway v2 一致性门禁"
 - Create: `apps/android/plugin-runtime-wasm/build.gradle.kts`
 - Create: `apps/android/plugin-ui/build.gradle.kts`
 - Create: `apps/android/companion-bridge/build.gradle.kts`
-- Create: `apps/android/gateway-client/src/main/kotlin/com/agentlife/gateway/http/HttpsConnectionFactory.kt`
+- Create: `apps/android/gateway-client/src/main/kotlin/com/openandroidintelligence/gateway/http/HttpsConnectionFactory.kt`
 
 **Interfaces:**
 - Produces: 只允许 `gateway-client` 和经审计的 Companion transport adapter 拥有出站网络实现
@@ -545,7 +545,7 @@ Expected: PASS；`gateway-client` 可以拥有 HTTPS 实现，其他模块出现
 
 GREEN 取证（2026-08-29）：`./gradlew check` → BUILD SUCCESSFUL（1148 tasks，较基线 862 增加新模块的 286 项）。
 
-四项负向验证（证明门禁非空转，探针已全部移入 `/tmp/Agent-life-trash/`）：
+四项负向验证（证明门禁非空转，探针已全部移入 `/tmp/Open Android Intelligence-trash/`）：
 
 | 注入位置 | 内容 | 结果 |
 |---|---|---|
@@ -554,7 +554,7 @@ GREEN 取证（2026-08-29）：`./gradlew check` → BUILD SUCCESSFUL（1148 tas
 | `gateway-client`（owner） | 引用 `VpnService` | FAIL ✓（VpnService 仍全仓禁止） |
 | `core-model`（非 owner） | `ServerSocket()` | FAIL ✓（修复后门禁仍有效） |
 
-实现说明：`forbiddenOutsideOwners` 采用计划给定正则，并补入 `ServerSocket|DatagramSocket|Socket` 与 `\b(?:URL|openConnection|createSocket)\s*\(`，否则原 `alwaysForbidden` 中的 socket 项会在放宽 HTTP 时被一并放开，形成规则漏洞。`plugin-package` 的 namespace 用 `com.agentlife.plugin.pkg`，因 `package` 是 Kotlin 保留字。
+实现说明：`forbiddenOutsideOwners` 采用计划给定正则，并补入 `ServerSocket|DatagramSocket|Socket` 与 `\b(?:URL|openConnection|createSocket)\s*\(`，否则原 `alwaysForbidden` 中的 socket 项会在放宽 HTTP 时被一并放开，形成规则漏洞。`plugin-package` 的 namespace 用 `com.openandroidintelligence.plugin.pkg`，因 `package` 是 Kotlin 保留字。
 
 已知前向依赖：`networkOwnerModules` 含 `tailscale-companion`，但该模块要到 Task 14 才创建。届时若 Tailscale 需要 `VpnService`，会与本门禁的"VpnService 全仓禁止"冲突——Task 14 需就此单独裁定（见账本）。
 
@@ -568,12 +568,12 @@ git commit -m "重构: 建立 Android 插件宿主模块边界"
 ### Task 8: 实现 Android 账号、会话与凭据生命周期
 
 **Files:**
-- Create: `apps/android/gateway-client/src/main/kotlin/com/agentlife/gateway/account/AccountProfile.kt`
-- Create: `apps/android/gateway-client/src/main/kotlin/com/agentlife/gateway/account/AccountProfileStore.kt`
-- Create: `apps/android/gateway-client/src/main/kotlin/com/agentlife/gateway/auth/GatewayCredentialStore.kt`
-- Create: `apps/android/gateway-client/src/main/kotlin/com/agentlife/gateway/auth/GatewaySessionManager.kt`
-- Create: `apps/android/gateway-client/src/test/kotlin/com/agentlife/gateway/auth/GatewaySessionManagerTest.kt`
-- Create: `apps/android/gateway-client/src/androidTest/kotlin/com/agentlife/gateway/auth/KeystoreCredentialStoreInstrumentedTest.kt`
+- Create: `apps/android/gateway-client/src/main/kotlin/com/openandroidintelligence/gateway/account/AccountProfile.kt`
+- Create: `apps/android/gateway-client/src/main/kotlin/com/openandroidintelligence/gateway/account/AccountProfileStore.kt`
+- Create: `apps/android/gateway-client/src/main/kotlin/com/openandroidintelligence/gateway/auth/GatewayCredentialStore.kt`
+- Create: `apps/android/gateway-client/src/main/kotlin/com/openandroidintelligence/gateway/auth/GatewaySessionManager.kt`
+- Create: `apps/android/gateway-client/src/test/kotlin/com/openandroidintelligence/gateway/auth/GatewaySessionManagerTest.kt`
+- Create: `apps/android/gateway-client/src/androidTest/kotlin/com/openandroidintelligence/gateway/auth/KeystoreCredentialStoreInstrumentedTest.kt`
 
 **Interfaces:**
 - Produces: `AccountProfileStore.list(): List<AccountProfile>`
@@ -666,16 +666,16 @@ git commit -m "新增: 实现多账号会话与可撤销自动登录"
 ### Task 9: 实现 Android HTTPS、SSE 与附件客户端
 
 **Files:**
-- Create: `apps/android/gateway-client/src/main/kotlin/com/agentlife/gateway/http/GatewayHttpClient.kt`
-- Modify: `apps/android/gateway-client/src/main/kotlin/com/agentlife/gateway/http/HttpsConnectionFactory.kt`
-- Create: `apps/android/gateway-client/src/main/kotlin/com/agentlife/gateway/events/SseParser.kt`
-- Create: `apps/android/gateway-client/src/main/kotlin/com/agentlife/gateway/events/EventCursorStore.kt`
-- Create: `apps/android/gateway-client/src/main/kotlin/com/agentlife/gateway/attachments/AttachmentUploader.kt`
-- Create: `apps/android/gateway-client/src/main/kotlin/com/agentlife/gateway/conversations/ConversationClient.kt`
-- Create: `apps/android/gateway-client/src/main/kotlin/com/agentlife/gateway/device/DeviceRequestClient.kt`
-- Create: `apps/android/gateway-client/src/test/kotlin/com/agentlife/gateway/events/SseParserTest.kt`
-- Create: `apps/android/gateway-client/src/test/kotlin/com/agentlife/gateway/attachments/AttachmentUploaderTest.kt`
-- Create: `apps/android/gateway-client/src/androidTest/kotlin/com/agentlife/gateway/http/PinnedTlsInstrumentedTest.kt`
+- Create: `apps/android/gateway-client/src/main/kotlin/com/openandroidintelligence/gateway/http/GatewayHttpClient.kt`
+- Modify: `apps/android/gateway-client/src/main/kotlin/com/openandroidintelligence/gateway/http/HttpsConnectionFactory.kt`
+- Create: `apps/android/gateway-client/src/main/kotlin/com/openandroidintelligence/gateway/events/SseParser.kt`
+- Create: `apps/android/gateway-client/src/main/kotlin/com/openandroidintelligence/gateway/events/EventCursorStore.kt`
+- Create: `apps/android/gateway-client/src/main/kotlin/com/openandroidintelligence/gateway/attachments/AttachmentUploader.kt`
+- Create: `apps/android/gateway-client/src/main/kotlin/com/openandroidintelligence/gateway/conversations/ConversationClient.kt`
+- Create: `apps/android/gateway-client/src/main/kotlin/com/openandroidintelligence/gateway/device/DeviceRequestClient.kt`
+- Create: `apps/android/gateway-client/src/test/kotlin/com/openandroidintelligence/gateway/events/SseParserTest.kt`
+- Create: `apps/android/gateway-client/src/test/kotlin/com/openandroidintelligence/gateway/attachments/AttachmentUploaderTest.kt`
+- Create: `apps/android/gateway-client/src/androidTest/kotlin/com/openandroidintelligence/gateway/http/PinnedTlsInstrumentedTest.kt`
 
 **Interfaces:**
 - Produces: `GatewayHttpClient.execute(SignedGatewayRequest): GatewayResponse`
@@ -758,17 +758,17 @@ git commit -m "新增: 实现 Gateway v2 HTTPS SSE 与附件客户端"
 - Create: `plugin-tooling/src/build-package.ts`
 - Create: `plugin-tooling/src/signature.ts`
 - Create: `plugin-tooling/test/deterministic-package.test.ts`
-- Create: `apps/android/plugin-package/src/main/kotlin/com/agentlife/plugin/package/PluginManifest.kt`
-- Create: `apps/android/plugin-package/src/main/kotlin/com/agentlife/plugin/package/AlpVerifier.kt`
-- Create: `apps/android/plugin-package/src/main/kotlin/com/agentlife/plugin/package/PluginInstaller.kt`
-- Create: `apps/android/plugin-package/src/main/kotlin/com/agentlife/plugin/package/PluginSourceResolver.kt`
-- Create: `apps/android/plugin-package/src/main/kotlin/com/agentlife/plugin/package/PluginUpdatePolicy.kt`
-- Create: `apps/android/plugin-package/src/test/kotlin/com/agentlife/plugin/package/AlpVerifierTest.kt`
-- Create: `apps/android/plugin-package/src/test/kotlin/com/agentlife/plugin/package/PluginUpdatePolicyTest.kt`
-- Create: `apps/android/plugin-package/src/androidTest/kotlin/com/agentlife/plugin/package/InterruptedInstallInstrumentedTest.kt`
+- Create: `apps/android/plugin-package/src/main/kotlin/com/openandroidintelligence/plugin/package/PluginManifest.kt`
+- Create: `apps/android/plugin-package/src/main/kotlin/com/openandroidintelligence/plugin/package/AlpVerifier.kt`
+- Create: `apps/android/plugin-package/src/main/kotlin/com/openandroidintelligence/plugin/package/PluginInstaller.kt`
+- Create: `apps/android/plugin-package/src/main/kotlin/com/openandroidintelligence/plugin/package/PluginSourceResolver.kt`
+- Create: `apps/android/plugin-package/src/main/kotlin/com/openandroidintelligence/plugin/package/PluginUpdatePolicy.kt`
+- Create: `apps/android/plugin-package/src/test/kotlin/com/openandroidintelligence/plugin/package/AlpVerifierTest.kt`
+- Create: `apps/android/plugin-package/src/test/kotlin/com/openandroidintelligence/plugin/package/PluginUpdatePolicyTest.kt`
+- Create: `apps/android/plugin-package/src/androidTest/kotlin/com/openandroidintelligence/plugin/package/InterruptedInstallInstrumentedTest.kt`
 
 **Interfaces:**
-- Produces: CLI `agent-life-plugin build --manifest <path> --key <path> --out <path>`
+- Produces: CLI `open-android-intelligence-plugin build --manifest <path> --key <path> --out <path>`
 - Produces: `AlpVerifier.verify(input: InputStream): VerifiedPluginPackage`
 - Produces: `PluginInstaller.install(VerifiedPluginPackage): InstalledPlugin`
 - Produces: `PluginSourceResolver.resolve(LocalFile | HttpsUrl | FixedRelease | OrganizationRepository | OptionalIndex): PackageStream`
@@ -854,7 +854,7 @@ Expected: PASS，ZIP bomb、路径穿越、摘要篡改、作者替换、降级�
 - **两个真实设计缺陷由测试暴露并已修复**：
   1. `InstalledPlugin` 原先不保存安全边界，导致安装器把"同插件同声明的正常升级"误判为"资源提升"而要求批准。已让 `InstalledPlugin` 携带 `SecurityDeclaration`。
   2. 保留的上一版本原先指向 live 目录，而提交会把该目录移走并删除——回滚目标随之消失。已改为固定放在 `.previous/<pluginId>`，与 live 路径完全独立。
-- **未实现 CLI `agent-life-plugin build`**。计划的 Interfaces 列出了该命令，但 Tasks 的文件清单里没有对应入口文件，且 Task 11 之前的宿主尚不消费构建产物。当前 `buildPackage` 以库函数形式提供，CLI 可在 Task 11 接线时补上，不影响确定性保证。
+- **未实现 CLI `open-android-intelligence-plugin build`**。计划的 Interfaces 列出了该命令，但 Tasks 的文件清单里没有对应入口文件，且 Task 11 之前的宿主尚不消费构建产物。当前 `buildPackage` 以库函数形式提供，CLI 可在 Task 11 接线时补上，不影响确定性保证。
 - `PluginSourceResolver` 要求 HTTPS 来源必须带 SPKI pin 或固定 sha256，否则拒绝——避免把"来源"变成事实上的信任根。
 
 - [x] **Step 5: 提交**
@@ -872,24 +872,24 @@ git commit -m "新增: 实现确定性插件包与事务安装"
 - Create: `plugins/sdk-rust/Cargo.toml`
 - Create: `plugins/sdk-rust/src/lib.rs`
 - Create: `plugins/fixtures/echo/src/lib.rs`
-- Create: `apps/android/platform-kernel/src/main/kotlin/com/agentlife/kernel/PluginKernel.kt`
-- Create: `apps/android/platform-kernel/src/main/kotlin/com/agentlife/kernel/CapabilityGrant.kt`
-- Create: `apps/android/platform-kernel/src/main/kotlin/com/agentlife/kernel/PluginStateMachine.kt`
-- Create: `apps/android/platform-kernel/src/main/kotlin/com/agentlife/kernel/CapabilityProviderSelector.kt`
-- Create: `apps/android/platform-kernel/src/main/kotlin/com/agentlife/kernel/PluginPrivateStore.kt`
-- Create: `apps/android/platform-kernel/src/main/kotlin/com/agentlife/kernel/MediatedNetworkProxy.kt`
-- Create: `apps/android/platform-kernel/src/main/kotlin/com/agentlife/kernel/AndroidAuditStore.kt`
-- Create: `apps/android/platform-kernel/src/main/kotlin/com/agentlife/kernel/DeveloperTrustMode.kt`
-- Create: `apps/android/platform-kernel/src/main/kotlin/com/agentlife/kernel/NativePluginLoader.kt`
-- Create: `apps/android/plugin-runtime-wasm/src/main/kotlin/com/agentlife/plugin/wasm/ChicoryPluginRuntime.kt`
-- Create: `apps/android/plugin-runtime-wasm/src/androidTest/kotlin/com/agentlife/plugin/wasm/ChicoryRuntimeInstrumentedTest.kt`
-- Create: `apps/android/plugin-ui/src/main/kotlin/com/agentlife/plugin/ui/DeclarativeUiSchema.kt`
-- Create: `apps/android/plugin-ui/src/test/kotlin/com/agentlife/plugin/ui/DeclarativeUiSchemaTest.kt`
-- Create: `apps/android/platform-kernel/src/test/kotlin/com/agentlife/kernel/KernelIsolationTest.kt`
-- Create: `apps/android/platform-kernel/src/androidTest/kotlin/com/agentlife/kernel/DeveloperTrustModeInstrumentedTest.kt`
+- Create: `apps/android/platform-kernel/src/main/kotlin/com/openandroidintelligence/kernel/PluginKernel.kt`
+- Create: `apps/android/platform-kernel/src/main/kotlin/com/openandroidintelligence/kernel/CapabilityGrant.kt`
+- Create: `apps/android/platform-kernel/src/main/kotlin/com/openandroidintelligence/kernel/PluginStateMachine.kt`
+- Create: `apps/android/platform-kernel/src/main/kotlin/com/openandroidintelligence/kernel/CapabilityProviderSelector.kt`
+- Create: `apps/android/platform-kernel/src/main/kotlin/com/openandroidintelligence/kernel/PluginPrivateStore.kt`
+- Create: `apps/android/platform-kernel/src/main/kotlin/com/openandroidintelligence/kernel/MediatedNetworkProxy.kt`
+- Create: `apps/android/platform-kernel/src/main/kotlin/com/openandroidintelligence/kernel/AndroidAuditStore.kt`
+- Create: `apps/android/platform-kernel/src/main/kotlin/com/openandroidintelligence/kernel/DeveloperTrustMode.kt`
+- Create: `apps/android/platform-kernel/src/main/kotlin/com/openandroidintelligence/kernel/NativePluginLoader.kt`
+- Create: `apps/android/plugin-runtime-wasm/src/main/kotlin/com/openandroidintelligence/plugin/wasm/ChicoryPluginRuntime.kt`
+- Create: `apps/android/plugin-runtime-wasm/src/androidTest/kotlin/com/openandroidintelligence/plugin/wasm/ChicoryRuntimeInstrumentedTest.kt`
+- Create: `apps/android/plugin-ui/src/main/kotlin/com/openandroidintelligence/plugin/ui/DeclarativeUiSchema.kt`
+- Create: `apps/android/plugin-ui/src/test/kotlin/com/openandroidintelligence/plugin/ui/DeclarativeUiSchemaTest.kt`
+- Create: `apps/android/platform-kernel/src/test/kotlin/com/openandroidintelligence/kernel/KernelIsolationTest.kt`
+- Create: `apps/android/platform-kernel/src/androidTest/kotlin/com/openandroidintelligence/kernel/DeveloperTrustModeInstrumentedTest.kt`
 
 **Interfaces:**
-- Produces: Rust `agent_life_plugin_main(request_ptr: u32, request_len: u32) -> u64`
+- Produces: Rust `open_android_intelligence_plugin_main(request_ptr: u32, request_len: u32) -> u64`
 - Produces: `PluginKernel.invoke(identity, accountId, pairingId, capability, input): PluginResult`
 - Produces: `ChicoryPluginRuntime.invoke(module, budget, imports, input): ByteArray`
 - Produces: `CapabilityProviderSelector.select(capability, pairingId): PluginIdentity`
@@ -928,7 +928,7 @@ val effective = hostEnvelope
 if (!effective.contains(call.primitive)) throw CapabilityDenied(call.primitive)
 ```
 
-Chicory module 只链接 `agent_life_kernel_v1` 明确函数；调用由 deadline、memory pages、输出字节、并发 semaphore 和每日网络计数器限制。网络代理逐跳验证 HTTPS allowlist，私有存储按插件×账号×安装实例分区，provider 切换产生新授权 revision，Android 审计只记录主体/动作/结果/correlation ID。原生 loader 只有开发者信任模式可达，关闭模式立即停用全部原生插件。
+Chicory module 只链接 `open_android_intelligence_kernel_v1` 明确函数；调用由 deadline、memory pages、输出字节、并发 semaphore 和每日网络计数器限制。网络代理逐跳验证 HTTPS allowlist，私有存储按插件×账号×安装实例分区，provider 切换产生新授权 revision，Android 审计只记录主体/动作/结果/correlation ID。原生 loader 只有开发者信任模式可达，关闭模式立即停用全部原生插件。
 
 - [x] **Step 4: 实现声明式 UI 白名单测试**
 
@@ -946,12 +946,12 @@ git commit -m "新增: 实现受保护 WASM 插件平台内核"
 ### Task 12: 实现 Companion 身份与加密字节通道
 
 **Files:**
-- Create: `apps/android/companion-bridge/src/main/aidl/com/agentlife/companion/ICompanionTransport.aidl`
-- Create: `apps/android/companion-bridge/src/main/kotlin/com/agentlife/companion/CompanionBindingVerifier.kt`
-- Create: `apps/android/companion-bridge/src/main/kotlin/com/agentlife/companion/OperationTokenIssuer.kt`
-- Create: `apps/android/companion-bridge/src/main/kotlin/com/agentlife/companion/EncryptedByteChannel.kt`
-- Create: `apps/android/companion-bridge/src/test/kotlin/com/agentlife/companion/OperationTokenIssuerTest.kt`
-- Create: `apps/android/companion-bridge/src/androidTest/kotlin/com/agentlife/companion/CompanionFailureInstrumentedTest.kt`
+- Create: `apps/android/companion-bridge/src/main/aidl/com/openandroidintelligence/companion/ICompanionTransport.aidl`
+- Create: `apps/android/companion-bridge/src/main/kotlin/com/openandroidintelligence/companion/CompanionBindingVerifier.kt`
+- Create: `apps/android/companion-bridge/src/main/kotlin/com/openandroidintelligence/companion/OperationTokenIssuer.kt`
+- Create: `apps/android/companion-bridge/src/main/kotlin/com/openandroidintelligence/companion/EncryptedByteChannel.kt`
+- Create: `apps/android/companion-bridge/src/test/kotlin/com/openandroidintelligence/companion/OperationTokenIssuerTest.kt`
+- Create: `apps/android/companion-bridge/src/androidTest/kotlin/com/openandroidintelligence/companion/CompanionFailureInstrumentedTest.kt`
 
 **Interfaces:**
 - Produces: `verify(packageName, certificateSha256, minVersionCode): VerifiedCompanion`
@@ -1003,25 +1003,25 @@ git commit -m "新增: 实现 Companion 身份与单用途通道"
 - Create: `plugins/call-log/Cargo.toml`
 - Create: `plugins/call-log/src/lib.rs`
 - Create: `plugins/call-log/manifest.json`
-- Modify: `apps/android/notification-collector/src/main/kotlin/com/agentlife/notifications/AndroidNotificationCollector.kt`
-- Modify: `apps/android/sms-collector/src/main/kotlin/com/agentlife/sms/AndroidSmsInboxReader.kt`
-- Modify: `apps/android/call-log-collector/src/main/kotlin/com/agentlife/calls/AndroidCallLogReader.kt`
-- Create: `apps/android/platform-kernel/src/androidTest/kotlin/com/agentlife/kernel/ReferencePluginIsolationInstrumentedTest.kt`
+- Modify: `apps/android/notification-collector/src/main/kotlin/com/openandroidintelligence/notifications/AndroidNotificationCollector.kt`
+- Modify: `apps/android/sms-collector/src/main/kotlin/com/openandroidintelligence/sms/AndroidSmsInboxReader.kt`
+- Modify: `apps/android/call-log-collector/src/main/kotlin/com/openandroidintelligence/calls/AndroidCallLogReader.kt`
+- Create: `apps/android/platform-kernel/src/androidTest/kotlin/com/openandroidintelligence/kernel/ReferencePluginIsolationInstrumentedTest.kt`
 
 **Interfaces:**
 - Consumes: `kernel.notifications.read`, `kernel.sms.read`, `kernel.call-log.read`
-- Produces: `org.agentlife.notifications.query@1.0.0`
-- Produces: `org.agentlife.sms.query@1.0.0`
-- Produces: `org.agentlife.call-log.query@1.0.0`
+- Produces: `org.openandroidintelligence.notifications.query@1.0.0`
+- Produces: `org.openandroidintelligence.sms.query@1.0.0`
+- Produces: `org.openandroidintelligence.call-log.query@1.0.0`
 
 - [ ] **Step 1: 写“未安装/未授权即无能力”和账号隔离失败测试**
 
 ```kotlin
 @Test fun referencePluginsHaveNoPrivilegeByAuthor() {
     installSigned(officialSmsPlugin)
-    assertFailsWith<GrantRequired> { invoke("org.agentlife.sms.query", accountA) }
-    grant(accountA, "org.agentlife.sms.query")
-    assertFailsWith<GrantRequired> { invoke("org.agentlife.sms.query", accountB) }
+    assertFailsWith<GrantRequired> { invoke("org.openandroidintelligence.sms.query", accountA) }
+    grant(accountA, "org.openandroidintelligence.sms.query")
+    assertFailsWith<GrantRequired> { invoke("org.openandroidintelligence.sms.query", accountB) }
 }
 ```
 
@@ -1068,8 +1068,8 @@ git commit -m "重构: 将现有设备能力迁为参考插件"
 **Files:**
 - Create: `apps/android/tailscale-companion/build.gradle.kts`
 - Create: `apps/android/tailscale-companion/src/main/AndroidManifest.xml`
-- Create: `apps/android/tailscale-companion/src/main/kotlin/com/agentlife/tailscale/companion/TailscaleTransportService.kt`
-- Create: `apps/android/tailscale-companion/src/androidTest/kotlin/com/agentlife/tailscale/companion/TailscaleOpaqueChannelInstrumentedTest.kt`
+- Create: `apps/android/tailscale-companion/src/main/kotlin/com/openandroidintelligence/tailscale/companion/TailscaleTransportService.kt`
+- Create: `apps/android/tailscale-companion/src/androidTest/kotlin/com/openandroidintelligence/tailscale/companion/TailscaleOpaqueChannelInstrumentedTest.kt`
 - Modify: `apps/android/tailnet-core/build.gradle.kts`
 - Modify: `apps/android/transport/build.gradle.kts`
 - Modify: `apps/android/settings.gradle.kts`
@@ -1084,7 +1084,7 @@ git commit -m "重构: 将现有设备能力迁为参考插件"
 
 ```kotlin
 @Test fun companionProtocolContainsNoGatewayCredentialFields() {
-    val aidl = projectFile("tailscale-companion/../companion-bridge/src/main/aidl/com/agentlife/companion/ICompanionTransport.aidl").readText()
+    val aidl = projectFile("tailscale-companion/../companion-bridge/src/main/aidl/com/openandroidintelligence/companion/ICompanionTransport.aidl").readText()
     listOf("password", "refresh", "accessToken", "devicePrivateKey").forEach { assertFalse(aidl.contains(it, true)) }
 }
 ```
@@ -1118,15 +1118,15 @@ git commit -m "重构: 将 tsnet 迁为可选 Tailscale Companion"
 - Modify: `apps/android/app/build.gradle.kts`
 - Modify: `apps/android/build.gradle.kts`
 - Modify: `apps/android/app/src/main/AndroidManifest.xml`
-- Modify: `apps/android/app/src/main/kotlin/com/agentlife/mobile/AgentLifeApplication.kt`
-- Modify: `apps/android/app/src/main/kotlin/com/agentlife/mobile/MainActivity.kt`
-- Create: `apps/android/app/src/main/kotlin/com/agentlife/mobile/GatewayScreen.kt`
-- Create: `apps/android/app/src/main/kotlin/com/agentlife/mobile/ConversationScreen.kt`
-- Create: `apps/android/app/src/main/kotlin/com/agentlife/mobile/AttachmentPicker.kt`
-- Create: `apps/android/app/src/main/kotlin/com/agentlife/mobile/PlatformSettingsScreen.kt`
-- Modify: `apps/android/app/src/test/kotlin/com/agentlife/mobile/ArchitectureBoundaryTest.kt`
-- Create: `apps/android/app/src/androidTest/kotlin/com/agentlife/mobile/CoreWithoutPluginsInstrumentedTest.kt`
-- Create: `apps/android/app/src/test/kotlin/com/agentlife/mobile/DistributionVariantTest.kt`
+- Modify: `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/OpenAndroidIntelligenceApplication.kt`
+- Modify: `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/MainActivity.kt`
+- Create: `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/GatewayScreen.kt`
+- Create: `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/ConversationScreen.kt`
+- Create: `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/AttachmentPicker.kt`
+- Create: `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/PlatformSettingsScreen.kt`
+- Modify: `apps/android/app/src/test/kotlin/com/openandroidintelligence/mobile/ArchitectureBoundaryTest.kt`
+- Create: `apps/android/app/src/androidTest/kotlin/com/openandroidintelligence/mobile/CoreWithoutPluginsInstrumentedTest.kt`
+- Create: `apps/android/app/src/test/kotlin/com/openandroidintelligence/mobile/DistributionVariantTest.kt`
 
 **Interfaces:**
 - Consumes: `gateway-client`、`platform-kernel`、`plugin-package`、`plugin-ui`、`companion-bridge`
@@ -1199,7 +1199,7 @@ git commit -m "重构: 将 Android App 切换为极简 Gateway 核心"
 expect(exported).toEqual({
   schemaVersion: "1.0",
   gateways: [{ displayName: "Home", baseUrl: "https://gw.example", tlsSpkiSha256: "sha256:..." }],
-  plugins: [{ id: "org.agentlife.sms", authorKeyId: "sha256:..." }],
+  plugins: [{ id: "org.openandroidintelligence.sms", authorKeyId: "sha256:..." }],
 });
 expect(JSON.stringify(exported)).not.toMatch(/private|password|token|queue|body/i);
 ```

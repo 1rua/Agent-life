@@ -2,7 +2,7 @@
 
     <application
         android:allowBackup="false"
-        android:label="Agent Life Assistant">
+        android:label="Open Android Intelligence Assistant">
         <activity
             android:name=".AssistantActivity"
             android:exported="true">

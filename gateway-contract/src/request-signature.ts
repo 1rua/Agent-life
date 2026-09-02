@@ -107,10 +107,10 @@ const canonicalPath = (path: string): string => {
   });
 
   const result = canonicalSegments.join("/");
-  if (result !== "/agent-life/v2" && result !== "/agent-life/v2/" && !result.startsWith("/agent-life/v2/")) {
+  if (result !== "/open-android-intelligence/v2" && result !== "/open-android-intelligence/v2/" && !result.startsWith("/open-android-intelligence/v2/")) {
     schemaInvalid();
   }
-  if (result.endsWith("/") && result !== "/agent-life/v2/") schemaInvalid();
+  if (result.endsWith("/") && result !== "/open-android-intelligence/v2/") schemaInvalid();
   return result;
 };
 
@@ -219,7 +219,7 @@ export const canonicalRequestSignatureInput = (input: SignedRequestInput): Uint8
   const bodyDigest = createHash("sha256").update(input.body).digest("hex");
   return new TextEncoder().encode(
     [
-      "AGENT-LIFE-REQUEST-V2",
+      "OPEN-ANDROID-INTELLIGENCE-REQUEST-V2",
       input.method,
       target,
       input.accountId,

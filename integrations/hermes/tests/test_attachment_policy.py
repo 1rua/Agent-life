@@ -8,8 +8,8 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from agent_life_gateway.core import GatewayError, create_gateway_core
-from agent_life_gateway.http import create_gateway_exposure
+from open_android_intelligence_gateway.core import GatewayError, create_gateway_core
+from open_android_intelligence_gateway.http import create_gateway_exposure
 from test_support import make_secret_store, make_verified_request, trust_core
 
 
@@ -47,7 +47,7 @@ def _negotiate(core):
             "requestId": "req_attachment_negotiate",
             "correlationId": "cor_attachment_negotiate",
             "method": "POST",
-            "target": "/agent-life/v2/negotiate",
+            "target": "/open-android-intelligence/v2/negotiate",
             "body": NEGOTIATION_BODY,
         }
     )
@@ -297,7 +297,7 @@ def test_attachment_storage_without_an_explicit_aead_key_fails_closed(tmp_path):
                 "requestId": "req_no_aead", "correlationId": "cor_no_aead",
                 "pairingGeneration": 1, "grantRevision": 1,
             },
-            "method": "GET", "target": "/agent-life/v2/conversations",
+            "method": "GET", "target": "/open-android-intelligence/v2/conversations",
         }))
     assert blocked["error"]["code"] == "MASTER_KEY_UNAVAILABLE"
 
@@ -361,8 +361,8 @@ def test_device_parameters_and_event_payload_are_sealed_at_rest(tmp_path):
             "pairing_generation": 4,
             "grant_revision": 7,
             "risk": "read",
-            "capability": {"id": "org.agentlife.sms.query", "version": "1.0.0"},
-            "provider": {"pluginId": "org.agentlife.sms", "authorKeyId": "sha256:" + "a" * 64},
+            "capability": {"id": "org.openandroidintelligence.sms.query", "version": "1.0.0"},
+            "provider": {"pluginId": "org.openandroidintelligence.sms", "authorKeyId": "sha256:" + "a" * 64},
             "parameters": parameters,
             "correlation_id": "cor_sealed_device",
         }
@@ -390,7 +390,7 @@ def test_idempotency_outcome_is_sealed_at_rest_and_replays_through_the_provider(
             "correlationId": "cor_sealed_idempotency", "pairingGeneration": 1,
             "grantRevision": 1,
         },
-        "method": "POST", "target": "/agent-life/v2/conversations",
+        "method": "POST", "target": "/open-android-intelligence/v2/conversations",
         "idempotencyKey": "req_sealed_idempotency",
         "body": {"clientConversationId": "conv_sealed_idempotency", "title": "private title"},
     }
@@ -498,12 +498,12 @@ def test_raw_attachment_body_limit_accepts_the_negotiated_single_attachment_size
         },
         verify_request=verify,
     )
-    route = next(item for item in exposure.routes if item.path == "/agent-life/v2/attachments/")
+    route = next(item for item in exposure.routes if item.path == "/open-android-intelligence/v2/attachments/")
     body = b"x" * 26_214_400
     response = _RawResponse()
 
     route.handler(
-        _RawRequest(body, "/agent-life/v2/attachments/att_raw/content"),
+        _RawRequest(body, "/open-android-intelligence/v2/attachments/att_raw/content"),
         response,
     )
 

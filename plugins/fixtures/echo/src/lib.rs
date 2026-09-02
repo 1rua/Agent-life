@@ -1,6 +1,6 @@
 //! echo 参考插件：把宿主写入的请求字节原样回显。
 //!
-//! 它是 `agent_life_kernel_v1` 的最小可行实现，供 Android 侧的
+//! 它是 `open_android_intelligence_kernel_v1` 的最小可行实现，供 Android 侧的
 //! `ChicoryPluginRuntime` 做端到端验证：模块必须能被加载（零 WASI 导入），
 //! 入口必须能被链接，返回值的 (ptr, len) 必须能被解析。
 //!
@@ -11,7 +11,7 @@
 //!
 //! 行为契约：
 //!
-//! - `agent_life_plugin_main(ptr, len)` 返回 `((rptr << 32) | rlen)`，
+//! - `open_android_intelligence_plugin_main(ptr, len)` 返回 `((rptr << 32) | rlen)`，
 //!   其中 `memory[rptr .. rptr + rlen]` 与请求逐字节相同；
 //! - 空请求返回 `(0, 0)`；
 //! - 超过交换区上限的请求返回 `u64::MAX`（宿主侧同时还会在
@@ -22,7 +22,7 @@
 
 extern crate alloc;
 
-use agent_life_sdk::{PluginError, declare_plugin};
+use open_android_intelligence_sdk::{PluginError, declare_plugin};
 use alloc::vec::Vec;
 
 /// 回显处理函数：把请求字节原样复制一份作为响应。
@@ -36,7 +36,7 @@ pub fn echo(request: &[u8]) -> Result<Vec<u8>, PluginError> {
     Ok(out)
 }
 
-// 生成 `agent_life_plugin_main` 导出与全局分配器。
+// 生成 `open_android_intelligence_plugin_main` 导出与全局分配器。
 // 缓冲区 64 KiB：请求在交换区不占它，所以 64 KiB 就是"响应最大 64 KiB"，
 // 正好等于宿主侧允许的交换区上限。
 declare_plugin! { handler = echo, arena_bytes = 65_536 }
@@ -50,14 +50,14 @@ mod tests {
     /// 宿主是 64 位进程，真实地址塞不进 u32，因此不能解引用打包出来的
     /// 指针；`dispatch_with_response` 把响应内容也带回来供断言。
     fn round_trip(request: &[u8]) -> (u64, Vec<u8>) {
-        let (packed, response) = agent_life_sdk::dispatch_with_response(request, echo);
+        let (packed, response) = open_android_intelligence_sdk::dispatch_with_response(request, echo);
         let response = response.expect("echo 必须返回成功结果");
         (packed, response)
     }
 
     #[test]
     fn echoes_request_bytes_verbatim() {
-        let request = b"hello agent-life";
+        let request = b"hello open-android-intelligence";
         assert_eq!(echo(request).unwrap(), request);
         assert_eq!(round_trip(request).1, request);
     }
@@ -70,7 +70,7 @@ mod tests {
 
     #[test]
     fn echoes_utf8_boundaries_without_transcoding() {
-        let request = "你好 🌍 agent-life".as_bytes();
+        let request = "你好 🌍 open-android-intelligence".as_bytes();
         assert_eq!(round_trip(request).1, request);
     }
 
@@ -78,8 +78,8 @@ mod tests {
     fn empty_request_produces_empty_response() {
         assert_eq!(echo(b"").unwrap(), Vec::<u8>::new());
         // 空请求走的是"零长度不得解引用空指针"那条分支。
-        let packed = agent_life_sdk::dispatch(0, 0, echo);
-        assert_eq!(agent_life_sdk::unpack(packed), Some((0, 0)));
+        let packed = open_android_intelligence_sdk::dispatch(0, 0, echo);
+        assert_eq!(open_android_intelligence_sdk::unpack(packed), Some((0, 0)));
         assert_eq!(round_trip(b"").1, Vec::<u8>::new());
     }
 
@@ -88,7 +88,7 @@ mod tests {
         for len in [0usize, 1, 7, 255, 4096] {
             let request = alloc::vec![0xABu8; len];
             let (packed, response) = round_trip(&request);
-            let (_, out_len) = agent_life_sdk::unpack(packed).unwrap();
+            let (_, out_len) = open_android_intelligence_sdk::unpack(packed).unwrap();
             assert_eq!(out_len as usize, len, "响应长度必须等于请求长度");
             assert_eq!(response.len(), len);
         }
@@ -115,9 +115,9 @@ mod tests {
     fn echoes_the_largest_request_the_exchange_region_allows() {
         // 宿主最多写满 64 KiB 交换区；请求在交换区，响应在缓冲区，
         // 两者不争用同一块内存，所以满额请求也能完整回显。
-        let request = alloc::vec![0x5Au8; agent_life_sdk::EXCHANGE_SIZE_BYTES];
+        let request = alloc::vec![0x5Au8; open_android_intelligence_sdk::EXCHANGE_SIZE_BYTES];
         let (packed, response) = round_trip(&request);
-        let (_, len) = agent_life_sdk::unpack(packed).unwrap();
+        let (_, len) = open_android_intelligence_sdk::unpack(packed).unwrap();
         assert_eq!(len as usize, request.len());
         assert_eq!(response, request);
     }
@@ -125,13 +125,13 @@ mod tests {
     #[test]
     fn requests_beyond_the_exchange_region_are_rejected() {
         // 越界请求必须走失败哨兵，绝不能把插件的静态数据回显出去。
-        let over = agent_life_sdk::EXCHANGE_SIZE_BYTES as u32 + 1;
-        assert_eq!(agent_life_sdk::unpack(agent_life_sdk::dispatch(0, over, echo)), None);
+        let over = open_android_intelligence_sdk::EXCHANGE_SIZE_BYTES as u32 + 1;
+        assert_eq!(open_android_intelligence_sdk::unpack(open_android_intelligence_sdk::dispatch(0, over, echo)), None);
         // 偏移 + 长度越过边界同样要拒绝，不能只看长度。
         assert_eq!(
-            agent_life_sdk::unpack(agent_life_sdk::dispatch(
+            open_android_intelligence_sdk::unpack(open_android_intelligence_sdk::dispatch(
                 1,
-                agent_life_sdk::EXCHANGE_SIZE_BYTES as u32,
+                open_android_intelligence_sdk::EXCHANGE_SIZE_BYTES as u32,
                 echo
             )),
             None
@@ -141,7 +141,7 @@ mod tests {
     #[test]
     fn echo_does_not_use_the_kernel_import_module() {
         // 受保护插件的导入必须是空的；这条断言守住常量本身不被误改。
-        assert_eq!(agent_life_sdk::KERNEL_ABI_MODULE, "agent_life_kernel_v1");
-        assert_eq!(agent_life_sdk::ENTRYPOINT, "agent_life_plugin_main");
+        assert_eq!(open_android_intelligence_sdk::KERNEL_ABI_MODULE, "open_android_intelligence_kernel_v1");
+        assert_eq!(open_android_intelligence_sdk::ENTRYPOINT, "open_android_intelligence_plugin_main");
     }
 }

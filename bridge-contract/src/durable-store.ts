@@ -2,7 +2,7 @@ import { BridgeServiceError } from "./service-types.js";
 import { BRIDGE_PERSISTENCE_NAMESPACES } from "./persistence.js";
 
 /** Stable identifier for the storage port consumed by a production Bridge. */
-export const DURABLE_BRIDGE_STORE_PORT = "agent-life.bridge-store.v1" as const;
+export const DURABLE_BRIDGE_STORE_PORT = "open-android-intelligence.bridge-store.v1" as const;
 
 /**
  * State partitions that the WP-06 runtime is allowed to persist through this

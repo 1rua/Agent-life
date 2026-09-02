@@ -1,5 +1,5 @@
 {
-  "name": "@agent-life/bridge-runtime",
+  "name": "@open-android-intelligence/bridge-runtime",
   "private": true,
   "type": "module",
   "scripts": {

@@ -4,7 +4,7 @@
 - tailnet-core connected: 12/12 PASS + 离线真实后端用例 Assume 跳过
 - transport 5/5、app 2/2；前后脱敏审计 18/18 稳定；全程 VPN agent=0
 - Keystore 方案②生产修复（真机验证）
-- AgentLifeApplication HOME/XDG_CONFIG_HOME 生产修复（真机必需）
+- OpenAndroidIntelligenceApplication HOME/XDG_CONFIG_HOME 生产修复（真机必需）
 - 设备级真实后端 OFFLINE 证据（第二 key，非 AAR 独立 tsnet）
 - 根因链 RUN-A/B/C/D/E 全部存档
 

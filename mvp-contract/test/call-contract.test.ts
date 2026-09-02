@@ -116,6 +116,6 @@ describe("call record v1", () => {
     expect(validateWireCallRecord({ ...released, metadata: { ...released.metadata, duration_seconds: 60 } })).toBe(false);
     expect(validateWireCallRecord({ ...released, counterparty_number: { state: "released" } })).toBe(false);
     const schemaText = readFileSync(resolve(process.cwd(), "mvp-contract/schemas/v1/call-record.schema.json"), "utf8");
-    expect(schemaText).toContain('"x-agent-life-maxUtf8Bytes": 256');
+    expect(schemaText).toContain('"x-open-android-intelligence-maxUtf8Bytes": 256');
   });
 });

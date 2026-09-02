@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://agent-life.dev/schemas/gateway/v2/conversation-snapshot.schema.json",
+  "$id": "https://open-android-intelligence.dev/schemas/gateway/v2/conversation-snapshot.schema.json",
   "$defs": {
     "mirrorSync": {
       "type": "object",
@@ -8,7 +8,7 @@
       "required": ["snapshotRevision", "conversations"],
       "properties": {
         "snapshotRevision": {
-          "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/positiveInt"
+          "$ref": "https://open-android-intelligence.dev/schemas/gateway/v2/envelope.schema.json#/$defs/positiveInt"
         },
         "conversations": {
           "type": "array",
@@ -18,14 +18,14 @@
             "required": ["conversationId", "revision", "updatedAt"],
             "properties": {
               "conversationId": {
-                "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
+                "$ref": "https://open-android-intelligence.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
               },
               "title": { "type": "string" },
               "revision": {
-                "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/positiveInt"
+                "$ref": "https://open-android-intelligence.dev/schemas/gateway/v2/envelope.schema.json#/$defs/positiveInt"
               },
               "updatedAt": {
-                "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/utcMillis"
+                "$ref": "https://open-android-intelligence.dev/schemas/gateway/v2/envelope.schema.json#/$defs/utcMillis"
               },
               "tombstoned": { "type": "boolean" }
             }

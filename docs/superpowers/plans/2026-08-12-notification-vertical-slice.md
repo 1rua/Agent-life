@@ -23,19 +23,19 @@
 
 | File | Responsibility |
 | --- | --- |
-| 'apps/android/core-model/src/main/kotlin/com/agentlife/core/model/NotificationCollectionSettings.kt' | Delivery-mode enum and shared Unicode-code-point package ordering. |
-| 'apps/android/core-model/src/main/kotlin/com/agentlife/core/model/NotificationContracts.kt' | Reuse the shared package ordering in the policy value object. |
-| 'apps/android/core-model/src/test/kotlin/com/agentlife/core/model/NotificationCollectionSettingsTest.kt' | Shared ordering and default-mode behavior tests. |
-| 'apps/android/policy-engine/src/main/kotlin/com/agentlife/policy/PersistentNotificationPolicyAuthority.kt' | Persist/restore delivery mode with policy and authorization revisions. |
-| 'apps/android/policy-engine/src/test/kotlin/com/agentlife/policy/PersistentNotificationPolicyAuthorityTest.kt' | Authority round-trip, migration, revision, and corruption tests. |
-| 'apps/android/notification-collector/src/main/kotlin/com/agentlife/notifications/NotificationAgentQueryGateway.kt' | Typed Agent query validation, redaction, filtering, and operation idempotency. |
-| 'apps/android/notification-collector/src/test/kotlin/com/agentlife/notifications/NotificationAgentQueryGatewayTest.kt' | Query authorization and result behavior tests. |
-| 'apps/android/notification-collector/src/main/kotlin/com/agentlife/notifications/NotificationRuntime.kt' | Skip new automatic outbox writes in on-demand mode. |
-| 'apps/android/notification-collector/src/test/kotlin/com/agentlife/notifications/NotificationRuntimeTest.kt' | Delivery-mode regression tests. |
-| 'apps/android/app/src/main/kotlin/com/agentlife/mobile/NotificationSettingsState.kt' | Pure settings draft-to-commit normalization used by the Android UI. |
-| 'apps/android/app/src/main/kotlin/com/agentlife/mobile/MainActivity.kt' | Local notification settings screen while preserving assistant handoff methods. |
-| 'apps/android/app/src/main/kotlin/com/agentlife/mobile/AgentLifeApplication.kt' | Expose the process-local authority/controller to the settings activity. |
-| 'apps/android/app/src/test/kotlin/com/agentlife/mobile/NotificationSettingsStateTest.kt' | Settings normalization and revision tests. |
+| 'apps/android/core-model/src/main/kotlin/com/openandroidintelligence/core/model/NotificationCollectionSettings.kt' | Delivery-mode enum and shared Unicode-code-point package ordering. |
+| 'apps/android/core-model/src/main/kotlin/com/openandroidintelligence/core/model/NotificationContracts.kt' | Reuse the shared package ordering in the policy value object. |
+| 'apps/android/core-model/src/test/kotlin/com/openandroidintelligence/core/model/NotificationCollectionSettingsTest.kt' | Shared ordering and default-mode behavior tests. |
+| 'apps/android/policy-engine/src/main/kotlin/com/openandroidintelligence/policy/PersistentNotificationPolicyAuthority.kt' | Persist/restore delivery mode with policy and authorization revisions. |
+| 'apps/android/policy-engine/src/test/kotlin/com/openandroidintelligence/policy/PersistentNotificationPolicyAuthorityTest.kt' | Authority round-trip, migration, revision, and corruption tests. |
+| 'apps/android/notification-collector/src/main/kotlin/com/openandroidintelligence/notifications/NotificationAgentQueryGateway.kt' | Typed Agent query validation, redaction, filtering, and operation idempotency. |
+| 'apps/android/notification-collector/src/test/kotlin/com/openandroidintelligence/notifications/NotificationAgentQueryGatewayTest.kt' | Query authorization and result behavior tests. |
+| 'apps/android/notification-collector/src/main/kotlin/com/openandroidintelligence/notifications/NotificationRuntime.kt' | Skip new automatic outbox writes in on-demand mode. |
+| 'apps/android/notification-collector/src/test/kotlin/com/openandroidintelligence/notifications/NotificationRuntimeTest.kt' | Delivery-mode regression tests. |
+| 'apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/NotificationSettingsState.kt' | Pure settings draft-to-commit normalization used by the Android UI. |
+| 'apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/MainActivity.kt' | Local notification settings screen while preserving assistant handoff methods. |
+| 'apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/OpenAndroidIntelligenceApplication.kt' | Expose the process-local authority/controller to the settings activity. |
+| 'apps/android/app/src/test/kotlin/com/openandroidintelligence/mobile/NotificationSettingsStateTest.kt' | Settings normalization and revision tests. |
 | 'apps/android/app/build.gradle.kts' | Add the app's JUnit test dependency. |
 | 'apps/android/README.md' | Document the completed notification slice and verification commands. |
 
@@ -44,9 +44,9 @@
 ### Task 1: Add shared delivery mode and package ordering
 
 **Files:**
-- Create: 'apps/android/core-model/src/main/kotlin/com/agentlife/core/model/NotificationCollectionSettings.kt'
-- Modify: 'apps/android/core-model/src/main/kotlin/com/agentlife/core/model/NotificationContracts.kt'
-- Create: 'apps/android/core-model/src/test/kotlin/com/agentlife/core/model/NotificationCollectionSettingsTest.kt'
+- Create: 'apps/android/core-model/src/main/kotlin/com/openandroidintelligence/core/model/NotificationCollectionSettings.kt'
+- Modify: 'apps/android/core-model/src/main/kotlin/com/openandroidintelligence/core/model/NotificationContracts.kt'
+- Create: 'apps/android/core-model/src/test/kotlin/com/openandroidintelligence/core/model/NotificationCollectionSettingsTest.kt'
 
 **Interfaces:**
 - Produces 'NotificationDeliveryMode { ON_DEMAND, AUTO_SEND }'.
@@ -88,7 +88,7 @@ Run:
 
 ~~~sh
 cd apps/android
-./gradlew --no-daemon :core-model:testDebugUnitTest --tests com.agentlife.core.model.NotificationCollectionSettingsTest
+./gradlew --no-daemon :core-model:testDebugUnitTest --tests com.openandroidintelligence.core.model.NotificationCollectionSettingsTest
 ~~~
 
 Expected: compilation/test failure because the shared enum and ordering
@@ -107,7 +107,7 @@ function in the policy initializer.
 Run:
 
 ~~~sh
-./gradlew --no-daemon :core-model:testDebugUnitTest --tests com.agentlife.core.model.NotificationCollectionSettingsTest --tests com.agentlife.core.model.NotificationContractsTest
+./gradlew --no-daemon :core-model:testDebugUnitTest --tests com.openandroidintelligence.core.model.NotificationCollectionSettingsTest --tests com.openandroidintelligence.core.model.NotificationContractsTest
 ~~~
 
 Expected: all selected tests pass with no new warning or forbidden-surface
@@ -118,7 +118,7 @@ output.
 Run:
 
 ~~~sh
-git add -- apps/android/core-model/src/main/kotlin/com/agentlife/core/model/NotificationCollectionSettings.kt apps/android/core-model/src/main/kotlin/com/agentlife/core/model/NotificationContracts.kt apps/android/core-model/src/test/kotlin/com/agentlife/core/model/NotificationCollectionSettingsTest.kt
+git add -- apps/android/core-model/src/main/kotlin/com/openandroidintelligence/core/model/NotificationCollectionSettings.kt apps/android/core-model/src/main/kotlin/com/openandroidintelligence/core/model/NotificationContracts.kt apps/android/core-model/src/test/kotlin/com/openandroidintelligence/core/model/NotificationCollectionSettingsTest.kt
 git diff --cached --name-only
 git commit -m "feat(android): add notification collection settings model"
 ~~~
@@ -128,8 +128,8 @@ The staged-name output must contain exactly the three listed paths.
 ### Task 2: Persist delivery mode in the local notification authority
 
 **Files:**
-- Modify: 'apps/android/policy-engine/src/main/kotlin/com/agentlife/policy/PersistentNotificationPolicyAuthority.kt'
-- Create: 'apps/android/policy-engine/src/test/kotlin/com/agentlife/policy/PersistentNotificationPolicyAuthorityTest.kt'
+- Modify: 'apps/android/policy-engine/src/main/kotlin/com/openandroidintelligence/policy/PersistentNotificationPolicyAuthority.kt'
+- Create: 'apps/android/policy-engine/src/test/kotlin/com/openandroidintelligence/policy/PersistentNotificationPolicyAuthorityTest.kt'
 
 **Interfaces:**
 - 'NotificationAuthoritySnapshot' gains 'deliveryMode: NotificationDeliveryMode', defaulting to 'ON_DEMAND' for source compatibility.
@@ -182,14 +182,14 @@ fun corrupt_persisted_bytes_restore_as_deny_first_corrupted_state() {
 ~~~
 
 Also add a legacy V1 byte fixture using the current magic
-'AGENT_LIFE_NOTIFICATION_AUTHORITY_V1'; it must restore with
+'OPEN_ANDROID_INTELLIGENCE_NOTIFICATION_AUTHORITY_V1'; it must restore with
 'deliveryMode == ON_DEMAND' so existing app-private state remains readable.
 Build the fixture with this exact field order from the current V1 encoder:
 
 ~~~kotlin
 private fun legacyV1Bytes(): ByteArray = ByteArrayOutputStream().use { bytes ->
     DataOutputStream(bytes).use { output ->
-        writeLegacyString(output, "AGENT_LIFE_NOTIFICATION_AUTHORITY_V1")
+        writeLegacyString(output, "OPEN_ANDROID_INTELLIGENCE_NOTIFICATION_AUTHORITY_V1")
         output.writeLong(7L)
         output.writeBoolean(true)
         output.writeByte(NotificationRuleMode.ALLOWLIST.ordinal)
@@ -218,7 +218,7 @@ Run:
 
 ~~~sh
 cd apps/android
-./gradlew --no-daemon :policy-engine:testDebugUnitTest --tests com.agentlife.policy.PersistentNotificationPolicyAuthorityTest
+./gradlew --no-daemon :policy-engine:testDebugUnitTest --tests com.openandroidintelligence.policy.PersistentNotificationPolicyAuthorityTest
 ~~~
 
 Expected: compilation failure because the snapshot and controller do not yet
@@ -252,7 +252,7 @@ Expected: all existing tests and the new authority tests pass.
 Run:
 
 ~~~sh
-git add -- apps/android/policy-engine/src/main/kotlin/com/agentlife/policy/PersistentNotificationPolicyAuthority.kt apps/android/policy-engine/src/test/kotlin/com/agentlife/policy/PersistentNotificationPolicyAuthorityTest.kt
+git add -- apps/android/policy-engine/src/main/kotlin/com/openandroidintelligence/policy/PersistentNotificationPolicyAuthority.kt apps/android/policy-engine/src/test/kotlin/com/openandroidintelligence/policy/PersistentNotificationPolicyAuthorityTest.kt
 git diff --cached --name-only
 git commit -m "feat(android): persist notification delivery mode"
 ~~~
@@ -260,8 +260,8 @@ git commit -m "feat(android): persist notification delivery mode"
 ### Task 3: Add the typed Agent on-demand query gateway
 
 **Files:**
-- Create: 'apps/android/notification-collector/src/main/kotlin/com/agentlife/notifications/NotificationAgentQueryGateway.kt'
-- Create: 'apps/android/notification-collector/src/test/kotlin/com/agentlife/notifications/NotificationAgentQueryGatewayTest.kt'
+- Create: 'apps/android/notification-collector/src/main/kotlin/com/openandroidintelligence/notifications/NotificationAgentQueryGateway.kt'
+- Create: 'apps/android/notification-collector/src/test/kotlin/com/openandroidintelligence/notifications/NotificationAgentQueryGatewayTest.kt'
 
 **Interfaces:**
 - 'NotificationQueryFilter(packageIds: List<String> = emptyList(), fieldAccess: NotificationFieldAccess = METADATA)' validates non-empty package IDs, package-name syntax, uniqueness, and Unicode-code-point ordering.
@@ -402,7 +402,7 @@ Run:
 
 ~~~sh
 cd apps/android
-./gradlew --no-daemon :notification-collector:testDebugUnitTest --tests com.agentlife.notifications.NotificationAgentQueryGatewayTest
+./gradlew --no-daemon :notification-collector:testDebugUnitTest --tests com.openandroidintelligence.notifications.NotificationAgentQueryGatewayTest
 ~~~
 
 Expected: compilation failure because the gateway request, result handling, and
@@ -446,7 +446,7 @@ Expected: all selected tests pass.
 Run:
 
 ~~~sh
-git add -- apps/android/notification-collector/src/main/kotlin/com/agentlife/notifications/NotificationAgentQueryGateway.kt apps/android/notification-collector/src/test/kotlin/com/agentlife/notifications/NotificationAgentQueryGatewayTest.kt
+git add -- apps/android/notification-collector/src/main/kotlin/com/openandroidintelligence/notifications/NotificationAgentQueryGateway.kt apps/android/notification-collector/src/test/kotlin/com/openandroidintelligence/notifications/NotificationAgentQueryGatewayTest.kt
 git diff --cached --name-only
 git commit -m "feat(android): add notification agent query gateway"
 ~~~
@@ -454,8 +454,8 @@ git commit -m "feat(android): add notification agent query gateway"
 ### Task 4: Gate runtime auto-send by the local delivery mode
 
 **Files:**
-- Modify: 'apps/android/notification-collector/src/main/kotlin/com/agentlife/notifications/NotificationRuntime.kt'
-- Modify: 'apps/android/notification-collector/src/test/kotlin/com/agentlife/notifications/NotificationRuntimeTest.kt'
+- Modify: 'apps/android/notification-collector/src/main/kotlin/com/openandroidintelligence/notifications/NotificationRuntime.kt'
+- Modify: 'apps/android/notification-collector/src/test/kotlin/com/openandroidintelligence/notifications/NotificationRuntimeTest.kt'
 
 **Interfaces:**
 - 'NotificationRuntime' continues to accept the existing optional 'PersistentNotificationPolicyAuthority'.
@@ -537,7 +537,7 @@ Run:
 
 ~~~sh
 cd apps/android
-./gradlew --no-daemon :notification-collector:testDebugUnitTest --tests com.agentlife.notifications.NotificationRuntimeTest
+./gradlew --no-daemon :notification-collector:testDebugUnitTest --tests com.openandroidintelligence.notifications.NotificationRuntimeTest
 ~~~
 
 Expected: the on-demand test fails because the current runtime always enqueues
@@ -568,7 +568,7 @@ pass.
 Run:
 
 ~~~sh
-git add -- apps/android/notification-collector/src/main/kotlin/com/agentlife/notifications/NotificationRuntime.kt apps/android/notification-collector/src/test/kotlin/com/agentlife/notifications/NotificationRuntimeTest.kt
+git add -- apps/android/notification-collector/src/main/kotlin/com/openandroidintelligence/notifications/NotificationRuntime.kt apps/android/notification-collector/src/test/kotlin/com/openandroidintelligence/notifications/NotificationRuntimeTest.kt
 git diff --cached --name-only
 git commit -m "feat(android): gate notification auto-send mode"
 ~~~
@@ -576,17 +576,17 @@ git commit -m "feat(android): gate notification auto-send mode"
 ### Task 5: Add local settings state and Android settings UI
 
 **Files:**
-- Create: 'apps/android/app/src/main/kotlin/com/agentlife/mobile/NotificationSettingsState.kt'
-- Modify: 'apps/android/app/src/main/kotlin/com/agentlife/mobile/MainActivity.kt'
-- Modify: 'apps/android/app/src/main/kotlin/com/agentlife/mobile/AgentLifeApplication.kt'
+- Create: 'apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/NotificationSettingsState.kt'
+- Modify: 'apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/MainActivity.kt'
+- Modify: 'apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/OpenAndroidIntelligenceApplication.kt'
 - Modify: 'apps/android/app/build.gradle.kts'
-- Create: 'apps/android/app/src/test/kotlin/com/agentlife/mobile/NotificationSettingsStateTest.kt'
+- Create: 'apps/android/app/src/test/kotlin/com/openandroidintelligence/mobile/NotificationSettingsStateTest.kt'
 
 **Interfaces:**
 - 'NotificationSettingsDraft(granted, deliveryMode, fieldAccess, ruleMode, packageIds)' is a pure UI draft.
 - 'NotificationSettingsCommit(policy, authorizationRevision, granted, deliveryMode)' is the normalized local mutation.
 - 'NotificationSettingsDraft.commitAgainst(snapshot): NotificationSettingsCommit' sorts package IDs with 'sortNotificationPackageIds', increments policy and authorization revisions exactly once, and rejects revision overflow.
-- 'AgentLifeApplication.notificationAuthority()' and '.notificationPolicyController()' expose the already-created process-local authority/controller without exposing mutation methods to remote code.
+- 'OpenAndroidIntelligenceApplication.notificationAuthority()' and '.notificationPolicyController()' expose the already-created process-local authority/controller without exposing mutation methods to remote code.
 
 - [ ] Step 1: Write failing pure settings tests
 
@@ -637,7 +637,7 @@ Run:
 
 ~~~sh
 cd apps/android
-./gradlew --no-daemon :app:testDebugUnitTest --tests com.agentlife.mobile.NotificationSettingsStateTest
+./gradlew --no-daemon :app:testDebugUnitTest --tests com.openandroidintelligence.mobile.NotificationSettingsStateTest
 ~~~
 
 Expected: compilation failure because the draft and commit types do not exist
@@ -647,7 +647,7 @@ and the app currently has no JUnit dependency.
 
 Add the draft/commit data classes and 'commitAgainst' implementation. Use the
 shared package sorter and construct a new 'NotificationCollectionPolicyV1' with
-the incremented policy revision. In 'AgentLifeApplication', retain the current
+the incremented policy revision. In 'OpenAndroidIntelligenceApplication', retain the current
 private authority field and add read-only accessors returning the authority and
 its local controller. Do not expose 'PairedNotificationBridgeRegistry' or any
 transport object through these accessors.
@@ -699,7 +699,7 @@ build claim.
 Run:
 
 ~~~sh
-git add -- apps/android/app/src/main/kotlin/com/agentlife/mobile/NotificationSettingsState.kt apps/android/app/src/main/kotlin/com/agentlife/mobile/MainActivity.kt apps/android/app/src/main/kotlin/com/agentlife/mobile/AgentLifeApplication.kt apps/android/app/build.gradle.kts apps/android/app/src/test/kotlin/com/agentlife/mobile/NotificationSettingsStateTest.kt
+git add -- apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/NotificationSettingsState.kt apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/MainActivity.kt apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/OpenAndroidIntelligenceApplication.kt apps/android/app/build.gradle.kts apps/android/app/src/test/kotlin/com/openandroidintelligence/mobile/NotificationSettingsStateTest.kt
 git diff --cached --name-only
 git commit -m "feat(android): add notification settings screen"
 ~~~

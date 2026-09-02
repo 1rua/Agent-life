@@ -1,7 +1,7 @@
 ---
 status: accepted
 date: 2026-08-24
-contract: agent-life-device-plugin-package
+contract: open-android-intelligence-device-plugin-package
 version: 1.0.0
 ---
 
@@ -76,7 +76,7 @@ assets/<path>                       # 可选静态资源
 签名输入为以下字节串：
 
 ```text
-UTF8("AGENT-LIFE-PLUGIN-PACKAGE-V1\n")
+UTF8("OPEN-ANDROID-INTELLIGENCE-PLUGIN-PACKAGE-V1\n")
 + canonical(manifest.json)
 + UTF8("\n")
 + canonical(files.json)
@@ -104,7 +104,7 @@ UTF8("AGENT-LIFE-PLUGIN-PACKAGE-V1\n")
   "runtime": {
     "type": "protected-wasm",
     "abiVersion": "1.0",
-    "entrypoint": "agent_life_plugin_main",
+    "entrypoint": "open_android_intelligence_plugin_main",
     "payload": "payload/plugin.wasm"
   },
   "compatibility": {
@@ -160,7 +160,7 @@ UTF8("AGENT-LIFE-PLUGIN-PACKAGE-V1\n")
 `protected-wasm`：
 
 - 载荷必须是单个通过宿主验证的 WASM 模块；
-- 只能导入 `agent_life_kernel_v1` ABI；
+- 只能导入 `open_android_intelligence_kernel_v1` ABI；
 - 禁止 WASI socket、文件系统、时钟、随机数和进程接口，所需能力由内核显式导出；
 - UI 只能来自已列入 `files.json` 的声明式 JSON。
 
@@ -177,10 +177,10 @@ UTF8("AGENT-LIFE-PLUGIN-PACKAGE-V1\n")
 {
   "type": "companion",
   "payload": "payload/companion.apk",
-  "packageName": "org.example.agentlife.companion",
+  "packageName": "org.example.openandroidintelligence.companion",
   "certificateSha256": "64-lowercase-hex-chars",
   "minVersionCode": 12,
-  "ipcContract": "agent-life-companion-v1"
+  "ipcContract": "open-android-intelligence-companion-v1"
 }
 ```
 

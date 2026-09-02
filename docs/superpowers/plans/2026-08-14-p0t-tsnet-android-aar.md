@@ -4,7 +4,7 @@
 
 **Goal:** Build a byte-reproducible, pinned Tailscale `v1.98.10` Android AAR from `third_party/tailscale`, integrate its narrow tsnet bridge into `tailnet-core`, make production composition use only `TsnetPairedBridgeTransport`, and close P0t only with complete real-device evidence.
 
-**Architecture:** The work is one sequential, three-gate delivery because every later gate consumes cryptographically identified output from the previous one. Gate A builds and verifies the AAR from immutable source and toolchain inputs. Gate B exposes only typed node/channel/path operations to Kotlin, persists node state with Android Keystore in `noBackupFilesDir`, and seals production composition against fakes or fallback networking. Gate C runs the frozen Agent Life connect protocol over a real Tailnet WSS peer and emits a secret-free, machine-validated evidence inventory for all required Android, network, lifecycle, VPN, 16 KiB, and resource cases.
+**Architecture:** The work is one sequential, three-gate delivery because every later gate consumes cryptographically identified output from the previous one. Gate A builds and verifies the AAR from immutable source and toolchain inputs. Gate B exposes only typed node/channel/path operations to Kotlin, persists node state with Android Keystore in `noBackupFilesDir`, and seals production composition against fakes or fallback networking. Gate C runs the frozen Open Android Intelligence connect protocol over a real Tailnet WSS peer and emits a secret-free, machine-validated evidence inventory for all required Android, network, lifecycle, VPN, 16 KiB, and resource cases.
 
 **Tech Stack:** Bash and Python 3 supply-chain tooling; stock Go `1.26.5`; `golang.org/x/mobile` gomobile/gobind at `v0.0.0-20240806205939-81131f6468ab`; Tailscale `v1.98.10`; `github.com/coder/websocket v1.8.12`; Android Gradle Plugin `8.9.2`; Gradle `8.12`; Kotlin `2.1.20`; Android API 34/compile SDK 35; NDK `27.2.12479018` (`r27c`); Temurin JDK `17.0.20+8`; JUnit; Android instrumentation; Node `24.18.0`; npm `11.16.0`; TypeScript `7.0.2`; Vitest `4.1.10`; `ws 8.21.3` for the P0t-only Bridge harness.
 
@@ -14,7 +14,7 @@
 
 These constraints apply to every task and are not deferred acceptance criteria:
 
-- Work from `/home/djbd/项目/Agent-life`. Preserve unrelated user changes. Never stage `third_party/tailscale` or mutate/switch its worktree.
+- Work from `/home/djbd/项目/open-android-intelligence`. Preserve unrelated user changes. Never stage `third_party/tailscale` or mutate/switch its worktree.
 - Use one implementation commit per task. Every commit message must be Chinese and follow the repository convention shown in each task.
 - Red-green-refactor is mandatory: add the named failing test, run it and record the expected failure, make only the smallest implementation change, rerun the focused test, then run the stated regression command.
 - No build or test script may download dependencies. A controller-only bootstrap command may download to `.toolchains/downloads`, verify a lock digest, and then populate the exact pinned location. Normal `build`, `verify`, Gradle `preBuild`, and evidence commands run offline.
@@ -50,7 +50,7 @@ The NDK archive digest above must be rechecked against the downloaded bytes duri
 - TCP/TLS/WSS establishment: 15 seconds; backend path ping: 10 seconds;
 - ordinary frame send/receive: 30 seconds; close/stop: 5 seconds;
 - direct 64 MiB workload: 120 seconds overall; relay workload: 600 seconds overall;
-- Android Keystore aliases: `agent_life_tailnet_state_v1` and `agent_life_tailnet_generation_v1`;
+- Android Keystore aliases: `open_android_intelligence_tailnet_state_v1` and `open_android_intelligence_tailnet_generation_v1`;
 - Android no-backup files: `tailnet/node-state-v1.aesgcm`, `tailnet/connection-generation-v1.aesgcm`, and the pairing subsystem's separately owned sanitized reconnect bundle;
 - forced-Doze observation: 15 minutes; Wi-Fi/cellular switch reconnection: at most 15 seconds after the system reports the new validated network.
 
@@ -98,14 +98,14 @@ The evidence validator must fail when any of these is absent or exceeds its limi
 - Modify `TransportContracts.kt`, `TsnetPairedBridgeTransport.kt`, and `PairedBridgeSessionCoordinator.kt` so path is backend-derived and lifecycle failure is closed.
 - Create `ProductionTailnetTransportFactory.kt` and `ProductionPairedBridgeTransport.kt` in the transport module.
 - Move `FakeUserspaceTransport.kt` from `src/main` to `src/testFixtures`; update Gradle test-fixture dependencies and all consumers.
-- Modify `AgentLifeApplication.kt` so its registry accepts only the opaque production transport returned by the production factory.
+- Modify `OpenAndroidIntelligenceApplication.kt` so its registry accepts only the opaque production transport returned by the production factory.
 - Strengthen `apps/android/tools/test_transport_boundary.py` and `apps/android/gradle/mvp-forbidden-surfaces.gradle.kts` to inspect Kotlin, generated AAR/API/ELF, manifests, APKs, and runtime classpaths.
 
 ### P0t harness and evidence
 
 - Create `p0t/bridge-harness/{package.json,tsconfig.json,src/server.ts,src/fixture.ts,test/server.test.ts}` and add the exact `ws` lock to root `package-lock.json`.
 - Create `p0t/bridge-harness/run-server.sh` to open controller-owned TLS material on inherited file descriptors without putting key bytes in arguments or environment.
-- Create `apps/android/transport/src/androidTest/kotlin/com/agentlife/transport/p0t/` tests for native load, connect/control, restore, path, and lifecycle.
+- Create `apps/android/transport/src/androidTest/kotlin/com/openandroidintelligence/transport/p0t/` tests for native load, connect/control, restore, path, and lifecycle.
 - Create `p0t/device/run-p0t.sh`, `p0t/device/provision-run-as.sh`, `p0t/device/network-scenarios.sh`, and `p0t/device/collect-evidence.py`.
 - Create `p0t/device/build-input-stream.py` to frame provisioning data entirely in memory and stream it directly to `adb run-as`.
 - Create `p0t/evidence/schema/p0t-evidence.schema.json` and `p0t/evidence/test_collect_evidence.py`.
@@ -546,7 +546,7 @@ git commit -m "新增: 构建并锁定 Tailscale Android AAR"
 - Modify: `apps/android/build.gradle.kts`
 - Modify: `apps/android/gradle/mvp-forbidden-surfaces.gradle.kts`
 - Modify: `apps/android/tools/test_transport_boundary.py`
-- Create: `apps/android/tailnet-core/src/test/kotlin/com/agentlife/tailnet/core/TsnetArtifactContractTest.kt`
+- Create: `apps/android/tailnet-core/src/test/kotlin/com/openandroidintelligence/tailnet/core/TsnetArtifactContractTest.kt`
 
 - [ ] **Step 1: Write failing Gradle/static contract tests**
 
@@ -586,7 +586,7 @@ git add apps/android/build.gradle.kts \
   apps/android/gradle/mvp-forbidden-surfaces.gradle.kts \
   apps/android/tools/test_transport_boundary.py \
   apps/android/tailnet-core/build.gradle.kts \
-  apps/android/tailnet-core/src/test/kotlin/com/agentlife/tailnet/core/TsnetArtifactContractTest.kt
+  apps/android/tailnet-core/src/test/kotlin/com/openandroidintelligence/tailnet/core/TsnetArtifactContractTest.kt
 git commit -m "新增: 将锁定 AAR 接入 tailnet-core"
 ```
 
@@ -594,18 +594,18 @@ git commit -m "新增: 将锁定 AAR 接入 tailnet-core"
 
 **Files:**
 
-- Modify: `apps/android/core-model/src/main/kotlin/com/agentlife/core/model/TransportContracts.kt`
-- Modify: `apps/android/tailnet-core/src/main/kotlin/com/agentlife/tailnet/core/VerifiedPairingTransportBinding.kt`
-- Replace: `apps/android/tailnet-core/src/main/kotlin/com/agentlife/tailnet/core/TailscaleUserspaceCore.kt`
-- Create: `apps/android/tailnet-core/src/main/kotlin/com/agentlife/tailnet/core/NativeEnrollmentSource.kt`
-- Create: `apps/android/tailnet-core/src/main/kotlin/com/agentlife/tailnet/core/AndroidTsnetBinding.kt`
-- Create: `apps/android/tailnet-core/src/test/kotlin/com/agentlife/tailnet/core/TailscaleUserspaceCoreTest.kt`
-- Create: `apps/android/tailnet-core/src/test/kotlin/com/agentlife/tailnet/core/AndroidTsnetBindingBoundaryTest.kt`
-- Modify: `apps/android/transport/src/main/kotlin/com/agentlife/transport/PairedBridgeSessionCoordinator.kt`
-- Modify: `apps/android/transport/src/test/kotlin/com/agentlife/transport/TransportBoundaryTest.kt`
-- Modify: `apps/android/app/src/main/kotlin/com/agentlife/mobile/AgentLifeApplication.kt`
-- Modify: `apps/android/notification-collector/src/test/kotlin/com/agentlife/notifications/NotificationBridgeDispatcherTest.kt`
-- Modify: `apps/android/sms-collector/src/test/kotlin/com/agentlife/sms/SmsAutoSyncCoordinatorTest.kt`
+- Modify: `apps/android/core-model/src/main/kotlin/com/openandroidintelligence/core/model/TransportContracts.kt`
+- Modify: `apps/android/tailnet-core/src/main/kotlin/com/openandroidintelligence/tailnet/core/VerifiedPairingTransportBinding.kt`
+- Replace: `apps/android/tailnet-core/src/main/kotlin/com/openandroidintelligence/tailnet/core/TailscaleUserspaceCore.kt`
+- Create: `apps/android/tailnet-core/src/main/kotlin/com/openandroidintelligence/tailnet/core/NativeEnrollmentSource.kt`
+- Create: `apps/android/tailnet-core/src/main/kotlin/com/openandroidintelligence/tailnet/core/AndroidTsnetBinding.kt`
+- Create: `apps/android/tailnet-core/src/test/kotlin/com/openandroidintelligence/tailnet/core/TailscaleUserspaceCoreTest.kt`
+- Create: `apps/android/tailnet-core/src/test/kotlin/com/openandroidintelligence/tailnet/core/AndroidTsnetBindingBoundaryTest.kt`
+- Modify: `apps/android/transport/src/main/kotlin/com/openandroidintelligence/transport/PairedBridgeSessionCoordinator.kt`
+- Modify: `apps/android/transport/src/test/kotlin/com/openandroidintelligence/transport/TransportBoundaryTest.kt`
+- Modify: `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/OpenAndroidIntelligenceApplication.kt`
+- Modify: `apps/android/notification-collector/src/test/kotlin/com/openandroidintelligence/notifications/NotificationBridgeDispatcherTest.kt`
+- Modify: `apps/android/sms-collector/src/test/kotlin/com/openandroidintelligence/sms/SmsAutoSyncCoordinatorTest.kt`
 - Modify: `apps/android/tools/test_transport_boundary.py`
 
 - [ ] **Step 1: Write failing typed-boundary and lifecycle tests**
@@ -687,13 +687,13 @@ Expected: unit, static, artifact, and Gradle checks pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add apps/android/core-model/src/main/kotlin/com/agentlife/core/model/TransportContracts.kt \
+git add apps/android/core-model/src/main/kotlin/com/openandroidintelligence/core/model/TransportContracts.kt \
   apps/android/tailnet-core/src \
-  apps/android/transport/src/main/kotlin/com/agentlife/transport/PairedBridgeSessionCoordinator.kt \
-  apps/android/transport/src/test/kotlin/com/agentlife/transport/TransportBoundaryTest.kt \
-  apps/android/app/src/main/kotlin/com/agentlife/mobile/AgentLifeApplication.kt \
-  apps/android/notification-collector/src/test/kotlin/com/agentlife/notifications/NotificationBridgeDispatcherTest.kt \
-  apps/android/sms-collector/src/test/kotlin/com/agentlife/sms/SmsAutoSyncCoordinatorTest.kt \
+  apps/android/transport/src/main/kotlin/com/openandroidintelligence/transport/PairedBridgeSessionCoordinator.kt \
+  apps/android/transport/src/test/kotlin/com/openandroidintelligence/transport/TransportBoundaryTest.kt \
+  apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/OpenAndroidIntelligenceApplication.kt \
+  apps/android/notification-collector/src/test/kotlin/com/openandroidintelligence/notifications/NotificationBridgeDispatcherTest.kt \
+  apps/android/sms-collector/src/test/kotlin/com/openandroidintelligence/sms/SmsAutoSyncCoordinatorTest.kt \
   apps/android/tools/test_transport_boundary.py
 git commit -m "重构: 使用真实 tsnet 生成绑定"
 ```
@@ -702,11 +702,11 @@ git commit -m "重构: 使用真实 tsnet 生成绑定"
 
 **Files:**
 
-- Modify: `apps/android/tailnet-core/src/main/kotlin/com/agentlife/tailnet/core/NoBackupTailnetStateStore.kt`
-- Create: `apps/android/tailnet-core/src/main/kotlin/com/agentlife/tailnet/core/AndroidKeystoreTailnetState.kt`
-- Create: `apps/android/tailnet-core/src/main/kotlin/com/agentlife/tailnet/core/FileConnectionGenerationPersistence.kt`
-- Create: `apps/android/tailnet-core/src/test/kotlin/com/agentlife/tailnet/core/NoBackupTailnetStateStoreTest.kt`
-- Create: `apps/android/tailnet-core/src/androidTest/kotlin/com/agentlife/tailnet/core/AndroidKeystoreTailnetStateTest.kt`
+- Modify: `apps/android/tailnet-core/src/main/kotlin/com/openandroidintelligence/tailnet/core/NoBackupTailnetStateStore.kt`
+- Create: `apps/android/tailnet-core/src/main/kotlin/com/openandroidintelligence/tailnet/core/AndroidKeystoreTailnetState.kt`
+- Create: `apps/android/tailnet-core/src/main/kotlin/com/openandroidintelligence/tailnet/core/FileConnectionGenerationPersistence.kt`
+- Create: `apps/android/tailnet-core/src/test/kotlin/com/openandroidintelligence/tailnet/core/NoBackupTailnetStateStoreTest.kt`
+- Create: `apps/android/tailnet-core/src/androidTest/kotlin/com/openandroidintelligence/tailnet/core/AndroidKeystoreTailnetStateTest.kt`
 - Modify: `apps/android/tailnet-core/build.gradle.kts`
 
 - [ ] **Step 1: Write failing format, durability, and failure tests**
@@ -752,17 +752,17 @@ git commit -m "新增: 持久化加密的 Tailnet 节点状态"
 
 **Files:**
 
-- Modify: `apps/android/transport/src/main/kotlin/com/agentlife/transport/TsnetPairedBridgeTransport.kt`
-- Modify: `apps/android/transport/src/main/kotlin/com/agentlife/transport/PairedBridgeSessionCoordinator.kt`
-- Create: `apps/android/transport/src/main/kotlin/com/agentlife/transport/ProductionPairedBridgeTransport.kt`
-- Create: `apps/android/transport/src/main/kotlin/com/agentlife/transport/ProductionTailnetTransportFactory.kt`
-- Move: `apps/android/transport/src/main/kotlin/com/agentlife/transport/FakeUserspaceTransport.kt` → `apps/android/transport/src/testFixtures/kotlin/com/agentlife/transport/FakeUserspaceTransport.kt`
+- Modify: `apps/android/transport/src/main/kotlin/com/openandroidintelligence/transport/TsnetPairedBridgeTransport.kt`
+- Modify: `apps/android/transport/src/main/kotlin/com/openandroidintelligence/transport/PairedBridgeSessionCoordinator.kt`
+- Create: `apps/android/transport/src/main/kotlin/com/openandroidintelligence/transport/ProductionPairedBridgeTransport.kt`
+- Create: `apps/android/transport/src/main/kotlin/com/openandroidintelligence/transport/ProductionTailnetTransportFactory.kt`
+- Move: `apps/android/transport/src/main/kotlin/com/openandroidintelligence/transport/FakeUserspaceTransport.kt` → `apps/android/transport/src/testFixtures/kotlin/com/openandroidintelligence/transport/FakeUserspaceTransport.kt`
 - Modify: `apps/android/transport/build.gradle.kts`
-- Modify: `apps/android/transport/src/test/kotlin/com/agentlife/transport/TransportBoundaryTest.kt`
+- Modify: `apps/android/transport/src/test/kotlin/com/openandroidintelligence/transport/TransportBoundaryTest.kt`
 - Modify: `apps/android/notification-collector/build.gradle.kts`
-- Modify: `apps/android/notification-collector/src/test/kotlin/com/agentlife/notifications/NotificationBridgeDispatcherTest.kt`
-- Modify: `apps/android/app/src/main/kotlin/com/agentlife/mobile/AgentLifeApplication.kt`
-- Modify: `apps/android/app/src/test/kotlin/com/agentlife/mobile/NotificationSettingsStateTest.kt`
+- Modify: `apps/android/notification-collector/src/test/kotlin/com/openandroidintelligence/notifications/NotificationBridgeDispatcherTest.kt`
+- Modify: `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/OpenAndroidIntelligenceApplication.kt`
+- Modify: `apps/android/app/src/test/kotlin/com/openandroidintelligence/mobile/NotificationSettingsStateTest.kt`
 - Modify: `apps/android/tools/test_transport_boundary.py`
 
 - [ ] **Step 1: Write failing production-composition tests**
@@ -900,11 +900,11 @@ git commit -m "新增: 实现 P0t Bridge WSS 验证器"
 **Files:**
 
 - Modify: `apps/android/transport/build.gradle.kts`
-- Create: `apps/android/transport/src/androidTest/kotlin/com/agentlife/transport/p0t/P0tInput.kt`
-- Create: `apps/android/transport/src/androidTest/kotlin/com/agentlife/transport/p0t/TsnetNativeLoadTest.kt`
-- Create: `apps/android/transport/src/androidTest/kotlin/com/agentlife/transport/p0t/TsnetPairedConnectionTest.kt`
-- Create: `apps/android/transport/src/androidTest/kotlin/com/agentlife/transport/p0t/TsnetProcessRestoreTest.kt`
-- Create: `apps/android/transport/src/androidTest/kotlin/com/agentlife/transport/p0t/TsnetFailurePathTest.kt`
+- Create: `apps/android/transport/src/androidTest/kotlin/com/openandroidintelligence/transport/p0t/P0tInput.kt`
+- Create: `apps/android/transport/src/androidTest/kotlin/com/openandroidintelligence/transport/p0t/TsnetNativeLoadTest.kt`
+- Create: `apps/android/transport/src/androidTest/kotlin/com/openandroidintelligence/transport/p0t/TsnetPairedConnectionTest.kt`
+- Create: `apps/android/transport/src/androidTest/kotlin/com/openandroidintelligence/transport/p0t/TsnetProcessRestoreTest.kt`
+- Create: `apps/android/transport/src/androidTest/kotlin/com/openandroidintelligence/transport/p0t/TsnetFailurePathTest.kt`
 - Create: `p0t/device/provision-run-as.sh`
 - Create: `p0t/device/build-input-stream.py`
 - Create: `p0t/device/run-p0t.sh`
@@ -913,7 +913,7 @@ git commit -m "新增: 实现 P0t Bridge WSS 验证器"
 
 - [ ] **Step 1: Write failing host tests for provisioning secrecy and framing**
 
-`test_provisioning.sh` replaces the bundle CLI and `adb` with recording fakes and proves that an auth-key sentinel appears only on the CLI's standard input and the standard-input stream of `adb shell run-as com.agentlife.transport.test sh -c 'umask 077; mkdir -p no_backup/p0t; cat > no_backup/p0t/input.bin'`. It must not appear in process arguments, environment, `set -x` output, temporary host files, Android shell history, Gradle properties, or generated evidence. Also test truncated framing, a failed CLI, a failed `run-as`, mode other than `0600`, wrong test package, and cleanup after interruption.
+`test_provisioning.sh` replaces the bundle CLI and `adb` with recording fakes and proves that an auth-key sentinel appears only on the CLI's standard input and the standard-input stream of `adb shell run-as com.openandroidintelligence.transport.test sh -c 'umask 077; mkdir -p no_backup/p0t; cat > no_backup/p0t/input.bin'`. It must not appear in process arguments, environment, `set -x` output, temporary host files, Android shell history, Gradle properties, or generated evidence. Also test truncated framing, a failed CLI, a failed `run-as`, mode other than `0600`, wrong test package, and cleanup after interruption.
 
 ```bash
 bash p0t/device/test_provisioning.sh
@@ -929,10 +929,10 @@ The test must not deserialize a `VerifiedPairingTransportBinding` directly. It c
 
 - [ ] **Step 3: Implement stdin-only provisioning**
 
-`provision-run-as.sh` accepts only nonsecret arguments: device serial, instrumentation package `com.agentlife.transport.test`, and a nonsecret JSON descriptor path. It gives its standard input directly to `build-input-stream.py`, which holds the key only in a mutable in-process byte buffer, invokes the native `enrollment-bundle` CLI, combines enrollment/reconnect bundles with freshly generated signed fixtures, wipes intermediate key/bundle buffers, and streams the complete container directly into:
+`provision-run-as.sh` accepts only nonsecret arguments: device serial, instrumentation package `com.openandroidintelligence.transport.test`, and a nonsecret JSON descriptor path. It gives its standard input directly to `build-input-stream.py`, which holds the key only in a mutable in-process byte buffer, invokes the native `enrollment-bundle` CLI, combines enrollment/reconnect bundles with freshly generated signed fixtures, wipes intermediate key/bundle buffers, and streams the complete container directly into:
 
 ```text
-adb -s DEVICE_SERIAL shell run-as com.agentlife.transport.test sh -c \
+adb -s DEVICE_SERIAL shell run-as com.openandroidintelligence.transport.test sh -c \
   'umask 077; mkdir -p no_backup/p0t; cat > no_backup/p0t/input.bin'
 ```
 
@@ -994,7 +994,7 @@ git commit -m "新增: 验证真实 tsnet 配对连接"
 - Create: `p0t/android-size-probe/settings.gradle.kts`
 - Create: `p0t/android-size-probe/build.gradle.kts`
 - Create: `p0t/android-size-probe/src/main/AndroidManifest.xml`
-- Create: `p0t/android-size-probe/src/main/kotlin/com/agentlife/p0t/sizeprobe/MainActivity.kt`
+- Create: `p0t/android-size-probe/src/main/kotlin/com/openandroidintelligence/p0t/sizeprobe/MainActivity.kt`
 - Create: `p0t/evidence/schema/p0t-evidence.schema.json`
 - Create: `p0t/evidence/test_collect_evidence.py`
 - Create: `docs/mvp/evidence/p0t/.gitkeep`

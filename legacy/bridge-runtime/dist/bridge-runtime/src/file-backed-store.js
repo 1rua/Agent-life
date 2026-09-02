@@ -8,14 +8,14 @@ import { BridgeServiceError, compareCodePoints } from "../../bridge-contract/src
  * boundary, while this format is only a reproducible fixture/development
  * implementation of that boundary.
  */
-export const FILE_BACKED_BRIDGE_STORE_FORMAT = "agent-life.bridge-store.file.v1";
+export const FILE_BACKED_BRIDGE_STORE_FORMAT = "open-android-intelligence.bridge-store.file.v1";
 // Version 3 adds replay associations to the closed namespace set. This local
 // fixture upgrades v1/v2 snapshots by initializing new partitions; it still
 // makes no production migration or multi-process database claim.
 export const FILE_BACKED_BRIDGE_STORE_VERSION = 3;
-const STATE_FORMAT = "agent-life.bridge-store.state.v3";
-const LEGACY_STATE_FORMAT_V2 = "agent-life.bridge-store.state.v2";
-const LEGACY_STATE_FORMAT_V1 = "agent-life.bridge-store.state.v1";
+const STATE_FORMAT = "open-android-intelligence.bridge-store.state.v3";
+const LEGACY_STATE_FORMAT_V2 = "open-android-intelligence.bridge-store.state.v2";
+const LEGACY_STATE_FORMAT_V1 = "open-android-intelligence.bridge-store.state.v1";
 const MANIFEST_FILE = "manifest.json";
 const GENERATIONS_DIR = "generations";
 const SCOPE_PATTERN = /^[a-z0-9][a-z0-9._/-]{0,127}$/;

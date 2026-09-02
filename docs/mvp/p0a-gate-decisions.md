@@ -3,7 +3,7 @@
 Status: **product decisions recorded; implementation and production gates remain
 separate**.
 
-Recorded: **2026-08-11 UTC** from the user's confirmation in the Agent Life
+Recorded: **2026-08-11 UTC** from the user's confirmation in the Open Android Intelligence
 MVP discussion. This file records product/security choices only; it does not
 approve a protocol implementation, dependency lock, Android build, P0t device
 run, Tailscale AAR, or production Bridge deployment.

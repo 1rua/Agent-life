@@ -17,7 +17,7 @@ const MEDIA_TYPES = new Set([
 ]);
 const SHA256 = /^[A-Fa-f0-9]{64}$/;
 const ID = /^[A-Za-z0-9._~-]{1,128}$/;
-const PROOF_BRAND = Symbol("agent-life.artifact.proof-verified");
+const PROOF_BRAND = Symbol("open-android-intelligence.artifact.proof-verified");
 
 export class ArtifactContractError extends Error {
   readonly code: string;

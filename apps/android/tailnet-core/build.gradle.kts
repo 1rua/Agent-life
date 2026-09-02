@@ -4,14 +4,14 @@ plugins {
 }
 
 android {
-    namespace = "com.agentlife.tailnet.core"
+    namespace = "com.openandroidintelligence.tailnet.core"
     defaultConfig {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // Fail-closed connected tests consume the authoritative ALTSNET1 blob
         // provisioned by tools/p0t-device/provision-failclosed-bundle.sh on the
         // attached device. The path is device-local and the blob is non-secret.
         testInstrumentationRunnerArguments["p0tFailClosedBundle"] =
-            "/data/local/tmp/agentlife-p0t/failclosed.bundle"
+            "/data/local/tmp/openandroidintelligence-p0t/failclosed.bundle"
     }
 }
 

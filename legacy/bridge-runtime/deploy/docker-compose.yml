@@ -6,14 +6,14 @@ services:
     init: true
     restart: unless-stopped
     environment:
-      AGENT_LIFE_RUNTIME_SOCKET: /run/agent-life/runtime.sock
-      AGENT_LIFE_TSNET_STATE_DIR: /var/lib/agent-life-ingress
-      AGENT_LIFE_TSNET_HOSTNAME: ${AGENT_LIFE_TSNET_HOSTNAME:-agent-life-bridge}
-      AGENT_LIFE_TSNET_CONTROL_URL: ${AGENT_LIFE_TSNET_CONTROL_URL:-https://controlplane.tailscale.com}
-      AGENT_LIFE_TSNET_PORT: "443"
+      OPEN_ANDROID_INTELLIGENCE_RUNTIME_SOCKET: /run/open-android-intelligence/runtime.sock
+      OPEN_ANDROID_INTELLIGENCE_TSNET_STATE_DIR: /var/lib/open-android-intelligence-ingress
+      OPEN_ANDROID_INTELLIGENCE_TSNET_HOSTNAME: ${OPEN_ANDROID_INTELLIGENCE_TSNET_HOSTNAME:-open-android-intelligence-bridge}
+      OPEN_ANDROID_INTELLIGENCE_TSNET_CONTROL_URL: ${OPEN_ANDROID_INTELLIGENCE_TSNET_CONTROL_URL:-https://controlplane.tailscale.com}
+      OPEN_ANDROID_INTELLIGENCE_TSNET_PORT: "443"
     volumes:
-      - ingress-state:/var/lib/agent-life-ingress
-      - runtime-socket:/run/agent-life
+      - ingress-state:/var/lib/open-android-intelligence-ingress
+      - runtime-socket:/run/open-android-intelligence
 
   bridge:
     build:
@@ -27,14 +27,14 @@ services:
     network_mode: "service:ingress"
     restart: unless-stopped
     environment:
-      AGENT_LIFE_DATABASE: /var/lib/agent-life-bridge/bridge.sqlite
-      AGENT_LIFE_PAIRING_PUBLIC_KEY: /var/lib/agent-life-bridge/secrets/pairing-ticket-public.pem
-      AGENT_LIFE_RUNTIME_SOCKET: /run/agent-life/runtime.sock
-      AGENT_LIFE_LEASE_TTL_MS: "60000"
+      OPEN_ANDROID_INTELLIGENCE_DATABASE: /var/lib/open-android-intelligence-bridge/bridge.sqlite
+      OPEN_ANDROID_INTELLIGENCE_PAIRING_PUBLIC_KEY: /var/lib/open-android-intelligence-bridge/secrets/pairing-ticket-public.pem
+      OPEN_ANDROID_INTELLIGENCE_RUNTIME_SOCKET: /run/open-android-intelligence/runtime.sock
+      OPEN_ANDROID_INTELLIGENCE_LEASE_TTL_MS: "60000"
     volumes:
-      - bridge-state:/var/lib/agent-life-bridge
-      - runtime-socket:/run/agent-life
-      - ./secrets/pairing-ticket-public.pem:/var/lib/agent-life-bridge/secrets/pairing-ticket-public.pem:ro
+      - bridge-state:/var/lib/open-android-intelligence-bridge
+      - runtime-socket:/run/open-android-intelligence
+      - ./secrets/pairing-ticket-public.pem:/var/lib/open-android-intelligence-bridge/secrets/pairing-ticket-public.pem:ro
 
 volumes:
   ingress-state:

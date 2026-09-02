@@ -1,6 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- 测试宿主（androidTest APK）允许的真实网络访问。注意：这只会出现在测试
-         专用 APK 的合并清单中，不改变 com.agentlife.mobile 正式 APK 的权限面；
+         专用 APK 的合并清单中，不改变 com.openandroidintelligence.mobile 正式 APK 的权限面；
          正式 APK 仍只声明 INTERNET（见 app/src/main/AndroidManifest.xml）。 -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />

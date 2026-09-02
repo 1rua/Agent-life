@@ -11,7 +11,7 @@ P0T_WRAPPER="$P0T_MODULE_ROOT/native/tsnetbridge"
 P0T_TOOLCHAINS="$P0T_REPO_ROOT/.toolchains"
 P0T_TMP="$P0T_TOOLCHAINS/tsnet-p0t"
 P0T_EVIDENCE_ROOT="$P0T_REPO_ROOT/docs/mvp/evidence/p0t"
-P0T_DEVICE_DIR="/data/local/tmp/agentlife-p0t"
+P0T_DEVICE_DIR="/data/local/tmp/openandroidintelligence-p0t"
 P0T_BUNDLE_REMOTE="$P0T_DEVICE_DIR/failclosed.bundle"
 
 P0T_SERIAL="${ANDROID_SERIAL:-${P0T_SERIAL:-}}"

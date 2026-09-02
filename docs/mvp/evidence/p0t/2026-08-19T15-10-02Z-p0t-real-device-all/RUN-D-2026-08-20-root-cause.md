@@ -29,7 +29,7 @@ DIRECT_UP_ERR="tsnet.Up: backend: invalid key: API key <redacted-consumed-key> n
 
 ## 生产修复（已应用，编译通过）
 
-- `app/src/main/kotlin/com/agentlife/mobile/AgentLifeApplication.onCreate()`：
+- `app/src/main/kotlin/com/openandroidintelligence/mobile/OpenAndroidIntelligenceApplication.onCreate()`：
   启动时 `Os.setenv("HOME", noBackupFilesDir) `与 `XDG_CONFIG_HOME` → tsnet varRoot
   可写且不备份。不加此修复，正式 App 在任何 Android 上都无法 enroll。
 - 测试侧：`P0tOfflineRealBackendInstrumentedTest.@BeforeClass` 同样先设 HOME

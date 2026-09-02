@@ -103,9 +103,9 @@ const validValues: Record<GatewaySchemaName, unknown> = {
   },
   "device.request": {
     requestId: "device_request_1",
-    capability: { id: "org.agentlife.sms.query", version: "1.0.0" },
+    capability: { id: "org.openandroidintelligence.sms.query", version: "1.0.0" },
     provider: {
-      pluginId: "org.agentlife.sms",
+      pluginId: "org.openandroidintelligence.sms",
       authorKeyId: prefixedDigest,
     },
     parameters: {},

@@ -32,7 +32,7 @@ const clock = { wallNow: () => new Date("2026-08-08T00:00:00.000Z"), monotonicNo
 const inboundWire = (): Uint8Array => {
   const payload = { challenge: CHALLENGE };
   const header = {
-    protocol_version: "1.0", message_schema: "urn:agent-life:protocol:v1:message:device_ping",
+    protocol_version: "1.0", message_schema: "urn:open-android-intelligence:protocol:v1:message:device_ping",
     message_type: "device_ping", message_id: "018f4f9a-5555-4555-8555-555555555555",
     key_id: PUBLIC.kid, direction: "app-to-bridge", sequence: "9",
     issued_at: "2026-08-08T00:00:00.000Z", expires_at: "2026-08-08T00:01:00.000Z",

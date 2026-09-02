@@ -29,7 +29,7 @@ Android Keystore 上加密被拒（详见下文“失败项”）。DIRECT/DERP 
 做法：
 1. 以固定 Go 工具链 + 固定 `cmd/enrollment-bundle` 生成**权威 ALTSNET1 fail-closed 束**
    （controlUrl=`https://127.0.0.1`，仅用于证明“无控制器时 fail closed”），推到
-   `/data/local/tmp/agentlife-p0t/failclosed.bundle`（sha256 见 `provisioning/`）。
+   `/data/local/tmp/openandroidintelligence-p0t/failclosed.bundle`（sha256 见 `provisioning/`）。
 2. 执行目标命令
    `./gradlew --no-daemon --console=plain :tailnet-core:connectedDebugAndroidTest :transport:connectedDebugAndroidTest`
    （+ 补充 `:app:connectedDebugAndroidTest`），结果 XML 见 `connected-gradle/`。
@@ -127,7 +127,7 @@ DIRECT/DERP/approval/Doze/另一 VPN 共存等行。
 - **fail-closed 直证**：对
   `unreachableControlFailsClosedWithoutVpnOrPublicFallback` 单独做了一次
   logcat 包裹的 `am instrument`（`OK (1 test)`），logcat 显示测试进程
-  `com.agentlife.tailnet.core.test` 真实启动并快速得到 fail-closed 结果，
+  `com.openandroidintelligence.tailnet.core.test` 真实启动并快速得到 fail-closed 结果，
   全程无任何 VPN/VpnService 事件；脱敏 logcat 见
   `audits/*unreachableControl*.logcat.sanitized.txt`。
   说明：控制目标为本机回环 `https://127.0.0.1:443`（拒连），native

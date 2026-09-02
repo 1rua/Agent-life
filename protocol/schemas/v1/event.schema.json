@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:agent-life:protocol:v1:event",
+  "$id": "urn:open-android-intelligence:protocol:v1:event",
   "type": "object",
   "unevaluatedProperties": false,
   "$defs": {
@@ -8,15 +8,15 @@
       "type": "object",
       "required": ["source_epoch", "occurrence_id", "record_key", "record_revision", "cursor", "captured_at", "event_kind", "source_capability", "capture_revision", "record", "loss"],
       "properties": {
-        "source_epoch": { "$ref": "urn:agent-life:protocol:v1:common#/$defs/lowercase_uuid_v4" },
-        "occurrence_id": { "$ref": "urn:agent-life:protocol:v1:common#/$defs/lowercase_uuid_v4" },
-        "record_key": { "anyOf": [{ "$ref": "urn:agent-life:protocol:v1:common#/$defs/opaque_server_id" }, { "type": "null" }] },
-        "record_revision": { "anyOf": [{ "$ref": "urn:agent-life:protocol:v1:common#/$defs/decimal_u64" }, { "type": "null" }] },
-        "cursor": { "$ref": "urn:agent-life:protocol:v1:common#/$defs/decimal_u64" },
-        "captured_at": { "$ref": "urn:agent-life:protocol:v1:common#/$defs/timestamp" },
+        "source_epoch": { "$ref": "urn:open-android-intelligence:protocol:v1:common#/$defs/lowercase_uuid_v4" },
+        "occurrence_id": { "$ref": "urn:open-android-intelligence:protocol:v1:common#/$defs/lowercase_uuid_v4" },
+        "record_key": { "anyOf": [{ "$ref": "urn:open-android-intelligence:protocol:v1:common#/$defs/opaque_server_id" }, { "type": "null" }] },
+        "record_revision": { "anyOf": [{ "$ref": "urn:open-android-intelligence:protocol:v1:common#/$defs/decimal_u64" }, { "type": "null" }] },
+        "cursor": { "$ref": "urn:open-android-intelligence:protocol:v1:common#/$defs/decimal_u64" },
+        "captured_at": { "$ref": "urn:open-android-intelligence:protocol:v1:common#/$defs/timestamp" },
         "event_kind": { "enum": ["upsert", "delete_tombstone", "loss_marker"] },
-        "source_capability": { "$ref": "urn:agent-life:protocol:v1:common#/$defs/scope" },
-        "capture_revision": { "$ref": "urn:agent-life:protocol:v1:common#/$defs/revision_snapshot" },
+        "source_capability": { "$ref": "urn:open-android-intelligence:protocol:v1:common#/$defs/scope" },
+        "capture_revision": { "$ref": "urn:open-android-intelligence:protocol:v1:common#/$defs/revision_snapshot" },
         "record": { "anyOf": [{ "type": "object" }, { "type": "null" }] },
         "loss": { "anyOf": [
           { "type": "null" },
@@ -24,8 +24,8 @@
             "type": "object",
             "required": ["lost_from_cursor", "lost_to_cursor", "reason"],
             "properties": {
-              "lost_from_cursor": { "$ref": "urn:agent-life:protocol:v1:common#/$defs/decimal_u64" },
-              "lost_to_cursor": { "$ref": "urn:agent-life:protocol:v1:common#/$defs/decimal_u64" },
+              "lost_from_cursor": { "$ref": "urn:open-android-intelligence:protocol:v1:common#/$defs/decimal_u64" },
+              "lost_to_cursor": { "$ref": "urn:open-android-intelligence:protocol:v1:common#/$defs/decimal_u64" },
               "reason": { "enum": ["queue_limit", "listener_gap"] }
             },
             "unevaluatedProperties": false
@@ -34,16 +34,16 @@
       }
     },
     "device_event": {
-      "$id": "urn:agent-life:protocol:v1:message:device_event",
+      "$id": "urn:open-android-intelligence:protocol:v1:message:device_event",
       "type": "object",
       "oneOf": [
         {
           "allOf": [
-            { "$ref": "urn:agent-life:protocol:v1:event#/$defs/event_base" },
+            { "$ref": "urn:open-android-intelligence:protocol:v1:event#/$defs/event_base" },
             { "type": "object", "properties": {
               "event_kind": { "const": "upsert" },
-              "record_key": { "$ref": "urn:agent-life:protocol:v1:common#/$defs/opaque_server_id" },
-              "record_revision": { "$ref": "urn:agent-life:protocol:v1:common#/$defs/decimal_u64" },
+              "record_key": { "$ref": "urn:open-android-intelligence:protocol:v1:common#/$defs/opaque_server_id" },
+              "record_revision": { "$ref": "urn:open-android-intelligence:protocol:v1:common#/$defs/decimal_u64" },
               "record": { "type": "object" },
               "loss": { "type": "null" }
             } }
@@ -51,11 +51,11 @@
         },
         {
           "allOf": [
-            { "$ref": "urn:agent-life:protocol:v1:event#/$defs/event_base" },
+            { "$ref": "urn:open-android-intelligence:protocol:v1:event#/$defs/event_base" },
             { "type": "object", "properties": {
               "event_kind": { "const": "delete_tombstone" },
-              "record_key": { "$ref": "urn:agent-life:protocol:v1:common#/$defs/opaque_server_id" },
-              "record_revision": { "$ref": "urn:agent-life:protocol:v1:common#/$defs/decimal_u64" },
+              "record_key": { "$ref": "urn:open-android-intelligence:protocol:v1:common#/$defs/opaque_server_id" },
+              "record_revision": { "$ref": "urn:open-android-intelligence:protocol:v1:common#/$defs/decimal_u64" },
               "record": { "type": "null" },
               "loss": { "type": "null" }
             } }
@@ -63,7 +63,7 @@
         },
         {
           "allOf": [
-            { "$ref": "urn:agent-life:protocol:v1:event#/$defs/event_base" },
+            { "$ref": "urn:open-android-intelligence:protocol:v1:event#/$defs/event_base" },
             { "type": "object", "properties": {
               "event_kind": { "const": "loss_marker" },
               "record_key": { "type": "null" },
@@ -73,8 +73,8 @@
                 "type": "object",
                 "required": ["lost_from_cursor", "lost_to_cursor", "reason"],
                 "properties": {
-                  "lost_from_cursor": { "$ref": "urn:agent-life:protocol:v1:common#/$defs/decimal_u64" },
-                  "lost_to_cursor": { "$ref": "urn:agent-life:protocol:v1:common#/$defs/decimal_u64" },
+                  "lost_from_cursor": { "$ref": "urn:open-android-intelligence:protocol:v1:common#/$defs/decimal_u64" },
+                  "lost_to_cursor": { "$ref": "urn:open-android-intelligence:protocol:v1:common#/$defs/decimal_u64" },
                   "reason": { "enum": ["queue_limit", "listener_gap"] }
                 },
                 "unevaluatedProperties": false
@@ -86,61 +86,61 @@
       "unevaluatedProperties": false
     },
     "event_ack": {
-      "$id": "urn:agent-life:protocol:v1:message:event_ack",
+      "$id": "urn:open-android-intelligence:protocol:v1:message:event_ack",
       "type": "object",
       "required": ["source_epoch", "source_capability", "highest_contiguous_cursor"],
       "properties": {
-        "source_epoch": { "$ref": "urn:agent-life:protocol:v1:common#/$defs/lowercase_uuid_v4" },
-        "source_capability": { "$ref": "urn:agent-life:protocol:v1:common#/$defs/scope" },
-        "highest_contiguous_cursor": { "$ref": "urn:agent-life:protocol:v1:common#/$defs/decimal_u64" }
+        "source_epoch": { "$ref": "urn:open-android-intelligence:protocol:v1:common#/$defs/lowercase_uuid_v4" },
+        "source_capability": { "$ref": "urn:open-android-intelligence:protocol:v1:common#/$defs/scope" },
+        "highest_contiguous_cursor": { "$ref": "urn:open-android-intelligence:protocol:v1:common#/$defs/decimal_u64" }
       },
       "unevaluatedProperties": false
     },
     "device_event_header": {
-      "$id": "urn:agent-life:protocol:v1:header:device_event",
+      "$id": "urn:open-android-intelligence:protocol:v1:header:device_event",
       "type": "object",
       "allOf": [
-        { "$ref": "urn:agent-life:protocol:v1:control-envelope#/$defs/paired_device_family_header" },
+        { "$ref": "urn:open-android-intelligence:protocol:v1:control-envelope#/$defs/paired_device_family_header" },
         { "type": "object", "properties": {
           "message_type": { "const": "device_event" },
-          "message_schema": { "const": "urn:agent-life:protocol:v1:message:device_event" },
+          "message_schema": { "const": "urn:open-android-intelligence:protocol:v1:message:device_event" },
           "direction": { "const": "app-to-bridge" }
         } }
       ],
       "unevaluatedProperties": false
     },
     "event_ack_header": {
-      "$id": "urn:agent-life:protocol:v1:header:event_ack",
+      "$id": "urn:open-android-intelligence:protocol:v1:header:event_ack",
       "type": "object",
       "allOf": [
-        { "$ref": "urn:agent-life:protocol:v1:control-envelope#/$defs/paired_device_family_header" },
+        { "$ref": "urn:open-android-intelligence:protocol:v1:control-envelope#/$defs/paired_device_family_header" },
         { "type": "object", "properties": {
           "message_type": { "const": "event_ack" },
-          "message_schema": { "const": "urn:agent-life:protocol:v1:message:event_ack" },
+          "message_schema": { "const": "urn:open-android-intelligence:protocol:v1:message:event_ack" },
           "direction": { "const": "bridge-to-app" }
         } }
       ],
       "unevaluatedProperties": false
     },
     "device_event_envelope": {
-      "$id": "urn:agent-life:protocol:v1:envelope:device_event",
+      "$id": "urn:open-android-intelligence:protocol:v1:envelope:device_event",
       "type": "object",
       "required": ["header", "payload", "signature"],
       "properties": {
-        "header": { "$ref": "urn:agent-life:protocol:v1:header:device_event" },
-        "payload": { "$ref": "urn:agent-life:protocol:v1:message:device_event" },
-        "signature": { "$ref": "urn:agent-life:protocol:v1:common#/$defs/p1363_signature" }
+        "header": { "$ref": "urn:open-android-intelligence:protocol:v1:header:device_event" },
+        "payload": { "$ref": "urn:open-android-intelligence:protocol:v1:message:device_event" },
+        "signature": { "$ref": "urn:open-android-intelligence:protocol:v1:common#/$defs/p1363_signature" }
       },
       "unevaluatedProperties": false
     },
     "event_ack_envelope": {
-      "$id": "urn:agent-life:protocol:v1:envelope:event_ack",
+      "$id": "urn:open-android-intelligence:protocol:v1:envelope:event_ack",
       "type": "object",
       "required": ["header", "payload", "signature"],
       "properties": {
-        "header": { "$ref": "urn:agent-life:protocol:v1:header:event_ack" },
-        "payload": { "$ref": "urn:agent-life:protocol:v1:message:event_ack" },
-        "signature": { "$ref": "urn:agent-life:protocol:v1:common#/$defs/p1363_signature" }
+        "header": { "$ref": "urn:open-android-intelligence:protocol:v1:header:event_ack" },
+        "payload": { "$ref": "urn:open-android-intelligence:protocol:v1:message:event_ack" },
+        "signature": { "$ref": "urn:open-android-intelligence:protocol:v1:common#/$defs/p1363_signature" }
       },
       "unevaluatedProperties": false
     }

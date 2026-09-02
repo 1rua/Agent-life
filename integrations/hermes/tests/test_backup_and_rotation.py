@@ -8,9 +8,9 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from agent_life_gateway.backup import GatewayBackupService
-from agent_life_gateway.core import GatewayError, create_gateway_core
-from agent_life_gateway.identity_rotation import IdentityRotationService
+from open_android_intelligence_gateway.backup import GatewayBackupService
+from open_android_intelligence_gateway.core import GatewayError, create_gateway_core
+from open_android_intelligence_gateway.identity_rotation import IdentityRotationService
 from test_support import (
     IdentityProofVerifierDouble,
     PasswordVerifierDouble,
@@ -75,8 +75,8 @@ def test_portable_backup_excludes_active_identity_credentials_queue_and_content(
         pairing_generation=1,
         grant_revision=1,
         risk="read",
-        capability={"id": "org.agentlife.sms.query", "version": "1.0.0"},
-        provider={"pluginId": "org.agentlife.sms", "authorKeyId": "sha256:" + "a" * 64},
+        capability={"id": "org.openandroidintelligence.sms.query", "version": "1.0.0"},
+        provider={"pluginId": "org.openandroidintelligence.sms", "authorKeyId": "sha256:" + "a" * 64},
         parameters={"query": "from:alice"},
         correlation_id="cor_device",
         now="2026-08-27T00:00:00.000Z",

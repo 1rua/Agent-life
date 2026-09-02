@@ -313,14 +313,14 @@ must distinguish host/static and JVM results from unverified device/AAR gates.
 
 The implementation plan will cover these focused changes:
 
-- `apps/android/capability-ports/src/main/kotlin/com/agentlife/capability/CapabilityProviderContracts.kt`
-- `apps/android/capability-ports/src/test/kotlin/com/agentlife/capability/...`
+- `apps/android/capability-ports/src/main/kotlin/com/openandroidintelligence/capability/CapabilityProviderContracts.kt`
+- `apps/android/capability-ports/src/test/kotlin/com/openandroidintelligence/capability/...`
 - `apps/android/sms-collector/build.gradle.kts`
-- `apps/android/sms-collector/src/main/kotlin/com/agentlife/sms/...`
-- `apps/android/sms-collector/src/test/kotlin/com/agentlife/sms/...`
-- `apps/android/encrypted-store/src/main/kotlin/com/agentlife/encrypted/store/...`
+- `apps/android/sms-collector/src/main/kotlin/com/openandroidintelligence/sms/...`
+- `apps/android/sms-collector/src/test/kotlin/com/openandroidintelligence/sms/...`
+- `apps/android/encrypted-store/src/main/kotlin/com/openandroidintelligence/encrypted/store/...`
 - `apps/android/app/src/main/AndroidManifest.xml`
-- `apps/android/app/src/main/kotlin/com/agentlife/mobile/...`
+- `apps/android/app/src/main/kotlin/com/openandroidintelligence/mobile/...`
 - `mvp-contract/schemas/v1/sms-*.schema.json`
 - `mvp-contract/src/wire-codec.ts`
 - `mvp-contract/test/...`

@@ -109,7 +109,7 @@ export function sha256B64Url(bytes) {
 }
 export function signingPreimage(domain, value) {
     parseSignatureDomain(domain);
-    const prefix = utf8Encoder.encode(`agent-life/v1/${domain}\0`);
+    const prefix = utf8Encoder.encode(`open-android-intelligence/v1/${domain}\0`);
     const canonical = canonicalBytes(value);
     const length = new Uint8Array(4);
     new DataView(length.buffer).setUint32(0, canonical.byteLength, false);

@@ -17,7 +17,7 @@ import (
 	"io"
 	"os"
 
-	bridge "agentlife/tsnetbridge/tsnetbridge"
+	bridge "openandroidintelligence/tsnetbridge/tsnetbridge"
 )
 
 const maxRecordBytes = 1 << 20

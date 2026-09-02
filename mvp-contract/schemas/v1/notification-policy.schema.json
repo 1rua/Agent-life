@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:agent-life:mvp:notification-policy:v1",
-  "title": "Agent Life notification collection policy",
+  "$id": "urn:open-android-intelligence:mvp:notification-policy:v1",
+  "title": "Open Android Intelligence notification collection policy",
   "type": "object",
   "additionalProperties": false,
   "$defs": {
@@ -21,5 +21,5 @@
     "field_access": { "type": "string", "enum": ["metadata", "content"] },
     "policy_revision": { "$ref": "#/$defs/u64" }
   },
-  "x-agent-life-order": "package_ids are strictly Unicode-code-point sorted; revisions are monotonic decimal u64"
+  "x-open-android-intelligence-order": "package_ids are strictly Unicode-code-point sorted; revisions are monotonic decimal u64"
 }

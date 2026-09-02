@@ -42,7 +42,7 @@ describe("Bridge persistence contract", () => {
       backend: "sqlite",
       driver: NODE_SQLITE_BRIDGE_DRIVER,
       status: "external-driver-required",
-      databasePath: "/var/lib/agent-life/bridge.sqlite",
+      databasePath: "/var/lib/open-android-intelligence/bridge.sqlite",
       transact: async () => undefined,
       schemaVersion: async () => 0,
       runMigration: async () => undefined,

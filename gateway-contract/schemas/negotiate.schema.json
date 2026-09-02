@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://agent-life.dev/schemas/gateway/v2/negotiate.schema.json",
+  "$id": "https://open-android-intelligence.dev/schemas/gateway/v2/negotiate.schema.json",
   "$defs": {
     "protocol": {
       "type": "object",
@@ -17,7 +17,7 @@
       "required": ["negotiationId", "protocol", "client", "features", "schemaHashes"],
       "properties": {
         "negotiationId": {
-          "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
+          "$ref": "https://open-android-intelligence.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
         },
         "protocol": { "$ref": "#/$defs/protocol" },
         "client": {
@@ -26,7 +26,7 @@
           "required": ["installationId", "appVersion", "platform", "platformApi"],
           "properties": {
             "installationId": {
-              "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
+              "$ref": "https://open-android-intelligence.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
             },
             "appVersion": { "type": "string", "minLength": 1 },
             "platform": { "const": "android" },
@@ -87,7 +87,7 @@
           "required": ["core"],
           "properties": {
             "core": {
-              "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/prefixedSha256"
+              "$ref": "https://open-android-intelligence.dev/schemas/gateway/v2/envelope.schema.json#/$defs/prefixedSha256"
             }
           }
         }
@@ -164,10 +164,10 @@
           "required": ["deploymentId", "tlsSpkiSha256"],
           "properties": {
             "deploymentId": {
-              "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
+              "$ref": "https://open-android-intelligence.dev/schemas/gateway/v2/envelope.schema.json#/$defs/opaqueId"
             },
             "tlsSpkiSha256": {
-              "$ref": "https://agent-life.dev/schemas/gateway/v2/envelope.schema.json#/$defs/prefixedSha256"
+              "$ref": "https://open-android-intelligence.dev/schemas/gateway/v2/envelope.schema.json#/$defs/prefixedSha256"
             }
           }
         }

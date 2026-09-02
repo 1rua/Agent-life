@@ -35,7 +35,7 @@ fields only through a later versioned contract amendment.
 
 | option | registry/filter contract | prerequisite before GREEN |
 |---|---|---|
-| **A — capability-specific closed filters (SELECTED)** | Every registry row points to a named closed schema. Notifications use `urn:agent-life:protocol:v1:filter:notifications_v1` with explicit package IDs and selected fields (`metadata`, `content`); other capabilities use their own minimal closed schema. | **Recorded by product owner in this turn.** Registry rows, schemas and JCS vectors MUST use the selected literal. |
+| **A — capability-specific closed filters (SELECTED)** | Every registry row points to a named closed schema. Notifications use `urn:open-android-intelligence:protocol:v1:filter:notifications_v1` with explicit package IDs and selected fields (`metadata`, `content`); other capabilities use their own minimal closed schema. | **Recorded by product owner in this turn.** Registry rows, schemas and JCS vectors MUST use the selected literal. |
 | B — generic `filter_all_v1` | Every capability accepts only `{ "kind": "all" }`, with no package/field/object selector. | Rejected for Task 6 because notification grants require per-app/per-field authorization. |
 
 The shared contract is invariant across both options: a grant always carries a
@@ -205,14 +205,14 @@ header and envelope `$id` in the named Task 6 schema document:
 
 | type | direction | domain | payload `$id` | header/envelope document |
 |---|---|---|---|---|
-| `authorization_revision_update` | `app-to-bridge` | `control/app-to-bridge` | `urn:agent-life:protocol:v1:message:authorization_revision_update` | `authorization-revision.schema.json` |
-| `authorization_revision_ack` | `bridge-to-app` | `control/bridge-to-app` | `urn:agent-life:protocol:v1:message:authorization_revision_ack` | `authorization-revision.schema.json` |
-| `data_query_grant_update` | `app-to-bridge` | `control/app-to-bridge` | `urn:agent-life:protocol:v1:message:data_query_grant_update` | `data-query-grant.schema.json` |
-| `data_query_grant_ack` | `bridge-to-app` | `control/bridge-to-app` | `urn:agent-life:protocol:v1:message:data_query_grant_ack` | `data-query-grant.schema.json` |
-| `capability_manifest` | `app-to-bridge` | `control/app-to-bridge` | `urn:agent-life:protocol:v1:message:capability_manifest` | `capability-manifest.schema.json` |
+| `authorization_revision_update` | `app-to-bridge` | `control/app-to-bridge` | `urn:open-android-intelligence:protocol:v1:message:authorization_revision_update` | `authorization-revision.schema.json` |
+| `authorization_revision_ack` | `bridge-to-app` | `control/bridge-to-app` | `urn:open-android-intelligence:protocol:v1:message:authorization_revision_ack` | `authorization-revision.schema.json` |
+| `data_query_grant_update` | `app-to-bridge` | `control/app-to-bridge` | `urn:open-android-intelligence:protocol:v1:message:data_query_grant_update` | `data-query-grant.schema.json` |
+| `data_query_grant_ack` | `bridge-to-app` | `control/bridge-to-app` | `urn:open-android-intelligence:protocol:v1:message:data_query_grant_ack` | `data-query-grant.schema.json` |
+| `capability_manifest` | `app-to-bridge` | `control/app-to-bridge` | `urn:open-android-intelligence:protocol:v1:message:capability_manifest` | `capability-manifest.schema.json` |
 
-Each header `$id` is exactly `urn:agent-life:protocol:v1:header:<message_type>`;
-each envelope `$id` is exactly `urn:agent-life:protocol:v1:envelope:<message_type>`.
+Each header `$id` is exactly `urn:open-android-intelligence:protocol:v1:header:<message_type>`;
+each envelope `$id` is exactly `urn:open-android-intelligence:protocol:v1:envelope:<message_type>`.
 Every Task 6 header uses the existing paired-device family header, therefore
 requires the common signed fields plus `device_id`, `pairing_generation` and
 `connection_generation`; every envelope has only `header`, `payload` and
@@ -260,7 +260,7 @@ export function validateCapabilityFilter(
 ```
 
 `capabilities.json` is validated by the new
-`urn:agent-life:protocol:v1:capabilities-registry` schema, recursively frozen,
+`urn:open-android-intelligence:protocol:v1:capabilities-registry` schema, recursively frozen,
 and branded once.  Both options use literal top-level fields
 `$schema`, `registry_id`, `protocol_version: "1.0"`, `registry_version: "1"`,
 `filter_policy` and a non-empty `filter_schema_ids` array.  `filter_policy` is
@@ -277,11 +277,11 @@ registry value are identical.
 The loader rejects a missing, unknown or decision-mismatched policy at startup.
 
 For the selected **capability-specific** policy, the notification closed branch
-`urn:agent-life:protocol:v1:filter:notifications_v1` in
+`urn:open-android-intelligence:protocol:v1:filter:notifications_v1` in
 `authorization.schema.json` is:
 
 ```json
-{ "$id": "urn:agent-life:protocol:v1:filter:notifications_v1", "type": "object",
+{ "$id": "urn:open-android-intelligence:protocol:v1:filter:notifications_v1", "type": "object",
   "required": ["kind", "packages", "fields"],
   "properties": {
     "kind": { "const": "notifications" },
@@ -525,7 +525,7 @@ correlation already bound to the revision state.  Adapter credential reissue
 is rejected by this reducer and remains only an adapter-generation transition.
 
 `revision-events.json` has literal top-level
-`registry_id: "urn:agent-life:protocol:v1:model:revision-events"`,
+`registry_id: "urn:open-android-intelligence:protocol:v1:model:revision-events"`,
 `protocol_version: "1.0"`, `model_version: "1"`, and one closed row per event
 above.  The row fixes allowed source lifecycle, target lifecycle, `epoch_delta`
 (`"0"` or `"1"`), `pairing_generation_delta` (`"0"` or `"1"`), and
@@ -780,8 +780,8 @@ not accidentally added to a stored-query access result.
 
 Add exactly `"zero-retention/bridge"` to `protocol/profile/v1.json` signature
 domains.  The new schema root ID is
-`urn:agent-life:protocol:v1:zero-retention-profile`; its evidence branch ID is
-`urn:agent-life:protocol:v1:zero-retention-evidence`.
+`urn:open-android-intelligence:protocol:v1:zero-retention-profile`; its evidence branch ID is
+`urn:open-android-intelligence:protocol:v1:zero-retention-evidence`.
 
 ```ts
 export type ProviderObjectObservation = "none" | "returned" | "unknown";
