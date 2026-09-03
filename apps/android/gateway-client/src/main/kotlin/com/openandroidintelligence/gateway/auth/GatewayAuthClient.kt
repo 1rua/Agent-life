@@ -79,17 +79,37 @@ class GatewayAuthClient(
         }
     }
 
-    suspend fun refresh(refreshCredential: ByteArray): SessionCredentials =
-        withContext(Dispatchers.IO) {
-            val payload = mapOf(
-                "installationId" to installationId,
-                "refreshCredential" to String(refreshCredential, Charsets.ISO_8859_1),
-            )
-            val body = postJson("/open-android-intelligence/v2/sessions/refresh", payload)
-            parseSession(body, "REFRESH_FAILED")
-        }
+    /**
+     * Rotates the session from a refresh credential.
+     *
+     * Every field `session.schema.json` makes mandatory is sent: a refresh
+     * that omits the account, device or negotiation it is bound to is not a
+     * shorter request, it is a schema-invalid one the Gateway must reject.
+     */
+    suspend fun refresh(
+        accountId: String,
+        deviceId: String,
+        negotiationId: String,
+        refreshCredential: ByteArray,
+    ): SessionCredentials = withContext(Dispatchers.IO) {
+        val payload = mapOf(
+            "negotiationId" to negotiationId,
+            "accountId" to accountId,
+            "installationId" to installationId,
+            "deviceId" to deviceId,
+            "refreshCredential" to String(refreshCredential, Charsets.ISO_8859_1),
+        )
+        val body = postJson("/open-android-intelligence/v2/sessions/refresh", payload)
+        parseSession(body, "REFRESH_FAILED")
+    }
 
-    suspend fun logout(accessToken: String, revokeRefresh: Boolean) {
+    suspend fun logout(
+        accessToken: String,
+        accountId: String,
+        deviceId: String,
+        sessionId: String,
+        revokeRefresh: Boolean,
+    ) {
         withContext(Dispatchers.IO) {
             val response = transport.execute(
                 WireRequest(
@@ -97,6 +117,13 @@ class GatewayAuthClient(
                     target = "/open-android-intelligence/v2/sessions/current?revokeRefresh=$revokeRefresh",
                     headers = listOf(
                         RawHeader("Authorization", "Bearer $accessToken"),
+                        // The Gateway has no way to name the session from the
+                        // bearer token alone; the phone states the identity it
+                        // is terminating so the server can verify it.
+                        RawHeader("X-Open-Android-Intelligence-Protocol", "2.0"),
+                        RawHeader("X-Open-Android-Intelligence-Account", accountId),
+                        RawHeader("X-Open-Android-Intelligence-Device", deviceId),
+                        RawHeader("X-Open-Android-Intelligence-Session", sessionId),
                         RawHeader("Accept", "application/json"),
                     ),
                 ),

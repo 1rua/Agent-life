@@ -69,6 +69,53 @@ class PluginKernel(
     private val registrations = ConcurrentHashMap<String, PluginRegistration>()
     private val semaphores = ConcurrentHashMap<String, Semaphore>()
 
+    @Volatile
+    private var emergencyStopped = false
+    private val emergencyStopListeners = mutableListOf<(Boolean) -> Unit>()
+
+    /**
+     * The one-way system-level cut-off behind the settings' red button.
+     *
+     * It quarantines every enabled plugin, turns developer trust mode off (its
+     * own listeners unload native code immediately), and re-checks at invoke
+     * time so a plugin already mid-flight cannot start another capability. The
+     * only way back is a process restart with a fresh, unauthorised kernel.
+     *
+     * @return how many enabled plugins were quarantined.
+     */
+    fun emergencyStop(correlationId: String): Int {
+        emergencyStopped = true
+        var stopped = 0
+        for (registration in registrations.values) {
+            if (registration.state.state == PluginState.ENABLED) {
+                registration.state.transition(PluginState.QUARANTINED)
+                stopped++
+            }
+        }
+        trustMode.disable()
+        audit.record(
+            "platform", "platform", "platform",
+            "emergency.stop", AuditOutcome.ALLOWED, correlationId,
+        )
+        synchronized(emergencyStopListeners) {
+            emergencyStopListeners.toList().forEach { it(true) }
+        }
+        return stopped
+    }
+
+    fun isEmergencyStopped(): Boolean = emergencyStopped
+
+    /**
+     * Observes the cut-off, invoked immediately on registration so a surface
+     * created after the stop cannot miss that it already happened.
+     */
+    fun onEmergencyStop(listener: (Boolean) -> Unit) {
+        synchronized(emergencyStopListeners) {
+            emergencyStopListeners += listener
+        }
+        listener(emergencyStopped)
+    }
+
     fun register(registration: PluginRegistration) {
         registrations[registration.identity.pluginId] = registration
         semaphores[registration.identity.pluginId] =
@@ -146,6 +193,15 @@ class PluginKernel(
         session: SessionConstraints,
     ): PluginResult {
         val correlationId = session.correlationId
+        // A tripped cut-off denies everything before any other term is even
+        // evaluated: the intersection cannot resurrect what the user stopped.
+        if (emergencyStopped) {
+            audit.record(
+                identity.pluginId, accountId, pairingId,
+                "invoke", AuditOutcome.DENIED, correlationId,
+            )
+            throw CapabilityDenied(capability)
+        }
         val registration = registrations[identity.pluginId]
         if (registration == null) {
             audit.record(

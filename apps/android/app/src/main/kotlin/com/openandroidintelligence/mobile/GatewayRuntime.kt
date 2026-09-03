@@ -100,7 +100,7 @@ class GatewayRuntime(
                     if (refreshCred.isNotEmpty()) {
                         runCatching {
                             keystoreCredentials.saveRefresh(profileId, refreshCred)
-                            saveLastProfile(normalized, username, profileId)
+                            saveLastProfile(normalized, username, profileId, session)
                         }
                     }
                     establish(normalized, username, profileId, session, negotiated.limits)
@@ -120,12 +120,22 @@ class GatewayRuntime(
     fun logout(revokeRefresh: Boolean) {
         val current = _phase.value as? ConnectionPhase.Connected ?: return
         val profileId = profileIdFor(current.gatewayUrl, current.username)
+        val accountId = lastAccountId ?: current.username
+        val deviceId = lastDeviceId ?: "pre-auth"
+        val sessionId = lastSessionId
         scope.launch {
-            runCatching { authClientFor(current.gatewayUrl).logout(accessTokenHolder ?: "", revokeRefresh) }
-                .onFailure { cause ->
-                    _phase.value = ConnectionPhase.Failed(errorCode(cause))
-                    return@launch
-                }
+            runCatching {
+                authClientFor(current.gatewayUrl).logout(
+                    accessToken = accessTokenHolder ?: "",
+                    accountId = accountId,
+                    deviceId = deviceId,
+                    sessionId = sessionId ?: "",
+                    revokeRefresh = revokeRefresh,
+                )
+            }.onFailure { cause ->
+                _phase.value = ConnectionPhase.Failed(errorCode(cause))
+                return@launch
+            }
             runCatching {
                 keystoreCredentials.clearRefresh(profileId)
                 clearLastProfile()
@@ -140,6 +150,12 @@ class GatewayRuntime(
         val lastUrl = prefs.getString(KEY_LAST_GATEWAY, null) ?: return
         val lastUser = prefs.getString(KEY_LAST_USER, null) ?: return
         val lastProfileId = prefs.getString(KEY_LAST_PROFILE, null) ?: return
+        val storedAccountId = prefs.getString(KEY_LAST_ACCOUNT, null) ?: return
+        val storedDeviceId = prefs.getString(KEY_LAST_DEVICE, null) ?: return
+        val storedSessionId = prefs.getString(KEY_LAST_SESSION, null)
+        lastAccountId = storedAccountId
+        lastDeviceId = storedDeviceId
+        lastSessionId = storedSessionId
 
         val refreshBytes = runCatching { keystoreCredentials.loadRefresh(lastProfileId) }.getOrNull() ?: return
         if (refreshBytes.isEmpty()) return
@@ -154,10 +170,22 @@ class GatewayRuntime(
 
             _phase.value = ConnectionPhase.Authenticating
             val session = runCatching {
-                auth.refresh(refreshBytes)
-            }.getOrElse {
-                keystoreCredentials.clearRefresh(lastProfileId)
-                clearLastProfile()
+                auth.refresh(
+                    accountId = storedAccountId,
+                    deviceId = storedDeviceId,
+                    negotiationId = negotiated.negotiationId,
+                    refreshCredential = refreshBytes,
+                )
+            }.getOrElse { cause ->
+                // Only an explicit Gateway refusal may destroy the local
+                // credential. A 404 from an older Gateway build, a 5xx or a
+                // network drop says nothing about whether the stored refresh
+                // credential is still valid: wiping it here would turn a
+                // recoverable outage into a permanent logout.
+                if (credentialRevoked(cause)) {
+                    keystoreCredentials.clearRefresh(lastProfileId)
+                    clearLastProfile()
+                }
                 _phase.value = ConnectionPhase.Disconnected
                 return@launch
             }
@@ -170,6 +198,18 @@ class GatewayRuntime(
             }
             establish(lastUrl, lastUser, lastProfileId, session, negotiated.limits)
         }
+    }
+
+    /**
+     * Whether the Gateway explicitly refused the credential.
+     *
+     * `GatewayAuthClient` surfaces `AUTHENTICATION_FAILED:<code-or-status>`, so
+     * the decisive part is what follows the last colon.
+     */
+    private fun credentialRevoked(cause: Throwable): Boolean {
+        val text = cause.message ?: return false
+        if (text.contains("REFRESH_REUSED")) return true
+        return text.substringAfterLast(':').trim().toIntOrNull() in setOf(401, 403)
     }
 
     private fun establish(
@@ -197,6 +237,9 @@ class GatewayRuntime(
         val repository = GatewayConversationRepository(conversationClient) { activeThread.get() }
         val catalogRepository = GatewayCommandCatalogRepository(CommandCatalogClient(http))
         accessTokenHolder = session.accessToken
+        lastAccountId = session.accountId
+        lastDeviceId = session.deviceId
+        lastSessionId = session.sessionId
 
         val attachmentTransport = HttpAttachmentTransport(http)
         val uploader = AttachmentUploader(attachmentTransport)
@@ -259,6 +302,11 @@ class GatewayRuntime(
 
     private var accessTokenHolder: String? = null
 
+    /** The session identity of the last successful login, for refresh/logout. */
+    private var lastAccountId: String? = null
+    private var lastDeviceId: String? = null
+    private var lastSessionId: String? = null
+
     private fun installationId(): String {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         return prefs.getString(KEY_INSTALL, null) ?: "install_" + newToken().also {
@@ -266,13 +314,19 @@ class GatewayRuntime(
         }
     }
 
-    private fun saveLastProfile(gatewayUrl: String, username: String, profileId: String) {
+    private fun saveLastProfile(gatewayUrl: String, username: String, profileId: String, session: SessionCredentials) {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
             .putString(KEY_LAST_GATEWAY, gatewayUrl)
             .putString(KEY_LAST_USER, username)
             .putString(KEY_LAST_PROFILE, profileId)
+            .putString(KEY_LAST_ACCOUNT, session.accountId)
+            .putString(KEY_LAST_DEVICE, session.deviceId)
+            .putString(KEY_LAST_SESSION, session.sessionId)
             .apply()
+        lastAccountId = session.accountId
+        lastDeviceId = session.deviceId
+        lastSessionId = session.sessionId
     }
 
     private fun clearLastProfile() {
@@ -281,7 +335,13 @@ class GatewayRuntime(
             .remove(KEY_LAST_GATEWAY)
             .remove(KEY_LAST_USER)
             .remove(KEY_LAST_PROFILE)
+            .remove(KEY_LAST_ACCOUNT)
+            .remove(KEY_LAST_DEVICE)
+            .remove(KEY_LAST_SESSION)
             .apply()
+        lastAccountId = null
+        lastDeviceId = null
+        lastSessionId = null
     }
 
     private fun profileIdFor(gatewayUrl: String, username: String): String =
@@ -300,5 +360,8 @@ class GatewayRuntime(
         const val KEY_LAST_GATEWAY = "last_gateway_url"
         const val KEY_LAST_USER = "last_username"
         const val KEY_LAST_PROFILE = "last_profile_id"
+        const val KEY_LAST_ACCOUNT = "last_account_id"
+        const val KEY_LAST_DEVICE = "last_device_id"
+        const val KEY_LAST_SESSION = "last_session_id"
     }
 }

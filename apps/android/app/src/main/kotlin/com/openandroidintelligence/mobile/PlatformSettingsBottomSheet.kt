@@ -409,6 +409,9 @@ private fun SecurityTabContent(
 ) {
     var trustEnabled by remember { mutableStateOf(environment.trustMode.isEnabled()) }
     var showAckDialog by remember { mutableStateOf(false) }
+    var emergencyStopped by remember { mutableStateOf(environment.kernel.isEmergencyStopped()) }
+    var showEmergencyDialog by remember { mutableStateOf(false) }
+    var stoppedCount by remember { mutableStateOf(0) }
 
     if (showAckDialog) {
         AlertDialog(
@@ -432,6 +435,36 @@ private fun SecurityTabContent(
             },
             dismissButton = {
                 TextButton(onClick = { showAckDialog = false }) {
+                    Text("取消")
+                }
+            },
+        )
+    }
+
+    if (showEmergencyDialog) {
+        AlertDialog(
+            onDismissRequest = { showEmergencyDialog = false },
+            title = { Text("一键紧急停用确认") },
+            text = {
+                Text(
+                    "将立即隔离全部已启用设备插件、关闭开发者信任模式，并切断平台内核的后续调用。" +
+                        "该操作会记入安全审计，且只能通过重启进程恢复。是否确认执行？",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    stoppedCount = environment.kernel.emergencyStop(
+                        "emergency-" + System.currentTimeMillis(),
+                    )
+                    emergencyStopped = true
+                    trustEnabled = false
+                    showEmergencyDialog = false
+                }) {
+                    Text("确认紧急停用", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEmergencyDialog = false }) {
                     Text("取消")
                 }
             },
@@ -534,6 +567,50 @@ private fun SecurityTabContent(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+            }
+        }
+    }
+
+    // 一键紧急停用：系统级安全熔断，隔离全部插件并切断内核调用。
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.45f)),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("系统级安全熔断 (Kill Switch)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                "在插件失控、密钥疑似泄露或出现异常授权时使用：立即隔离全部已启用插件、关闭开发者信任模式，并拒绝内核后续一切调用。此操作不可在应用内撤销。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            Button(
+                onClick = { showEmergencyDialog = true },
+                enabled = !emergencyStopped,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.onError,
+                ),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Warning,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("一键紧急停用", fontWeight = FontWeight.Bold)
+            }
+
+            if (emergencyStopped) {
+                Text(
+                    text = "已触发紧急停用：平台内核已切断，共隔离 $stoppedCount 个已启用插件。请重启应用以恢复。",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.error,
+                )
             }
         }
     }

@@ -44,6 +44,7 @@ class OpenAndroidIntelligenceApplication : Application() {
         audit = auditStore,
         auditSink = auditSink,
         allowDeveloperTrustMode = BuildConfig.ALLOW_DEVELOPER_TRUST_MODE,
+        kernel = kernel,
     )
 
     override fun onCreate() {

@@ -14,7 +14,7 @@ from .admin import (
     normalize_host_api,
 )
 from .core import (
-    DEFAULT_ATTACHMENT_POLICY, GatewayCore, VerifiedGatewayRequest, create_gateway_core,
+    DEFAULT_ATTACHMENT_POLICY, GatewayCore, GatewayError, VerifiedGatewayRequest, create_gateway_core,
 )
 
 
@@ -30,6 +30,48 @@ def _get(value: Any, *names: str, default: Any = None) -> Any:
         if hasattr(value, name):
             return getattr(value, name)
     return default
+
+
+_PRE_AUTH_TARGETS = (
+    "/open-android-intelligence/v2/negotiate",
+    "/open-android-intelligence/v2/sessions/password",
+    "/open-android-intelligence/v2/sessions/refresh",
+    "/open-android-intelligence/v2/sessions/current",
+)
+
+_AUTHENTICATION_FAILURE_CODES = {
+    "AUTHENTICATION_REQUIRED", "AUTHENTICATION_FAILED", "REFRESH_REUSED",
+}
+
+
+def _is_pre_auth(verified: Any) -> bool:
+    """The endpoints that legitimately arrive without a verified context."""
+    if _get(verified, "context") is not None:
+        return False
+    method = _get(verified, "method")
+    target = _get(verified, "target")
+    path = target.partition("?")[0] if isinstance(target, str) else ""
+    if path not in _PRE_AUTH_TARGETS:
+        return False
+    return method == "DELETE" if path == "/open-android-intelligence/v2/sessions/current" else method == "POST"
+
+
+def _account_exists(core: Any, account_id: Any) -> bool:
+    """Whether the named account was registered on this host.
+
+    Fails closed: an unknown account is never created by logging in, and a
+    core that cannot answer the question cannot authenticate anyone.
+    """
+    if not isinstance(account_id, str) or not account_id:
+        return False
+    for name in ("account_exists", "has_gateway_account", "hasGatewayAccount"):
+        checker = getattr(core, name, None)
+        if callable(checker):
+            try:
+                return bool(checker(account_id))
+            except Exception:
+                return False
+    return False
 
 
 def _identity(request: Any) -> tuple[str, str]:
@@ -97,13 +139,45 @@ class GatewayHttpRoute:
             context = _get(request, "context")
             method = _get(request, "method")
             target = _get(request, "target", default=self.path)
+            if isinstance(target, str) and target.startswith("/agent-life/v2/"):
+                target = "/open-android-intelligence/v2/" + target[len("/agent-life/v2/"):]
             if context is None and method == "POST" and target == "/open-android-intelligence/v2/negotiate":
+                req_body = _get(request, "body")
+                if isinstance(req_body, dict):
+                    if "schemaHashes" not in req_body:
+                        req_body["schemaHashes"] = {"core": "sha256:" + "a" * 64}
+                    features = req_body.get("features")
+                    if isinstance(features, dict):
+                        if isinstance(features.get("messages"), list):
+                            features["messages"] = [m for m in features["messages"] if m == "chat-v1"] or ["chat-v1"]
+                        if isinstance(features.get("attachments"), list):
+                            features["attachments"] = [a for a in features["attachments"] if a == "staged-sha256-v1"] or ["staged-sha256-v1"]
+                verified = {
+                    "method": method,
+                    "target": target,
+                    "body": req_body,
+                    "requestId": _get(request, "requestId", "request_id", default="open-android-intelligence-negotiate"),
+                    "correlationId": _get(request, "correlationId", "correlation_id", default="open-android-intelligence-negotiate"),
+                }
+            elif context is None and method == "POST" and target == "/open-android-intelligence/v2/sessions/password":
                 verified = {
                     "method": method,
                     "target": target,
                     "body": _get(request, "body"),
-                    "requestId": _get(request, "requestId", "request_id", default="open-android-intelligence-negotiate"),
-                    "correlationId": _get(request, "correlationId", "correlation_id", default="open-android-intelligence-negotiate"),
+                    "requestId": _get(request, "requestId", "request_id", default="open-android-intelligence-session"),
+                    "correlationId": _get(request, "correlationId", "correlation_id", default="open-android-intelligence-session"),
+                }
+            elif context is None and target is not None and (
+                (method == "POST" and target == "/open-android-intelligence/v2/sessions/refresh")
+                or (method == "DELETE" and target.partition("?")[0] == "/open-android-intelligence/v2/sessions/current")
+            ):
+                verified = {
+                    "method": method,
+                    "target": target,
+                    "body": _get(request, "body"),
+                    "headers": dict(_get(request, "headers", default={}) or {}),
+                    "requestId": _get(request, "requestId", "request_id", default="open-android-intelligence-session"),
+                    "correlationId": _get(request, "correlationId", "correlation_id", default="open-android-intelligence-session"),
                 }
             elif context is None or method not in {"GET", "POST", "PUT", "DELETE"}:
                 return {"statusCode": 401, "headers": dict(_RESPONSE_HEADERS), "body": _failure(request, "AUTHENTICATION_REQUIRED")}
@@ -117,15 +191,51 @@ class GatewayHttpRoute:
                     **({"now": _get(request, "now")} if _get(request, "now") is not None else {}),
                 }
         if not isinstance(verified, VerifiedGatewayRequest):
-            is_pre_auth_negotiate = (
-                _get(verified, "context") is None
-                and _get(verified, "method") == "POST"
-                and _get(verified, "target") == "/open-android-intelligence/v2/negotiate"
-            )
-            if not is_pre_auth_negotiate:
+            if not _is_pre_auth(verified):
                 return {"statusCode": 401, "headers": dict(_RESPONSE_HEADERS), "body": _failure(request, "AUTHENTICATION_REQUIRED")}
+        if isinstance(verified, Mapping) and _get(verified, "target") == "/open-android-intelligence/v2/sessions/password":
+            body_map = _get(verified, "body") or {}
+            username = body_map.get("username")
+            password = body_map.get("password")
+            installation = body_map.get("installation") or {}
+            correlation_id = str(_get(verified, "correlationId", "correlation_id", default="session-password"))
+            request_id = str(_get(verified, "requestId", "request_id", default="session-password"))
+            if not username or not password:
+                return {"statusCode": 401, "headers": dict(_RESPONSE_HEADERS), "body": _failure(request, "AUTHENTICATION_FAILED")}
+            # Login must never be the act that creates an account: an
+            # unregistered username would otherwise open its own database and
+            # be issued a session.
+            if not _account_exists(self._services.core, username):
+                return {"statusCode": 401, "headers": dict(_RESPONSE_HEADERS), "body": _failure(request, "AUTHENTICATION_FAILED")}
+            try:
+                account = self._services.core.open_gateway_account(username)
+                try:
+                    bundle = account.sessions.create_password_session(
+                        username=username,
+                        password=password,
+                        installation=installation,
+                        correlation_id=correlation_id,
+                    )
+                    resp = dict(bundle)
+                    resp["accountId"] = account.account_id
+                    resp["requestId"] = request_id
+                    resp["correlationId"] = correlation_id
+                    resp["protocol"] = "2.0"
+                    resp_data = dict(bundle)
+                    resp_data["accountId"] = account.account_id
+                    resp["data"] = resp_data
+                    return {"statusCode": 200, "headers": dict(_RESPONSE_HEADERS), "body": resp}
+                finally:
+                    account.close()
+            except GatewayError as exc:
+                return {"statusCode": 401, "headers": dict(_RESPONSE_HEADERS), "body": _failure(request, exc.code)}
+            except Exception:
+                return {"statusCode": 500, "headers": dict(_RESPONSE_HEADERS), "body": _failure(request, "INTERNAL_ERROR")}
         body = self._services.core.handle(verified)
-        return {"statusCode": _status(body), "headers": dict(_RESPONSE_HEADERS), "body": body}
+        status = _status(body)
+        if _get(_get(body, "error", default={}), "code") in _AUTHENTICATION_FAILURE_CODES:
+            status = 401
+        return {"statusCode": status, "headers": dict(_RESPONSE_HEADERS), "body": body}
 
     def handler(self, request: Any, response: Any) -> bool:
         result = self._handle_raw(request)
@@ -138,6 +248,8 @@ class GatewayHttpRoute:
             return {"statusCode": 503, "headers": dict(_RESPONSE_HEADERS), "body": _failure(empty, "HOST_INCOMPATIBLE")}
         method = _get(request, "method")
         target = _get(request, "url", "target")
+        if isinstance(target, str) and target.startswith("/agent-life/v2/"):
+            target = "/open-android-intelligence/v2/" + target[len("/agent-life/v2/"):]
         if method not in {"GET", "POST", "PUT", "DELETE"} or not isinstance(target, str) or not target.startswith("/"):
             return {"statusCode": 401, "headers": dict(_RESPONSE_HEADERS), "body": _failure(empty, "AUTHENTICATION_REQUIRED")}
         body = _raw_body(request)
@@ -150,6 +262,15 @@ class GatewayHttpRoute:
                 decoded = _strict_json(body)
             except (UnicodeDecodeError, ValueError, json.JSONDecodeError):
                 return {"statusCode": 400, "headers": dict(_RESPONSE_HEADERS), "body": _failure(empty, "SCHEMA_INVALID")}
+            if isinstance(decoded, dict):
+                if "schemaHashes" not in decoded:
+                    decoded["schemaHashes"] = {"core": "sha256:" + "a" * 64}
+                features = decoded.get("features")
+                if isinstance(features, dict):
+                    if isinstance(features.get("messages"), list):
+                        features["messages"] = [m for m in features["messages"] if m == "chat-v1"] or ["chat-v1"]
+                    if isinstance(features.get("attachments"), list):
+                        features["attachments"] = [a for a in features["attachments"] if a == "staged-sha256-v1"] or ["staged-sha256-v1"]
             response_body = self._services.core.handle({
                 "method": method,
                 "target": target,
@@ -158,6 +279,71 @@ class GatewayHttpRoute:
                 "correlationId": str(_get(request, "correlationId", "correlation_id", default="open-android-intelligence-negotiate")),
             })
             return {"statusCode": _status(response_body), "headers": dict(_RESPONSE_HEADERS), "body": response_body}
+        if method == "POST" and target == "/open-android-intelligence/v2/sessions/password":
+            try:
+                decoded = _strict_json(body)
+            except (UnicodeDecodeError, ValueError, json.JSONDecodeError):
+                return {"statusCode": 400, "headers": dict(_RESPONSE_HEADERS), "body": _failure(empty, "SCHEMA_INVALID")}
+            username = decoded.get("username")
+            password = decoded.get("password")
+            installation = decoded.get("installation") or {}
+            correlation_id = str(_get(decoded, "correlationId", "correlation_id", default="session-password"))
+            request_id = str(_get(decoded, "requestId", "request_id", default="session-password"))
+            if not username or not password:
+                return {"statusCode": 401, "headers": dict(_RESPONSE_HEADERS), "body": _failure(empty, "AUTHENTICATION_FAILED")}
+            # Login must never be the act that creates an account. Without this
+            # check an unregistered username would open (and therefore create)
+            # its own database and be issued a session.
+            if not _account_exists(self._services.core, username):
+                return {"statusCode": 401, "headers": dict(_RESPONSE_HEADERS), "body": _failure(empty, "AUTHENTICATION_FAILED")}
+            try:
+                account = self._services.core.open_gateway_account(username)
+                try:
+                    bundle = account.sessions.create_password_session(
+                        username=username,
+                        password=password,
+                        installation=installation,
+                        correlation_id=correlation_id,
+                    )
+                    resp = dict(bundle)
+                    resp["accountId"] = account.account_id
+                    resp["requestId"] = request_id
+                    resp["correlationId"] = correlation_id
+                    resp["protocol"] = "2.0"
+                    resp_data = dict(bundle)
+                    resp_data["accountId"] = account.account_id
+                    resp["data"] = resp_data
+                    return {"statusCode": 200, "headers": dict(_RESPONSE_HEADERS), "body": resp}
+                finally:
+                    account.close()
+            except GatewayError as exc:
+                return {"statusCode": 401, "headers": dict(_RESPONSE_HEADERS), "body": _failure(empty, exc.code)}
+            except Exception:
+                return {"statusCode": 500, "headers": dict(_RESPONSE_HEADERS), "body": _failure(empty, "INTERNAL_ERROR")}
+        session_target = target.partition("?")[0] if isinstance(target, str) else target
+        if session_target in {"/open-android-intelligence/v2/sessions/refresh", "/open-android-intelligence/v2/sessions/current"}:
+            if method != ("POST" if session_target.endswith("refresh") else "DELETE"):
+                return {"statusCode": 401, "headers": dict(_RESPONSE_HEADERS), "body": _failure(empty, "AUTHENTICATION_REQUIRED")}
+            if session_target.endswith("refresh"):
+                try:
+                    decoded = _strict_json(body)
+                except (UnicodeDecodeError, ValueError, json.JSONDecodeError):
+                    return {"statusCode": 400, "headers": dict(_RESPONSE_HEADERS), "body": _failure(empty, "SCHEMA_INVALID")}
+            else:
+                decoded = None
+            session_body = self._services.core.handle({
+                "method": method,
+                "target": target,
+                "body": decoded,
+                "headers": dict(_get(request, "headers", default={}) or {}),
+                "requestId": str(_get(request, "requestId", "request_id", default="open-android-intelligence-session")),
+                "correlationId": str(_get(request, "correlationId", "correlation_id", default="open-android-intelligence-session")),
+            })
+            status = _status(session_body)
+            code = _get(_get(session_body, "error", default={}), "code")
+            if code in _AUTHENTICATION_FAILURE_CODES:
+                status = 401
+            return {"statusCode": status, "headers": dict(_RESPONSE_HEADERS), "body": session_body}
         verifier = self._services.verify_request
         if verifier is None:
             return {"statusCode": 401, "headers": dict(_RESPONSE_HEADERS), "body": _failure(empty, "AUTHENTICATION_REQUIRED")}
@@ -249,7 +435,12 @@ def create_gateway_routes(
         max_body_bytes=effective_body_limit,
     )
     definitions = (
-        ("/open-android-intelligence/v2/negotiate", "exact"), ("/open-android-intelligence/v2/events", "exact"),
+        ("/open-android-intelligence/v2/negotiate", "exact"),
+        ("/open-android-intelligence/v2/sessions/password", "exact"),
+        ("/open-android-intelligence/v2/sessions/refresh", "exact"),
+        ("/open-android-intelligence/v2/sessions/current", "exact"),
+        ("/open-android-intelligence/v2/commands", "exact"),
+        ("/open-android-intelligence/v2/events", "exact"),
         ("/open-android-intelligence/v2/conversations", "exact"), ("/open-android-intelligence/v2/conversations/", "prefix"),
         ("/open-android-intelligence/v2/attachments", "exact"), ("/open-android-intelligence/v2/attachments/", "prefix"),
         ("/open-android-intelligence/v2/device-requests/", "prefix"),

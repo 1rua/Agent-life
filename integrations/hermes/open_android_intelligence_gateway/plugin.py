@@ -14,6 +14,12 @@ from .admin import (
     create_admin_service,
     normalize_host_api,
 )
+from .adapter import (
+    GatewayRequestVerifier,
+    LocalCredentialVerifier,
+    OpenAndroidPlatformAdapter,
+    create_gateway_request_verifier,
+)
 from .core import GatewayCore, create_gateway_core
 from .http import EXPOSURE_MODES, GatewayExposure, create_gateway_exposure
 
@@ -147,20 +153,30 @@ def compose_gateway_services(ctx: Any) -> GatewayServices:
     host_version = _attr(ctx, "host_version", "hostVersion", default=None)
     core = _attr(ctx, "gateway_core", "gatewayCore", default=None)
     if core is None:
+        verifier = _attr(ctx, "credential_verifier", "credentialVerifier", default=None)
+        if verifier is None:
+            verifier = LocalCredentialVerifier()
         core = create_gateway_core(
             storage_root=_storage_root(ctx),
             secret_store=_attr(ctx, "secret_store", "secretStore", default=None),
             contract_root=_attr(ctx, "contract_root", "contractRoot", default=None),
-            credential_verifier=_attr(ctx, "credential_verifier", "credentialVerifier", default=None),
+            credential_verifier=verifier,
         )
     admin = create_admin_service(core=core, host_version=host_version, host_api=host_api)
     config = _attr(ctx, "plugin_config", "pluginConfig", default={}) or {}
     mode = config.get("exposureMode", "host-route") if isinstance(config, Mapping) else "host-route"
     if mode not in EXPOSURE_MODES:
         mode = "host-route"
+    verify_request = _attr(ctx, "verify_request", "verifyRequest", default=None)
+    if verify_request is None:
+        # Without a verifier the HTTP boundary answers every authenticated
+        # request with 401, so the platform would be unusable. The host may
+        # still supply its own seam; this is the reference implementation that
+        # checks the device signature the phone actually sends.
+        verify_request = create_gateway_request_verifier(core)
     exposure = create_gateway_exposure(
         mode, core=core, host_version=host_version, host_api=host_api,
-        verify_request=_attr(ctx, "verify_request", "verifyRequest", default=None),
+        verify_request=verify_request,
         max_body_bytes=_attr(ctx, "max_body_bytes", "maxBodyBytes", default=None),
     )
     return GatewayServices(core, admin, exposure)
@@ -182,7 +198,7 @@ def register(ctx: Any) -> None:
                 register_plat(gateway_platform)
             else:
                 def _build_adapter(config: Any) -> Any:
-                    return gateway_platform
+                    return OpenAndroidPlatformAdapter(config, services)
 
                 def _check_deps() -> bool:
                     return True
@@ -198,6 +214,17 @@ def register(ctx: Any) -> None:
                     print("    2. 查看运行状态: hermes open-android-intelligence status")
                     print("  随后在 Android 手机端的 Open Android Intelligence App 中输入 Gateway 地址与账号凭据即可完成配对。\n")
 
+                register_plat(
+                    name="open_android",
+                    label="Open Android Intelligence (Gateway v2)",
+                    adapter_factory=_build_adapter,
+                    check_fn=_check_deps,
+                    is_connected=_is_connected,
+                    validate_config=_is_connected,
+                    setup_fn=_setup_fn,
+                    install_hint="",
+                    emoji="📱",
+                )
                 register_plat(
                     name="open_android_intelligence",
                     label="Open Android Intelligence Gateway",
@@ -336,6 +363,7 @@ HERMES_PLUGIN = {
 
 
 __all__ = [
-    "AdminSurface", "GatewayPlatform", "GatewayServices", "HermesPluginContext", "HERMES_PLUGIN", "HERMES_PLUGIN_MANIFEST",
-    "compose_gateway_services", "register",
+    "AdminSurface", "GatewayPlatform", "GatewayRequestVerifier", "GatewayServices",
+    "HermesPluginContext", "HERMES_PLUGIN", "HERMES_PLUGIN_MANIFEST",
+    "compose_gateway_services", "create_gateway_request_verifier", "register",
 ]

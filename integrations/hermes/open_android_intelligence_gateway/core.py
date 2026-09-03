@@ -744,6 +744,42 @@ def _request_body(request: Any) -> Any:
     return _value(request, "body", default=None)
 
 
+def _request_headers(request: Any) -> dict[str, str]:
+    """Case-folded headers of a pre-auth request, last value winning per name."""
+    headers = _value(request, "headers")
+    if headers is None:
+        return {}
+    if not isinstance(headers, Mapping):
+        return {}
+    return {str(name).lower(): str(value) for name, value in headers.items()}
+
+
+def _bearer_token(headers: Mapping[str, str]) -> str | None:
+    authorization = headers.get("authorization")
+    if not isinstance(authorization, str):
+        return None
+    scheme, separator, token = authorization.partition(" ")
+    if not separator or scheme.strip().lower() != "bearer":
+        return None
+    token = token.strip()
+    return token or None
+
+
+def _query_value(target: Any, name: str) -> str | None:
+    if not isinstance(target, str):
+        return None
+    query = target.partition("?")[2]
+    for item in query.split("&") if query else []:
+        key, equals, value = item.partition("=")
+        if key == name and equals:
+            return value
+    return None
+
+
+def _query_flag(target: Any, name: str) -> bool:
+    return (_query_value(target, name) or "").strip().lower() == "true"
+
+
 def _request_now(request: Any) -> datetime:
     return _now(_value(request, "now", default=None))
 
@@ -806,6 +842,13 @@ class AccountStore:
               installation_id TEXT NOT NULL, device_id TEXT NOT NULL,
               access_token_hash TEXT, status TEXT NOT NULL,
               created_at TEXT NOT NULL, expires_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS device_keys (
+              device_id TEXT PRIMARY KEY NOT NULL,
+              installation_id TEXT NOT NULL, public_key TEXT NOT NULL,
+              pairing_generation INTEGER NOT NULL DEFAULT 1,
+              grant_revision INTEGER NOT NULL DEFAULT 1,
+              registered_at TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS idempotency_ledger (
               device_id TEXT NOT NULL, request_id TEXT NOT NULL,
@@ -1863,6 +1906,7 @@ class SessionService:
         current = _now(now)
         with self.store.transaction():
             bundle = self._issue(installation_id, f"dev_{uuid.uuid4()}", current)
+            self._register_device_key(bundle["deviceId"], installation_id, device_public_key, current)
             self.audit.append(
                 "session.password.created",
                 {"accountId": self.account_id, "deviceId": bundle["deviceId"], "installationId": installation_id},
@@ -1911,6 +1955,74 @@ class SessionService:
         if bundle is None:
             raise GatewayError("AUTHENTICATION_FAILED")
         return bundle
+
+    def register_device_key(
+        self, device_id: str, installation_id: str, public_key: str,
+        now: datetime | str | None = None,
+    ) -> None:
+        self._register_device_key(device_id, installation_id, public_key, _now(now))
+
+    def _register_device_key(self, device_id: str, installation_id: str, public_key: str, current: datetime) -> None:
+        """Binds the Ed25519 public key a device proved at login.
+
+        The key is the only thing that makes a later request signature
+        checkable, so it is written in the same transaction that issues the
+        session: a session whose key was never recorded cannot be used.
+        """
+        self.store.database.execute(
+            "INSERT INTO device_keys(device_id, installation_id, public_key, pairing_generation, grant_revision, registered_at) "
+            "VALUES (?, ?, ?, 1, 1, ?) "
+            "ON CONFLICT(device_id) DO UPDATE SET "
+            "installation_id = excluded.installation_id, public_key = excluded.public_key, registered_at = excluded.registered_at",
+            (device_id, installation_id, public_key, iso_millis(current)),
+        )
+
+    def resolve_session(
+        self, access_token: str, session_id: str, device_id: str,
+        now: datetime | str | None = None,
+    ) -> dict[str, Any] | None:
+        """The verified-request facts behind one live access session.
+
+        Returns None instead of raising: the caller is an authentication seam
+        that must fail closed without distinguishing "no such session" from
+        "expired" to the requester.
+        """
+        row = self.store.database.execute(
+            "SELECT s.session_id AS session_id, s.installation_id AS installation_id, s.status AS status, "
+            "s.expires_at AS expires_at, k.public_key AS public_key, "
+            "k.pairing_generation AS pairing_generation, k.grant_revision AS grant_revision "
+            "FROM access_sessions s LEFT JOIN device_keys k ON k.device_id = s.device_id "
+            "WHERE s.session_id = ? AND s.device_id = ? AND s.access_token_hash = ?",
+            (session_id, device_id, self._digest(access_token)),
+        ).fetchone()
+        if row is None or row["status"] != "active" or _now(row["expires_at"]) <= _now(now):
+            return None
+        public_key = row["public_key"]
+        if not isinstance(public_key, str) or not public_key:
+            return None
+        return {
+            "sessionId": str(row["session_id"]),
+            "installationId": str(row["installation_id"]),
+            "devicePublicKey": public_key,
+            "pairingGeneration": int(row["pairing_generation"] or 1),
+            "grantRevision": int(row["grant_revision"] or 1),
+        }
+
+    def revoke_refresh_credentials(
+        self, device_id: str, correlation_id: str, now: datetime | str | None = None,
+    ) -> None:
+        """Ends the pairing: no refresh credential, and no key left to sign with."""
+        current = _now(now)
+        with self.store.transaction():
+            self.store.database.execute(
+                "UPDATE refresh_credentials SET status = 'revoked' WHERE device_id = ? AND status = 'active'",
+                (device_id,),
+            )
+            self.store.database.execute("DELETE FROM device_keys WHERE device_id = ?", (device_id,))
+            self.audit.append(
+                "session.refresh.revoked",
+                {"accountId": self.account_id, "deviceId": device_id}, {}, correlation_id, current,
+            )
 
     def active_refresh_credential_count(self, device_id: str) -> int:
         row = self.store.database.execute(
@@ -2023,6 +2135,20 @@ _PERSISTABLE_ERRORS = {
 }
 
 
+COMMAND_CATALOG_FORMAT = "agent-command-catalog-1.0"
+
+DEFAULT_COMMAND_CATALOG: tuple[dict[str, Any], ...] = (
+    {
+        "id": "new",
+        "invocation": "/new",
+        "title": "新建对话",
+        "description": "开始一个不继承当前上下文的新对话",
+        "acceptsArguments": False,
+        "availability": "available",
+    },
+)
+
+
 def _contains_identity_override(value: Any) -> bool:
     if isinstance(value, Mapping):
         if any(key in {"accountId", "account_id", "deviceId", "device_id", "principalId", "principal_id", "pairingGeneration", "pairing_generation"} for key in value):
@@ -2039,6 +2165,7 @@ class GatewayCore:
         contract_root: str | Path | None = None, commit_hook: Any = None,
         attachment_policy: AttachmentPolicy | None = None,
         credential_verifier: Any = None,
+        command_catalog: Any = None,
     ):
         self.storage_root = Path(storage_root or default_hermes_gateway_root()).resolve()
         self.secret_store = secret_store
@@ -2048,12 +2175,53 @@ class GatewayCore:
         self.commit_hook = commit_hook
         self.attachment_policy = attachment_policy or DEFAULT_ATTACHMENT_POLICY
         self.credential_verifier = credential_verifier
+        self.command_catalog = tuple(command_catalog) if command_catalog is not None else DEFAULT_COMMAND_CATALOG
 
     @property
     def contracts(self) -> ContractRegistry:
         if self._contracts is None:
             self._contracts = ContractRegistry(self.contract_root)
         return self._contracts
+
+    def account_exists(self, account_id: str) -> bool:
+        """Whether this account was registered on this host.
+
+        Login must never be the act that creates an account: an unknown
+        username is an authentication failure, not a signup.
+        """
+        try:
+            paths = account_paths(self.storage_root, account_id)
+        except (ValueError, TypeError):
+            return False
+        return paths.database.is_file()
+
+    has_gateway_account = account_exists
+
+    def command_catalog_response(self, language_code: str) -> dict[str, Any]:
+        """The shared command catalog in one response.
+
+        Each entry carries both spellings the two consumers read: the
+        discovery fields (`invocation`, `title`, `acceptsArguments`) the phone
+        renders, and the contract fields (`command`, `description`,
+        `argumentHint`) the shared schema validates. Deriving one from the
+        other here keeps a single source of truth.
+        """
+        catalog = tuple(self.command_catalog)
+        fingerprint = hashlib.sha256(
+            _json({"format": COMMAND_CATALOG_FORMAT, "commands": catalog}).encode("utf-8"),
+        ).hexdigest()[:16]
+        commands = []
+        for entry in catalog:
+            item = dict(entry)
+            item.setdefault("command", item.get("invocation", ""))
+            item.setdefault("argumentHint", item.get("title", "") if item.get("acceptsArguments") else "")
+            commands.append(item)
+        return {
+            "format": COMMAND_CATALOG_FORMAT,
+            "catalogVersion": f"cmdcat_{fingerprint}",
+            "languageCode": language_code,
+            "commands": commands,
+        }
 
     @staticmethod
     def _coerce_aead(candidate: Any) -> tuple[str, Any] | None:
@@ -2205,6 +2373,72 @@ class GatewayCore:
             code = "SCHEMA_INVALID" if exc.code == "INVALID_STATE_TRANSITION" else exc.code
             return _failure(context, code, exc.details)
 
+    def _handle_session_refresh(self, request: Any) -> GatewayResponse:
+        """Rotates an access session from a refresh credential (pre-auth).
+
+        The refresh credential is the only proof presented, so every field the
+        schema makes mandatory is required here too: a request that names an
+        account, device or installation that does not match the stored
+        credential is rejected before anything is rotated.
+        """
+        body = _request_body(request)
+        body_map = body if isinstance(body, Mapping) else {}
+        context = self._pre_auth_context(request, body_map)
+        now = _request_now(request)
+        try:
+            if not isinstance(body, Mapping) or not self.contracts.validate("session.refresh", body):
+                raise GatewayError("SCHEMA_INVALID")
+            account_id = str(body["accountId"])
+            if not self.account_exists(account_id):
+                raise GatewayError("AUTHENTICATION_FAILED")
+            self.bind_negotiation(str(body["negotiationId"]), account_id, str(body["installationId"]), now)
+            account = self.open_gateway_account(account_id)
+            try:
+                bundle = account.sessions.refresh(
+                    refresh_credential=str(body["refreshCredential"]),
+                    installation_id=str(body["installationId"]),
+                    device_id=str(body["deviceId"]),
+                    correlation_id=context["correlationId"],
+                    now=now,
+                )
+            finally:
+                account.close()
+            response = dict(bundle)
+            response["accountId"] = account_id
+            return _success(context, response)
+        except GatewayError as exc:
+            code = "SCHEMA_INVALID" if exc.code == "INVALID_STATE_TRANSITION" else exc.code
+            return _failure(context, code, exc.details)
+
+    def _handle_session_logout(self, request: Any) -> GatewayResponse:
+        """Ends the access session named by the request's own identity headers."""
+        context = self._pre_auth_context(request, {})
+        now = _request_now(request)
+        try:
+            headers = _request_headers(request)
+            account_id = headers.get("x-open-android-intelligence-account")
+            device_id = headers.get("x-open-android-intelligence-device")
+            session_id = headers.get("x-open-android-intelligence-session")
+            access_token = _bearer_token(headers)
+            if not account_id or not device_id or not session_id or not access_token:
+                raise GatewayError("AUTHENTICATION_REQUIRED")
+            if not self.account_exists(account_id):
+                raise GatewayError("AUTHENTICATION_FAILED")
+            revoke_refresh = _query_flag(_value(request, "target"), "revokeRefresh")
+            account = self.open_gateway_account(account_id)
+            try:
+                if not account.sessions.verify_access_token(access_token, session_id, device_id, now):
+                    raise GatewayError("AUTHENTICATION_FAILED")
+                account.sessions.revoke_session(session_id, context["correlationId"], now)
+                if revoke_refresh:
+                    account.sessions.revoke_refresh_credentials(device_id, context["correlationId"], now)
+            finally:
+                account.close()
+            return _success(context, {"sessionId": session_id, "refreshRevoked": revoke_refresh})
+        except GatewayError as exc:
+            code = "SCHEMA_INVALID" if exc.code == "INVALID_STATE_TRANSITION" else exc.code
+            return _failure(context, code, exc.details)
+
     def bind_negotiation(
         self, negotiation_id: str, account_id: str, installation_id: str,
         now: datetime | str | None = None,
@@ -2306,8 +2540,16 @@ class GatewayCore:
         try:
             method = _value(request, "method")
             target = _value(request, "target")
-            if method == "POST" and target == "/open-android-intelligence/v2/negotiate" and _value(request, "context") is None:
-                return self._handle_pre_auth(request)
+            if _value(request, "context") is None:
+                if method == "POST" and target == "/open-android-intelligence/v2/negotiate":
+                    return self._handle_pre_auth(request)
+                if method == "POST" and target == "/open-android-intelligence/v2/sessions/refresh":
+                    return self._handle_session_refresh(request)
+                if method == "DELETE" and isinstance(target, str) and (
+                    target == "/open-android-intelligence/v2/sessions/current"
+                    or target.startswith("/open-android-intelligence/v2/sessions/current?")
+                ):
+                    return self._handle_session_logout(request)
             if not isinstance(request, VerifiedGatewayRequest):
                 raise GatewayError("AUTHENTICATION_REQUIRED")
             context = _request_context(request)
@@ -2335,6 +2577,12 @@ class GatewayCore:
                         raise
 
                 def work() -> dict[str, Any]:
+                    if method == "GET" and isinstance(target, str) and (
+                        target == "/open-android-intelligence/v2/commands"
+                        or target.startswith("/open-android-intelligence/v2/commands?")
+                    ):
+                        language_code = _query_value(target, "languageCode") or "en"
+                        return _success(context, self.command_catalog_response(language_code))
                     if method == "POST" and target == "/open-android-intelligence/v2/negotiate":
                         return _success(context, self._negotiate(account, context, body, _request_now(request)))
                     if method == "POST" and target == "/open-android-intelligence/v2/conversations":

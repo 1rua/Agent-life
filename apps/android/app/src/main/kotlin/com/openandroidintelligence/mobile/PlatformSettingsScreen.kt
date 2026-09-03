@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import com.openandroidintelligence.kernel.AndroidAuditStore
 import com.openandroidintelligence.kernel.DeveloperTrustMode
 import com.openandroidintelligence.kernel.InMemoryAuditSink
+import com.openandroidintelligence.kernel.PluginKernel
 
 /** Distribution policy from the build flavor; the Play build cannot unlock trust mode. */
 data class DistributionPolicy(
@@ -48,6 +49,8 @@ data class PlatformSettingsEnvironment(
     val audit: AndroidAuditStore,
     val auditSink: InMemoryAuditSink,
     val allowDeveloperTrustMode: Boolean,
+    /** The kernel the emergency cut-off acts on. */
+    val kernel: PluginKernel,
 )
 
 /**
