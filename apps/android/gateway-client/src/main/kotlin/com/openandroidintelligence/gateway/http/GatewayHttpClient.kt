@@ -8,17 +8,26 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
+import java.net.URL
 
 data class GatewayProfile(
     val accountId: String,
     val deviceId: String,
     val sessionId: String,
     val gatewayBaseUrl: String,
-    /** SPKI SHA-256 pins, in base64. Empty means system trust only. */
+    /** Protocol `sha256:<lowercase hex>` SPKI pins. Empty means system trust only. */
     val pinnedSpkiSha256: Set<String> = emptySet(),
     /** Bearer token issued by the login or refresh endpoint. */
     val accessToken: String = "",
-)
+) {
+    init {
+        val isHttps = runCatching {
+            val url = URL(gatewayBaseUrl)
+            url.protocol == "https" && url.host.isNotBlank()
+        }.getOrDefault(false)
+        require(isHttps) { "gateway base url must be https" }
+    }
+}
 
 data class SignedGatewayRequest(
     val method: String,

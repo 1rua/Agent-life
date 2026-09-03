@@ -24,6 +24,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,7 +35,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.openandroidintelligence.kernel.AndroidAuditStore
 import com.openandroidintelligence.kernel.DeveloperTrustMode
-import com.openandroidintelligence.kernel.InMemoryAuditSink
+import com.openandroidintelligence.kernel.ObservableAuditSink
+import com.openandroidintelligence.kernel.PairingGrantStateHolder
 import com.openandroidintelligence.kernel.PluginKernel
 
 /** Distribution policy from the build flavor; the Play build cannot unlock trust mode. */
@@ -47,10 +49,11 @@ data class DistributionPolicy(
 data class PlatformSettingsEnvironment(
     val trustMode: DeveloperTrustMode,
     val audit: AndroidAuditStore,
-    val auditSink: InMemoryAuditSink,
+    val auditSink: ObservableAuditSink,
     val allowDeveloperTrustMode: Boolean,
     /** The kernel the emergency cut-off acts on. */
     val kernel: PluginKernel,
+    val pairingGrants: PairingGrantStateHolder,
 )
 
 /**
@@ -70,9 +73,8 @@ fun PlatformSettingsScreen(
 ) {
     var trustEnabled by remember { mutableStateOf(environment.trustMode.isEnabled()) }
     var showAcknowledgement by remember { mutableStateOf(false) }
-    val auditLines = remember {
-        environment.auditSink.events().map { environment.audit.render(it) }
-    }
+    val auditEvents by environment.auditSink.eventsFlow.collectAsState()
+    val auditLines = auditEvents.map { environment.audit.render(it) }
 
     Scaffold(
         topBar = {

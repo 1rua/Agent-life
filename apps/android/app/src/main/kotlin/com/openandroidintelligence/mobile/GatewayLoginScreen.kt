@@ -99,6 +99,11 @@ fun GatewayLoginScreen(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
+                Text(
+                    text = "仅支持经过 TLS 验证的 HTTPS Gateway",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 OutlinedTextField(
                     value = username,
                     onValueChange = { username = it },
@@ -135,9 +140,8 @@ fun GatewayLoginScreen(
 
                 Button(
                     onClick = { onLogin(url, username, password.toCharArray()) },
-                    enabled = (url.startsWith("https://") || url.startsWith("http://")) &&
+                    enabled = url.trim().startsWith("https://") &&
                         url.trim() != "https://" &&
-                        url.trim() != "http://" &&
                         username.isNotBlank() &&
                         password.isNotEmpty() &&
                         phase !is ConnectionPhase.Negotiating &&

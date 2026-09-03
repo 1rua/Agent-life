@@ -22,6 +22,10 @@ import javax.net.ssl.HttpsURLConnection
  */
 object SpkiPinning {
 
+    private val PROTOCOL_PIN = Regex("^sha256:[0-9a-f]{64}$")
+
+    fun isProtocolPin(value: String): Boolean = PROTOCOL_PIN.matches(value)
+
     fun verify(connection: HttpsURLConnection, pins: Set<String>) {
         verify(connection.serverCertificates, pins)
     }
@@ -31,7 +35,7 @@ object SpkiPinning {
 
         for (certificate in certificates) {
             if (certificate !is X509Certificate) continue
-            if (spkiSha256Base64(certificate) in pins) return
+            if (spkiSha256PrefixedHex(certificate) in pins || spkiSha256Base64(certificate) in pins) return
         }
         throw IOException(
             "PIN_MISMATCH: none of ${certificates.size} certificate(s) matched ${pins.size} pin(s)",
@@ -39,7 +43,14 @@ object SpkiPinning {
     }
 
     fun spkiSha256Base64(certificate: X509Certificate): String {
-        val spki = MessageDigest.getInstance("SHA-256").digest(certificate.publicKey.encoded)
+        val spki = digest(certificate)
         return java.util.Base64.getEncoder().encodeToString(spki)
     }
+
+    /** The canonical wire representation used by Gateway Protocol v2. */
+    fun spkiSha256PrefixedHex(certificate: X509Certificate): String =
+        "sha256:" + digest(certificate).joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
+
+    private fun digest(certificate: X509Certificate): ByteArray =
+        MessageDigest.getInstance("SHA-256").digest(certificate.publicKey.encoded)
 }

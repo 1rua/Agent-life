@@ -1,14 +1,16 @@
 package com.openandroidintelligence.mobile
 
 import android.app.Application
+import com.openandroidintelligence.kernel.PairingGrantStateHolder
 import com.openandroidintelligence.kernel.AndroidAuditStore
 import com.openandroidintelligence.kernel.CapabilityProviderSelector
 import com.openandroidintelligence.kernel.DeveloperTrustMode
 import com.openandroidintelligence.kernel.HostEnvelope
-import com.openandroidintelligence.kernel.InMemoryAuditSink
 import com.openandroidintelligence.kernel.NativePluginLoader
 import com.openandroidintelligence.kernel.PhoneLimits
+import com.openandroidintelligence.kernel.PersistentAuditSink
 import com.openandroidintelligence.kernel.PluginKernel
+import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -32,11 +34,18 @@ class OpenAndroidIntelligenceApplication : Application() {
     lateinit var auditStore: AndroidAuditStore
         private set
 
-    private lateinit var auditSink: InMemoryAuditSink
+    lateinit var pairingGrants: PairingGrantStateHolder
+        private set
+
+    private lateinit var auditSink: PersistentAuditSink
 
     /** 进程级连接运行时：登录、协商、会话建立与工作台装配。 */
     val gatewayRuntime: GatewayRuntime by lazy {
-        GatewayRuntime(this, CoroutineScope(SupervisorJob() + Dispatchers.Default))
+        GatewayRuntime(
+            context = this,
+            scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+            pairingGrants = pairingGrants,
+        )
     }
 
     fun platformSettingsEnvironment(): PlatformSettingsEnvironment = PlatformSettingsEnvironment(
@@ -45,13 +54,18 @@ class OpenAndroidIntelligenceApplication : Application() {
         auditSink = auditSink,
         allowDeveloperTrustMode = BuildConfig.ALLOW_DEVELOPER_TRUST_MODE,
         kernel = kernel,
+        pairingGrants = pairingGrants,
     )
 
     override fun onCreate() {
         super.onCreate()
         trustMode = DeveloperTrustMode()
-        auditSink = InMemoryAuditSink()
+        auditSink = PersistentAuditSink(File(filesDir, "platform-kernel/audit-events.log"))
         auditStore = AndroidAuditStore(sink = auditSink)
+        pairingGrants = PairingGrantStateHolder(
+            store = SharedPreferencesPairingGrantStore.from(this),
+            audit = auditStore,
+        )
 
         val providerSelector = CapabilityProviderSelector(phoneDefaults = emptyMap())
         kernel = PluginKernel(
@@ -68,7 +82,7 @@ class OpenAndroidIntelligenceApplication : Application() {
             trustMode = trustMode,
             nativeLoader = NativePluginLoader(trustMode),
             providerSelector = providerSelector,
-            grants = { null },
+            grants = { pairingId -> pairingGrants.currentKernelGrant(pairingId) },
         )
     }
 }

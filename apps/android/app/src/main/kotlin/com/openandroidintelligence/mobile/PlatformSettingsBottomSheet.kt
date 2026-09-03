@@ -19,6 +19,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.openandroidintelligence.kernel.PairingGrantCapabilities
 
 enum class SettingsTab {
     GATEWAY,
@@ -149,7 +150,12 @@ fun PlatformSettingsBottomSheet(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 when (currentTab) {
-                    SettingsTab.GATEWAY -> GatewayTabContent(phase = phase, runtime = runtime, onDismiss = onDismissRequest)
+                    SettingsTab.GATEWAY -> GatewayTabContent(
+                        phase = phase,
+                        runtime = runtime,
+                        environment = environment,
+                        onDismiss = onDismissRequest,
+                    )
                     SettingsTab.SECURITY -> SecurityTabContent(environment = environment)
                     SettingsTab.PLUGINS -> PluginsTabContent()
                     SettingsTab.TRANSPORT -> TransportTabContent(phase = phase)
@@ -201,9 +207,11 @@ private fun SettingsTabChip(
 private fun GatewayTabContent(
     phase: ConnectionPhase,
     runtime: GatewayRuntime,
+    environment: PlatformSettingsEnvironment,
     onDismiss: () -> Unit,
 ) {
     val connected = phase as? ConnectionPhase.Connected
+    val grantState by environment.pairingGrants.state.collectAsState()
 
     // 卡片 1: 活动 Gateway 账号资料
     Surface(
@@ -283,9 +291,17 @@ private fun GatewayTabContent(
                         color = MaterialTheme.colorScheme.surfaceContainerHighest,
                     ) {
                         Text(
-                            text = "TLS Pinned",
+                            text = when {
+                                connected == null -> "未连接"
+                                connected.tlsSpkiSha256.isNotBlank() -> "TLS 已固定"
+                                else -> "系统 CA 信任"
+                            },
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
+                            color = if (connected == null) {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            } else {
+                                MaterialTheme.colorScheme.primary
+                            },
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                         )
                     }
@@ -324,27 +340,36 @@ private fun GatewayTabContent(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-            var grantSms by remember { mutableStateOf(false) }
-            var grantScreen by remember { mutableStateOf(true) }
-            var grantNotif by remember { mutableStateOf(false) }
+            Text(
+                text = grantState?.let { "本机授权版本 r${it.revision}" } ?: "未连接 Gateway，授权暂不可用",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
 
             GrantSwitchRow(
                 title = "读取与发送短信 (SMS Broker)",
                 subtitle = "限制：每次交互须经手机确认",
-                checked = grantSms,
-                onCheckedChange = { grantSms = it },
+                checked = grantState?.granted?.contains(PairingGrantCapabilities.SMS) == true,
+                enabled = grantState != null,
+                onCheckedChange = {
+                    environment.pairingGrants.updatePrimitive(PairingGrantCapabilities.SMS, it)
+                },
             )
             GrantSwitchRow(
                 title = "屏幕上下文分析与圈选",
                 subtitle = "支持数字助理 Assist 选区截图",
-                checked = grantScreen,
-                onCheckedChange = { grantScreen = it },
+                checked = grantState?.screenSelectionEnabled == true,
+                enabled = grantState != null,
+                onCheckedChange = { environment.pairingGrants.updateScreenSelection(it) },
             )
             GrantSwitchRow(
-                title = "剪贴板读取与系统通知推送",
+                title = "系统通知推送",
                 subtitle = "后台低功耗推送服务",
-                checked = grantNotif,
-                onCheckedChange = { grantNotif = it },
+                checked = grantState?.granted?.contains(PairingGrantCapabilities.NOTIFICATIONS) == true,
+                enabled = grantState != null,
+                onCheckedChange = {
+                    environment.pairingGrants.updatePrimitive(PairingGrantCapabilities.NOTIFICATIONS, it)
+                },
             )
         }
     }
@@ -385,6 +410,7 @@ private fun GrantSwitchRow(
     title: String,
     subtitle: String,
     checked: Boolean,
+    enabled: Boolean,
     onCheckedChange: (Boolean) -> Unit,
 ) {
     Row(
@@ -396,7 +422,7 @@ private fun GrantSwitchRow(
             Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
             Text(subtitle, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        Switch(checked = checked, onCheckedChange = onCheckedChange, enabled = enabled)
     }
 }
 
@@ -533,9 +559,8 @@ private fun SecurityTabContent(
     }
 
     // 安全审计日志
-    val auditLines = remember {
-        environment.auditSink.events().map { environment.audit.render(it) }
-    }
+    val auditEvents by environment.auditSink.eventsFlow.collectAsState()
+    val auditLines = auditEvents.map { environment.audit.render(it) }
     Surface(
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surfaceContainer,

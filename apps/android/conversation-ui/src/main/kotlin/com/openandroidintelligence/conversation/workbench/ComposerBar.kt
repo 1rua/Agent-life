@@ -48,6 +48,7 @@ fun ComposerBar(
     onPickCamera: () -> Unit,
     onPickGallery: () -> Unit,
     onPickDocument: () -> Unit,
+    onVoiceInput: () -> Unit,
     attachments: List<AttachmentDraft> = emptyList(),
     onRemoveAttachment: (String) -> Unit = {},
     onRetryAttachment: (String) -> Unit = {},
@@ -240,7 +241,7 @@ fun ComposerBar(
                             }
                         } else {
                             IconButton(
-                                onClick = { /* 语音输入入口，暂留扩展 */ },
+                                onClick = onVoiceInput,
                                 modifier = Modifier.size(36.dp),
                             ) {
                                 Icon(

@@ -210,6 +210,11 @@ class GatewayHttpRoute:
             try:
                 account = self._services.core.open_gateway_account(username)
                 try:
+                    self._services.core.bind_negotiation(
+                        str(body_map.get("negotiationId")),
+                        account.account_id,
+                        str(installation.get("installationId")),
+                    )
                     bundle = account.sessions.create_password_session(
                         username=username,
                         password=password,
@@ -299,6 +304,11 @@ class GatewayHttpRoute:
             try:
                 account = self._services.core.open_gateway_account(username)
                 try:
+                    self._services.core.bind_negotiation(
+                        str(decoded.get("negotiationId")),
+                        account.account_id,
+                        str(installation.get("installationId")),
+                    )
                     bundle = account.sessions.create_password_session(
                         username=username,
                         password=password,

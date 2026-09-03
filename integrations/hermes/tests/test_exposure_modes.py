@@ -8,7 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from open_android_intelligence_gateway.admin import HostApiCompatibility
 from open_android_intelligence_gateway.http import EXPOSURE_MODES, create_gateway_exposure
 from open_android_intelligence_gateway.core import create_gateway_core
-from test_support import make_secret_store, make_verified_request, trust_core
+from test_support import PasswordVerifierDouble, make_secret_store, make_verified_request, trust_core
 
 
 _real_create_gateway_core = create_gateway_core
@@ -210,3 +210,195 @@ def test_negotiate_raw_route_has_independent_pre_auth_input_without_verifier(tmp
 
     assert response.status_code == 200
     assert json.loads(response.body)["data"]["protocol"] == {"major": 2, "minor": 0}
+
+
+def _gateway_routes_for_session_test(tmp_path):
+    core = create_gateway_core(
+        storage_root=tmp_path,
+        credential_verifier=PasswordVerifierDouble(),
+    )
+    account = core.open_gateway_account("alice")
+    account.close()
+    exposure = create_gateway_exposure(
+        "host-route",
+        core=core,
+        host_version="1.0.0",
+        host_api=TEST_HOST_API,
+    )
+    return core, {route.path: route for route in exposure.routes}
+
+
+def _negotiate_for_session(routes, negotiation_id, installation_id):
+    response = routes["/open-android-intelligence/v2/negotiate"].handle({
+        "method": "POST",
+        "target": "/open-android-intelligence/v2/negotiate",
+        "body": {
+            "negotiationId": negotiation_id,
+            "protocol": {"major": 2, "minor": 0},
+            "client": {
+                "installationId": installation_id,
+                "appVersion": "2.0.0",
+                "platform": "android",
+                "platformApi": 35,
+            },
+            "features": {
+                "auth": ["password", "refresh"],
+                "messages": ["chat-v1"],
+                "attachments": ["staged-sha256-v1"],
+                "events": ["sse-cursor-v1"],
+                "deviceRequests": ["risk-queue-v1"],
+            },
+            "schemaHashes": {"core": "sha256:" + "a" * 64},
+        },
+    })
+    assert response["statusCode"] == 200
+
+
+def _password_login(routes, negotiation_id, installation_id):
+    response = routes["/open-android-intelligence/v2/sessions/password"].handle({
+        "method": "POST",
+        "target": "/open-android-intelligence/v2/sessions/password",
+        "body": {
+            "negotiationId": negotiation_id,
+            "username": "alice",
+            "password": "password",
+            "installation": {
+                "installationId": installation_id,
+                "displayName": "Alice test device",
+                "devicePublicKey": "device-public-key",
+            },
+        },
+    })
+    assert response["statusCode"] == 200
+    return response["body"]
+
+
+def test_unknown_password_login_never_creates_an_account(tmp_path):
+    core, routes = _gateway_routes_for_session_test(tmp_path)
+
+    response = routes["/open-android-intelligence/v2/sessions/password"].handle({
+        "method": "POST",
+        "target": "/open-android-intelligence/v2/sessions/password",
+        "body": {
+            "negotiationId": "neg-unknown",
+            "username": "unknown-e2e",
+            "password": "password",
+            "installation": {
+                "installationId": "install-unknown",
+                "displayName": "Unknown",
+                "devicePublicKey": "device-public-key",
+            },
+        },
+    })
+
+    assert response["statusCode"] == 401
+    assert response["body"]["error"]["code"] == "AUTHENTICATION_FAILED"
+    assert not core.account_exists("unknown-e2e")
+
+
+def test_raw_unknown_password_login_never_creates_an_account(tmp_path):
+    core, routes = _gateway_routes_for_session_test(tmp_path)
+    response = RawResponse()
+    route = routes["/open-android-intelligence/v2/sessions/password"]
+    route.handler(
+        RawRequest(
+            json.dumps({
+                "negotiationId": "neg-raw-unknown",
+                "username": "unknown-e2e-raw",
+                "password": "password",
+                "installation": {
+                    "installationId": "install-unknown-raw",
+                    "displayName": "Unknown",
+                    "devicePublicKey": "device-public-key",
+                },
+            }).encode("utf-8"),
+            url="/open-android-intelligence/v2/sessions/password",
+        ),
+        response,
+    )
+
+    assert response.status_code == 401
+    assert json.loads(response.body)["error"]["code"] == "AUTHENTICATION_FAILED"
+    assert not core.account_exists("unknown-e2e-raw")
+
+
+def test_current_head_session_routes_register_device_keys_and_rotate_or_revoke(tmp_path):
+    core, routes = _gateway_routes_for_session_test(tmp_path)
+    negotiation_id = "neg-session"
+    installation_id = "install-session"
+    _negotiate_for_session(routes, negotiation_id, installation_id)
+    session = _password_login(routes, negotiation_id, installation_id)
+
+    account = core.open_gateway_account("alice")
+    try:
+        table = account.store.database.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'device_keys'"
+        ).fetchone()
+        assert table is not None
+        device_key = account.store.database.execute(
+            "SELECT public_key FROM device_keys WHERE device_id = ?",
+            (session["deviceId"],),
+        ).fetchone()
+        assert device_key[0] == "device-public-key"
+    finally:
+        account.close()
+
+    refresh = routes["/open-android-intelligence/v2/sessions/refresh"].handle({
+        "method": "POST",
+        "target": "/open-android-intelligence/v2/sessions/refresh",
+        "body": {
+            "negotiationId": negotiation_id,
+            "accountId": "alice",
+            "installationId": installation_id,
+            "deviceId": session["deviceId"],
+            "refreshCredential": session["refreshCredential"],
+        },
+    })
+    assert refresh["statusCode"] == 200
+    assert refresh["body"]["data"]["deviceId"] == session["deviceId"]
+    rotated = refresh["body"]["data"]
+
+    logout = routes["/open-android-intelligence/v2/sessions/current"].handle({
+        "method": "DELETE",
+        "target": "/open-android-intelligence/v2/sessions/current?revokeRefresh=false",
+        "headers": {
+            "authorization": "Bearer " + rotated["accessToken"],
+            "x-open-android-intelligence-account": "alice",
+            "x-open-android-intelligence-device": rotated["deviceId"],
+            "x-open-android-intelligence-session": rotated["sessionId"],
+        },
+    })
+    assert logout["statusCode"] == 200
+    assert logout["body"]["data"]["refreshRevoked"] is False
+
+    account = core.open_gateway_account("alice")
+    try:
+        assert account.sessions.active_refresh_credential_count(rotated["deviceId"]) == 1
+    finally:
+        account.close()
+
+    negotiation_id_2 = "neg-session-2"
+    _negotiate_for_session(routes, negotiation_id_2, installation_id)
+    session_2 = _password_login(routes, negotiation_id_2, installation_id)
+    unpair = routes["/open-android-intelligence/v2/sessions/current"].handle({
+        "method": "DELETE",
+        "target": "/open-android-intelligence/v2/sessions/current?revokeRefresh=true",
+        "headers": {
+            "authorization": "Bearer " + session_2["accessToken"],
+            "x-open-android-intelligence-account": "alice",
+            "x-open-android-intelligence-device": session_2["deviceId"],
+            "x-open-android-intelligence-session": session_2["sessionId"],
+        },
+    })
+    assert unpair["statusCode"] == 200
+    assert unpair["body"]["data"]["refreshRevoked"] is True
+
+    account = core.open_gateway_account("alice")
+    try:
+        assert account.sessions.active_refresh_credential_count(session_2["deviceId"]) == 0
+        assert account.store.database.execute(
+            "SELECT 1 FROM device_keys WHERE device_id = ?",
+            (session_2["deviceId"],),
+        ).fetchone() is None
+    finally:
+        account.close()

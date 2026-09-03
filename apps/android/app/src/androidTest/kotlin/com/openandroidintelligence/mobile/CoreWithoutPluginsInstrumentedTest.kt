@@ -1,10 +1,22 @@
 package com.openandroidintelligence.mobile
 
+import android.content.ComponentName
+import java.io.File
+import java.time.Instant
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.openandroidintelligence.kernel.AndroidAuditStore
+import com.openandroidintelligence.kernel.AuditOutcome
+import com.openandroidintelligence.kernel.AuditEvent
+import com.openandroidintelligence.kernel.InMemoryAuditSink
+import com.openandroidintelligence.kernel.PairingGrantBinding
+import com.openandroidintelligence.kernel.PairingGrantCapabilities
+import com.openandroidintelligence.kernel.PairingGrantStateHolder
+import com.openandroidintelligence.kernel.PersistentAuditSink
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertTrue
+import org.junit.Assert.assertNull
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -12,35 +24,115 @@ import org.junit.runner.RunWith
 class CoreWithoutPluginsInstrumentedTest {
 
     @Test
-    fun freshInstallCanLoginChatAndUploadWithoutPlugins() {
+    fun freshInstallStartsWithAnHonestDisconnectedRuntime() {
         val appContext = InstrumentationRegistry.getInstrumentation().targetContext
+        val application = appContext.applicationContext as OpenAndroidIntelligenceApplication
+        val runtime = application.gatewayRuntime
+        runtime.resetFailure()
+
         assertNotNull(appContext)
+        assertEquals(ConnectionPhase.Disconnected, runtime.phase.value)
+        assertNull(runtime.controller.value)
+        assertFalse(application.kernel.isEmergencyStopped())
+        assertNull(application.kernel.registrationFor("org.openandroidintelligence.sms"))
+    }
 
-        val gatewayPresenter = GatewayPresenter()
-        gatewayPresenter.connect("https://gw.example.com")
-        assertTrue("Gateway 必须成功标记为已连接", gatewayPresenter.currentState().isOnline)
+    @Test
+    fun plainHttpIsRejectedBeforeAnyNetworkAttempt() {
+        val appContext = InstrumentationRegistry.getInstrumentation().targetContext
+        val application = appContext.applicationContext as OpenAndroidIntelligenceApplication
+        val runtime = application.gatewayRuntime
 
-        val conversationPresenter = ConversationPresenter()
-        val sent = conversationPresenter.sendMessage("hello")
-        assertEquals("hello", sent.text)
-        val reply = conversationPresenter.receiveReply("world")
-        assertEquals("world", reply.text)
-        assertEquals(2, conversationPresenter.currentState().messages.size)
+        runtime.login("http://gateway.example.com", "alice", "secret".toCharArray())
 
-        val attachmentPresenter = AttachmentPresenter()
-        val attachment = attachmentPresenter.addAttachment(
-            name = "note.txt",
-            mimeType = "text/plain",
-            sizeBytes = 12L,
-            sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        assertEquals(
+            ConnectionPhase.Failed("AUTH_INVALID:url-scheme-required"),
+            runtime.phase.value,
         )
-        assertEquals("note.txt", attachment.name)
-        assertEquals(1, attachmentPresenter.currentState().attachments.size)
+        runtime.resetFailure()
+    }
 
-        val settingsPresenter = PlatformSettingsPresenter(
-            DistributionPolicy(allowRuntimePlugins = true, allowDeveloperTrustMode = true),
+    @Test
+    fun mainActivityUsesANoActionBarTheme() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val info = context.packageManager.getActivityInfo(
+            ComponentName(context, MainActivity::class.java),
+            0,
         )
-        assertEquals(0, settingsPresenter.currentState().installedPluginsCount)
+        val attributes = context.obtainStyledAttributes(
+            info.theme,
+            intArrayOf(android.R.attr.windowActionBar),
+        )
+        try {
+            assertFalse("主 Activity 不得包含系统 ActionBar", attributes.getBoolean(0, true))
+        } finally {
+            attributes.recycle()
+        }
+    }
+
+    @Test
+    fun pairingGrantPreferencesSurviveCreatingANewStateHolder() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val preferences = context.getSharedPreferences(
+            "open_android_intelligence_pairing_grants_test",
+            android.content.Context.MODE_PRIVATE,
+        )
+        preferences.edit().clear().commit()
+        val binding = PairingGrantBinding(
+            gatewayId = "https://gateway.example.com",
+            accountId = "account-test",
+            installationId = "install-test",
+        )
+
+        try {
+            val first = PairingGrantStateHolder(
+                SharedPreferencesPairingGrantStore(preferences),
+                AndroidAuditStore(InMemoryAuditSink()),
+            )
+            first.bind(binding)
+            first.updatePrimitive(PairingGrantCapabilities.SMS, enabled = true)
+            first.updateScreenSelection(enabled = true)
+
+            val restored = PairingGrantStateHolder(
+                SharedPreferencesPairingGrantStore(preferences),
+                AndroidAuditStore(InMemoryAuditSink()),
+            )
+            restored.bind(binding)
+
+            assertEquals(first.state.value, restored.state.value)
+        } finally {
+            preferences.edit().clear().commit()
+        }
+    }
+
+    @Test
+    fun persistentAuditSinkCanReloadADeviceWrittenRecord() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val file = File(context.cacheDir, "audit-test-${System.nanoTime()}.log")
+        val event = AuditEvent(
+            pluginId = "platform",
+            accountId = "account-test",
+            pairingId = "pairing-test",
+            action = "emergency.stop",
+            outcome = AuditOutcome.ALLOWED,
+            correlationId = "correlation-test",
+            timestampUtc = "2026-09-03T00:00:00.000Z",
+        )
+
+        try {
+            PersistentAuditSink(
+                file = file,
+                clock = { Instant.parse("2026-09-04T00:00:00Z") },
+            ).write(event)
+
+            val reloaded = PersistentAuditSink(
+                file = file,
+                clock = { Instant.parse("2026-09-04T00:00:00Z") },
+            )
+
+            assertEquals(listOf(event), reloaded.events())
+        } finally {
+            file.delete()
+        }
     }
 }
-

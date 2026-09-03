@@ -1,8 +1,19 @@
 package com.openandroidintelligence.kernel
 
+import java.io.File
+import java.io.FileOutputStream
+import java.nio.charset.StandardCharsets
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+import java.time.Duration
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import java.util.Base64
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 enum class AuditOutcome { ALLOWED, DENIED, FAILED }
 
@@ -29,14 +40,127 @@ interface AuditSink {
     fun write(event: AuditEvent)
 }
 
-class InMemoryAuditSink : AuditSink {
-    private val events = mutableListOf<AuditEvent>()
+interface ObservableAuditSink : AuditSink {
+    val eventsFlow: StateFlow<List<AuditEvent>>
+
+    fun events(): List<AuditEvent>
+}
+
+class InMemoryAuditSink : ObservableAuditSink {
+    private val lock = Any()
+    private val _events = MutableStateFlow<List<AuditEvent>>(emptyList())
+    override val eventsFlow: StateFlow<List<AuditEvent>> = _events.asStateFlow()
 
     override fun write(event: AuditEvent) {
-        events += event
+        synchronized(lock) {
+            _events.value = _events.value + event
+        }
     }
 
-    fun events(): List<AuditEvent> = events.toList()
+    override fun events(): List<AuditEvent> = eventsFlow.value
+}
+
+/**
+ * Private, metadata-only audit storage for the Android host.
+ *
+ * The sink stores encoded fields rather than rendered text so a future UI can
+ * still render through [AndroidAuditStore]. Invalid lines are ignored during
+ * recovery; a damaged audit file must not make the host fail to start.
+ */
+class PersistentAuditSink(
+    private val file: File,
+    private val clock: () -> Instant = { Instant.now() },
+    private val retention: Duration = Duration.ofDays(30),
+) : ObservableAuditSink {
+
+    private val lock = Any()
+    private val _events = MutableStateFlow(load())
+    override val eventsFlow: StateFlow<List<AuditEvent>> = _events.asStateFlow()
+
+    override fun write(event: AuditEvent) {
+        synchronized(lock) {
+            val cutoff = clock().minus(retention)
+            val next = (_events.value + event).filterNot { isExpired(it, cutoff) }
+            persist(next)
+            _events.value = next
+        }
+    }
+
+    override fun events(): List<AuditEvent> = eventsFlow.value
+
+    private fun load(): List<AuditEvent> {
+        if (!file.isFile) return emptyList()
+        val cutoff = clock().minus(retention)
+        return runCatching {
+            file.readLines(StandardCharsets.UTF_8)
+                .mapNotNull(AuditEventCodec::decode)
+                .filterNot { isExpired(it, cutoff) }
+        }.getOrDefault(emptyList())
+    }
+
+    private fun persist(events: List<AuditEvent>) {
+        file.parentFile?.mkdirs()
+        val bytes = events.joinToString(
+            separator = "\n",
+            postfix = if (events.isEmpty()) "" else "\n",
+        ) { event -> AuditEventCodec.encode(event) }
+            .toByteArray(StandardCharsets.UTF_8)
+        val temporary = File.createTempFile("audit", ".tmp", file.parentFile)
+        FileOutputStream(temporary).use { output ->
+            output.write(bytes)
+            output.fd.sync()
+        }
+        try {
+            Files.move(
+                temporary.toPath(),
+                file.toPath(),
+                StandardCopyOption.ATOMIC_MOVE,
+                StandardCopyOption.REPLACE_EXISTING,
+            )
+        } catch (_: AtomicMoveNotSupportedException) {
+            Files.move(temporary.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        }
+    }
+
+    private fun isExpired(event: AuditEvent, cutoff: Instant): Boolean =
+        runCatching { Instant.parse(event.timestampUtc).isBefore(cutoff) }.getOrDefault(true)
+}
+
+private object AuditEventCodec {
+    private const val VERSION = "v1"
+    private val encoder = Base64.getUrlEncoder().withoutPadding()
+    private val decoder = Base64.getUrlDecoder()
+
+    fun encode(event: AuditEvent): String = VERSION + "|" + listOf(
+        event.pluginId,
+        event.accountId,
+        event.pairingId,
+        event.action,
+        event.outcome.name,
+        event.correlationId,
+        event.timestampUtc,
+    ).joinToString("|") { value -> encoder.encodeToString(value.toByteArray(StandardCharsets.UTF_8)) }
+
+    fun decode(line: String): AuditEvent? {
+        val fields = line.split('|')
+        if (fields.size != 8) return null
+        if (fields[0] != VERSION) return null
+        val values = fields.drop(1).map { field ->
+            runCatching { String(decoder.decode(field), StandardCharsets.UTF_8) }.getOrNull()
+        }
+        if (values.any { it == null }) return null
+        val decoded = values.filterNotNull()
+        val outcome = runCatching { AuditOutcome.valueOf(decoded[4]) }.getOrNull() ?: return null
+        return AuditEvent(
+            pluginId = decoded[0],
+            accountId = decoded[1],
+            pairingId = decoded[2],
+            action = decoded[3],
+            outcome = outcome,
+            correlationId = decoded[5],
+            timestampUtc = decoded[6],
+        )
+    }
 }
 
 /**
@@ -75,12 +199,12 @@ class AndroidAuditStore(
         correlationId: String,
     ): AuditEvent {
         val event = AuditEvent(
-            pluginId = pluginId,
-            accountId = accountId,
-            pairingId = pairingId,
+            pluginId = sanitiseToken(pluginId),
+            accountId = sanitiseToken(accountId),
+            pairingId = sanitiseToken(pairingId),
             action = sanitiseAction(action),
             outcome = outcome,
-            correlationId = correlationId,
+            correlationId = sanitiseToken(correlationId),
             timestampUtc = TIMESTAMP.format(clock()),
         )
         sink.write(event)

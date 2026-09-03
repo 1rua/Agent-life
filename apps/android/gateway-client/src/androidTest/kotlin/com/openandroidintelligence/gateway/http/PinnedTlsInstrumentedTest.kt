@@ -26,6 +26,18 @@ import javax.net.ssl.TrustManagerFactory
 class PinnedTlsInstrumentedTest {
 
     @Test
+    fun gatewayProfileRejectsPlainHttp() {
+        assertThrows(IllegalArgumentException::class.java) {
+            GatewayProfile(
+                accountId = "account-test",
+                deviceId = "device-test",
+                sessionId = "session-test",
+                gatewayBaseUrl = "http://gateway.example.com",
+            )
+        }
+    }
+
+    @Test
     fun httpsOnlyFactoryRejectsPlainHttp() {
         val factory = HttpsConnectionFactory()
         val failure = runCatching { factory.open(URL("http://gateway.example.com/open-android-intelligence/v2")) }
@@ -52,6 +64,14 @@ class PinnedTlsInstrumentedTest {
     fun aMatchingPinIsAccepted() {
         val certificate = trustAnchor()
         val pin = SpkiPinning.spkiSha256Base64(certificate)
+
+        SpkiPinning.verify(arrayOf(certificate), setOf(pin))
+    }
+
+    @Test
+    fun aProtocolPrefixedSpkiPinIsAccepted() {
+        val certificate = trustAnchor()
+        val pin = SpkiPinning.spkiSha256PrefixedHex(certificate)
 
         SpkiPinning.verify(arrayOf(certificate), setOf(pin))
     }

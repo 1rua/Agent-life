@@ -73,7 +73,7 @@ class GatewayAuthClient(
                 ),
             )
             val body = postJson("/open-android-intelligence/v2/sessions/password", payload)
-            parseSession(body, "LOGIN_FAILED")
+            parseSessionCredentials(body, "LOGIN_FAILED")
         } finally {
             password.fill('\u0000')
         }
@@ -100,7 +100,7 @@ class GatewayAuthClient(
             "refreshCredential" to String(refreshCredential, Charsets.ISO_8859_1),
         )
         val body = postJson("/open-android-intelligence/v2/sessions/refresh", payload)
-        parseSession(body, "REFRESH_FAILED")
+        parseSessionCredentials(body, "REFRESH_FAILED")
     }
 
     suspend fun logout(
@@ -160,35 +160,37 @@ class GatewayAuthClient(
         return IllegalStateException("$prefix:${code ?: response.status}")
     }
 
-    private fun parseSession(body: JsonValue.JObject, prefix: String): SessionCredentials {
-        val accountId = JsonFields.string(body, "accountId")
-            ?: throw IllegalStateException("$prefix:missing-account")
-        val deviceId = JsonFields.string(body, "deviceId")
-            ?: throw IllegalStateException("$prefix:missing-device")
-        val sessionId = JsonFields.string(body, "sessionId")
-            ?: throw IllegalStateException("$prefix:missing-session")
-        val accessToken = JsonFields.string(body, "accessToken")
-            ?: JsonFields.string(body, "token")
-            ?: throw IllegalStateException("$prefix:missing-token")
-        val refresh = (JsonFields.field(body, "refreshCredential") as? JsonValue.JString)
-            ?.value?.toByteArray(Charsets.ISO_8859_1)
-            ?: throw IllegalStateException("$prefix:missing-refresh")
-        return SessionCredentials(
-            accountId = accountId,
-            deviceId = deviceId,
-            sessionId = sessionId,
-            accessToken = accessToken,
-            refreshCredential = refresh,
-            pairingSummary = JsonFields.string(body, "pairingSummary"),
-        )
-    }
-
     private fun newNegotiationId(): String =
         "neg_" + java.util.UUID.randomUUID().toString().replace("-", "")
+
     private fun SignedGatewayRequest.toWire() = WireRequest(
         method = method,
         target = target,
         headers = headers,
         body = body,
+    )
+}
+
+internal fun parseSessionCredentials(body: JsonValue.JObject, prefix: String): SessionCredentials {
+    val result = JsonFields.obj(JsonFields.field(body, "data")) ?: body
+    val accountId = JsonFields.string(result, "accountId")
+        ?: throw IllegalStateException("$prefix:missing-account")
+    val deviceId = JsonFields.string(result, "deviceId")
+        ?: throw IllegalStateException("$prefix:missing-device")
+    val sessionId = JsonFields.string(result, "sessionId")
+        ?: throw IllegalStateException("$prefix:missing-session")
+    val accessToken = JsonFields.string(result, "accessToken")
+        ?: JsonFields.string(result, "token")
+        ?: throw IllegalStateException("$prefix:missing-token")
+    val refresh = (JsonFields.field(result, "refreshCredential") as? JsonValue.JString)
+        ?.value?.toByteArray(Charsets.ISO_8859_1)
+        ?: throw IllegalStateException("$prefix:missing-refresh")
+    return SessionCredentials(
+        accountId = accountId,
+        deviceId = deviceId,
+        sessionId = sessionId,
+        accessToken = accessToken,
+        refreshCredential = refresh,
+        pairingSummary = JsonFields.string(result, "pairingSummary"),
     )
 }

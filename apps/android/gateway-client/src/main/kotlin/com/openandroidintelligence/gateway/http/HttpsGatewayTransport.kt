@@ -32,10 +32,15 @@ class HttpsGatewayTransport(
         return try {
             if (request.body.isNotEmpty()) {
                 connection.doOutput = true
+            }
+            // Complete the TLS handshake and pin verification before any
+            // sensitive request body is written to the socket.
+            connection.connect()
+            verifyPins(connection)
+            if (request.body.isNotEmpty()) {
                 connection.outputStream.use { stream -> stream.write(request.body) }
             }
             val status = connection.responseCode
-            verifyPins(connection)
             val headers = readHeaders(connection)
             WireResponse(status = status, headers = headers, body = readBody(connection, status))
         } finally {
@@ -46,11 +51,12 @@ class HttpsGatewayTransport(
     override fun eventStream(request: WireRequest): Flow<ByteArray> = flow {
         val connection = open(request)
         try {
+            connection.connect()
+            verifyPins(connection)
             val status = connection.responseCode
             if (status !in 200..299) {
                 throw IOException("EVENT_STREAM_FAILED:$status")
             }
-            verifyPins(connection)
             val contentType = connection.getHeaderField("Content-Type").orEmpty()
             if (!contentType.contains("text/event-stream")) {
                 throw IOException("EVENT_STREAM_FAILED:unexpected-content-type:$contentType")
@@ -82,7 +88,8 @@ class HttpsGatewayTransport(
     }
 
     private fun verifyPins(connection: HttpURLConnection) {
-        val https = connection as? HttpsURLConnection ?: return
+        val https = connection as? HttpsURLConnection
+            ?: throw IOException("HTTPS_REQUIRED")
         SpkiPinning.verify(https, profile.pinnedSpkiSha256)
     }
 

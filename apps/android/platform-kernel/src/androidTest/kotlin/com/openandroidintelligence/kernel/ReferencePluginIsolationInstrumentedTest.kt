@@ -15,22 +15,19 @@ class ReferencePluginIsolationInstrumentedTest {
     private val officialSmsIdentity = PluginIdentity(
         pluginId = "org.openandroidintelligence.sms",
         version = "1.0.0",
-        authorPublicKey = "35f3b7bf83777bc35fb080ee0e94abef8e945cbb6aa82414fa9cfcb7eaee699f",
-        packageSha256 = "b75c88f77cea011211b2b0136a8a051ede4d3067227d6c20ffaf6ee67b18ced7",
+        authorKeyFingerprint = "35f3b7bf83777bc35fb080ee0e94abef8e945cbb6aa82414fa9cfcb7eaee699f",
     )
 
     private val officialNotificationsIdentity = PluginIdentity(
         pluginId = "org.openandroidintelligence.notifications",
         version = "1.0.0",
-        authorPublicKey = "35f3b7bf83777bc35fb080ee0e94abef8e945cbb6aa82414fa9cfcb7eaee699f",
-        packageSha256 = "46dd5ce10bfba0cdcf45370c14350c948d5b36ec6b3cd460ab1bdce49b396ecd",
+        authorKeyFingerprint = "35f3b7bf83777bc35fb080ee0e94abef8e945cbb6aa82414fa9cfcb7eaee699f",
     )
 
     private val officialCallLogIdentity = PluginIdentity(
         pluginId = "org.openandroidintelligence.call-log",
         version = "1.0.0",
-        authorPublicKey = "35f3b7bf83777bc35fb080ee0e94abef8e945cbb6aa82414fa9cfcb7eaee699f",
-        packageSha256 = "617ce17c4de0cc597c2f7bcbba9ae5e2cafa92daca023e883f8cc2e2f478785e",
+        authorKeyFingerprint = "35f3b7bf83777bc35fb080ee0e94abef8e945cbb6aa82414fa9cfcb7eaee699f",
     )
 
     private val budget = ResourceBudget(
@@ -60,16 +57,7 @@ class ReferencePluginIsolationInstrumentedTest {
             ),
         )
 
-        val fakeAudit = object : AndroidAuditStore {
-            override fun record(
-                subjectId: String,
-                accountId: String,
-                pairingId: String,
-                action: String,
-                outcome: AuditOutcome,
-                correlationId: String,
-            ) {}
-        }
+        val fakeAudit = AndroidAuditStore(InMemoryAuditSink())
 
         val fakeRuntime = object : PluginRuntime {
             override fun invoke(
@@ -79,6 +67,7 @@ class ReferencePluginIsolationInstrumentedTest {
             ): ByteArray = input
         }
 
+        val trustMode = DeveloperTrustMode()
         val kernel = PluginKernel(
             hostEnvelope = HostEnvelope(
                 setOf(
@@ -96,8 +85,8 @@ class ReferencePluginIsolationInstrumentedTest {
             ),
             runtimes = mapOf(PluginKernel.RUNTIME_PROTECTED_WASM to fakeRuntime),
             audit = fakeAudit,
-            trustMode = DeveloperTrustMode(false),
-            nativeLoader = NativePluginLoader(emptyMap()),
+            trustMode = trustMode,
+            nativeLoader = NativePluginLoader(trustMode),
             providerSelector = providerSelector,
             grants = { pairingId -> grantsMap[pairingId] },
         )
@@ -176,4 +165,3 @@ class ReferencePluginIsolationInstrumentedTest {
         }
     }
 }
-

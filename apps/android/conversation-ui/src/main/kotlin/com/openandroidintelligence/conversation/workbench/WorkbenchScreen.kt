@@ -52,6 +52,7 @@ fun WorkbenchScreen(
     onPickCamera: () -> Unit,
     onPickGallery: () -> Unit,
     onPickDocument: () -> Unit,
+    onVoiceInput: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val state by controller.state.collectAsState()
@@ -109,6 +110,7 @@ fun WorkbenchScreen(
         Scaffold(
             snackbarHost = { SnackbarHost(snackbar) { data -> Snackbar(data) } },
             containerColor = MaterialTheme.colorScheme.background,
+            contentWindowInsets = WindowInsets.safeDrawing,
         ) { padding ->
             Box(
                 modifier = Modifier
@@ -119,8 +121,7 @@ fun WorkbenchScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .widthIn(max = 760.dp) // 大屏与平板宽度限制，保持舒适阅读行长
-                        .statusBarsPadding(),
+                        .widthIn(max = 760.dp), // 大屏与平板宽度限制，保持舒适阅读行长
                 ) {
                     // ===== 1. 顶部 Header 栏（截图 1） =====
                     WorkbenchTopHeader(
@@ -178,6 +179,7 @@ fun WorkbenchScreen(
                         onPickCamera = onPickCamera,
                         onPickGallery = onPickGallery,
                         onPickDocument = onPickDocument,
+                        onVoiceInput = onVoiceInput,
                         attachments = state.attachments,
                         onRemoveAttachment = { controller.removeAttachment(it) },
                         onRetryAttachment = { controller.retryAttachment(it) },

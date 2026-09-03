@@ -81,13 +81,14 @@ class NegotiationClient(
             runCatching { Json.parse(String(response.body, Charsets.UTF_8)) }.getOrNull(),
         ) ?: throw IllegalStateException("NEGOTIATION_FAILED:malformed")
 
-        val protocol = JsonFields.obj(JsonFields.field(body, "protocol"))
-        val features = JsonFields.obj(JsonFields.field(body, "features"))
-        val limits = JsonFields.obj(JsonFields.field(body, "limits"))
-        val identity = JsonFields.obj(JsonFields.field(body, "gatewayIdentity"))
+        val result = JsonFields.obj(JsonFields.field(body, "data")) ?: body
+        val protocol = JsonFields.obj(JsonFields.field(result, "protocol"))
+        val features = JsonFields.obj(JsonFields.field(result, "features"))
+        val limits = JsonFields.obj(JsonFields.field(result, "limits"))
+        val identity = JsonFields.obj(JsonFields.field(result, "gatewayIdentity"))
 
         return NegotiationResult(
-            negotiationId = JsonFields.string(body, "negotiationId") ?: negotiationId,
+            negotiationId = JsonFields.string(result, "negotiationId") ?: negotiationId,
             protocolMajor = JsonFields.int(protocol, "major") ?: PROTOCOL_MAJOR,
             protocolMinor = JsonFields.int(protocol, "minor") ?: PROTOCOL_MINOR,
             deploymentId = JsonFields.string(identity, "deploymentId"),

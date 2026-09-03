@@ -19,7 +19,10 @@ import com.openandroidintelligence.gateway.events.InMemoryEventCursorStore
 import com.openandroidintelligence.gateway.http.GatewayHttpClient
 import com.openandroidintelligence.gateway.http.GatewayProfile
 import com.openandroidintelligence.gateway.http.HttpsGatewayTransport
+import com.openandroidintelligence.gateway.http.SpkiPinning
 import com.openandroidintelligence.gateway.negotiation.NegotiatedLimits
+import com.openandroidintelligence.kernel.PairingGrantBinding
+import com.openandroidintelligence.kernel.PairingGrantStateHolder
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -48,6 +51,7 @@ sealed interface ConnectionPhase {
         val username: String,
         val limits: NegotiatedLimits?,
         val pairingSummary: String?,
+        val tlsSpkiSha256: String,
     ) : ConnectionPhase
 
     data class Failed(val code: String) : ConnectionPhase
@@ -56,6 +60,7 @@ sealed interface ConnectionPhase {
 class GatewayRuntime(
     private val context: Context,
     private val scope: CoroutineScope,
+    private val pairingGrants: PairingGrantStateHolder,
 ) {
     private val _phase = MutableStateFlow<ConnectionPhase>(ConnectionPhase.Disconnected)
     val phase: StateFlow<ConnectionPhase> = _phase.asStateFlow()
@@ -68,24 +73,30 @@ class GatewayRuntime(
     /** The login form's authoritative action; the UI only reflects the phase. */
     fun login(gatewayUrl: String, username: String, password: CharArray) {
         val normalized = gatewayUrl.trim().removeSuffix("/")
-        if (!normalized.startsWith("https://") && !normalized.startsWith("http://")) {
+        if (!isHttpsGatewayUrl(normalized)) {
+            password.fill('\u0000')
             _phase.value = ConnectionPhase.Failed("AUTH_INVALID:url-scheme-required")
             return
         }
         val profileId = profileIdFor(normalized, username)
         scope.launch {
             _phase.value = ConnectionPhase.Negotiating
-            val auth = authClientFor(normalized)
-            val negotiation = runCatching { auth.negotiate("neg_" + newToken()) }
+            val negotiation = runCatching { authClientFor(normalized).negotiate("neg_" + newToken()) }
             val negotiated = negotiation.getOrElse { cause ->
                 _phase.value = ConnectionPhase.Failed(errorCode(cause))
                 return@launch
             }
+            val tlsPin = negotiated.tlsSpkiSha256?.takeIf(SpkiPinning::isProtocolPin)
+                ?: run {
+                    _phase.value = ConnectionPhase.Failed("NEGOTIATION_FAILED:missing-tls-identity")
+                    password.fill('\u0000')
+                    return@launch
+                }
 
             _phase.value = ConnectionPhase.Authenticating
             val credentials = runCatching {
                 val publicKey = deviceKeys.publicKeyBase64Url(profileId)
-                auth.loginWithPassword(
+                authClientFor(normalized, setOf(tlsPin)).loginWithPassword(
                     negotiationId = negotiated.negotiationId,
                     username = username,
                     password = password,
@@ -103,7 +114,7 @@ class GatewayRuntime(
                             saveLastProfile(normalized, username, profileId, session)
                         }
                     }
-                    establish(normalized, username, profileId, session, negotiated.limits)
+                    establish(normalized, username, profileId, session, negotiated.limits, tlsPin)
                 },
                 onFailure = { cause -> _phase.value = ConnectionPhase.Failed(errorCode(cause)) },
             )
@@ -125,7 +136,7 @@ class GatewayRuntime(
         val sessionId = lastSessionId
         scope.launch {
             runCatching {
-                authClientFor(current.gatewayUrl).logout(
+                authClientFor(current.gatewayUrl, setOf(current.tlsSpkiSha256)).logout(
                     accessToken = accessTokenHolder ?: "",
                     accountId = accountId,
                     deviceId = deviceId,
@@ -139,6 +150,9 @@ class GatewayRuntime(
             runCatching {
                 keystoreCredentials.clearRefresh(profileId)
                 clearLastProfile()
+            }
+            if (revokeRefresh) {
+                pairingGrants.clearCurrent()
             }
             teardown()
         }
@@ -157,6 +171,11 @@ class GatewayRuntime(
         lastDeviceId = storedDeviceId
         lastSessionId = storedSessionId
 
+        if (!isHttpsGatewayUrl(lastUrl)) {
+            _phase.value = ConnectionPhase.Failed("AUTH_INVALID:url-scheme-required")
+            return
+        }
+
         val refreshBytes = runCatching { keystoreCredentials.loadRefresh(lastProfileId) }.getOrNull() ?: return
         if (refreshBytes.isEmpty()) return
 
@@ -167,10 +186,15 @@ class GatewayRuntime(
                 _phase.value = ConnectionPhase.Disconnected
                 return@launch
             }
+            val tlsPin = negotiated.tlsSpkiSha256?.takeIf(SpkiPinning::isProtocolPin)
+                ?: run {
+                    _phase.value = ConnectionPhase.Disconnected
+                    return@launch
+                }
 
             _phase.value = ConnectionPhase.Authenticating
             val session = runCatching {
-                auth.refresh(
+                authClientFor(lastUrl, setOf(tlsPin)).refresh(
                     accountId = storedAccountId,
                     deviceId = storedDeviceId,
                     negotiationId = negotiated.negotiationId,
@@ -196,7 +220,7 @@ class GatewayRuntime(
                     keystoreCredentials.saveRefresh(lastProfileId, newRefresh)
                 }
             }
-            establish(lastUrl, lastUser, lastProfileId, session, negotiated.limits)
+            establish(lastUrl, lastUser, lastProfileId, session, negotiated.limits, tlsPin)
         }
     }
 
@@ -218,13 +242,22 @@ class GatewayRuntime(
         profileId: String,
         session: SessionCredentials,
         limits: NegotiatedLimits?,
+        tlsSpkiSha256: String,
     ) {
         val profile = GatewayProfile(
             accountId = session.accountId,
             deviceId = session.deviceId,
             sessionId = session.sessionId,
             gatewayBaseUrl = gatewayUrl,
+            pinnedSpkiSha256 = setOf(tlsSpkiSha256),
             accessToken = session.accessToken,
+        )
+        pairingGrants.bind(
+            PairingGrantBinding(
+                gatewayId = gatewayUrl,
+                accountId = session.accountId,
+                installationId = installationId(),
+            ),
         )
         val transport = HttpsGatewayTransport(profile)
         val http = GatewayHttpClient(
@@ -252,7 +285,7 @@ class GatewayRuntime(
             profileId = profileId,
             gatewayId = gatewayUrl,
             accountId = session.accountId,
-            installId = "install_local",
+            installId = installationId(),
         )
 
         _controller.value = WorkbenchController(
@@ -268,6 +301,7 @@ class GatewayRuntime(
             username = username,
             limits = limits,
             pairingSummary = session.pairingSummary,
+            tlsSpkiSha256 = tlsSpkiSha256,
         )
     }
 
@@ -275,16 +309,21 @@ class GatewayRuntime(
         _controller.value = null
         accessTokenHolder = null
         activeThread.set(null)
+        pairingGrants.unbind()
         _phase.value = ConnectionPhase.Disconnected
     }
 
-    private fun authClientFor(gatewayUrl: String): GatewayAuthClient = GatewayAuthClient(
+    private fun authClientFor(
+        gatewayUrl: String,
+        pinnedSpkiSha256: Set<String> = emptySet(),
+    ): GatewayAuthClient = GatewayAuthClient(
         transport = HttpsGatewayTransport(
             GatewayProfile(
                 accountId = "pre-auth",
                 deviceId = "pre-auth",
                 sessionId = "pre-auth",
                 gatewayBaseUrl = gatewayUrl,
+                pinnedSpkiSha256 = pinnedSpkiSha256,
             ),
         ),
         installationId = installationId(),
@@ -353,6 +392,11 @@ class GatewayRuntime(
 
     private fun errorCode(cause: Throwable): String =
         cause.message?.takeIf { it.isNotBlank() } ?: cause::class.java.simpleName
+
+    private fun isHttpsGatewayUrl(value: String): Boolean = runCatching {
+        val url = java.net.URL(value)
+        url.protocol == "https" && url.host.isNotBlank()
+    }.getOrDefault(false)
 
     private companion object {
         const val PREFS_NAME = "open_android_intelligence_runtime"
